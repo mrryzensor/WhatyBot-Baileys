@@ -1,10 +1,9 @@
-name: Build desktop installers
+name: Build and publish installers
 
 on:
   push:
-    branches:
-      - main
-      - master
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -28,17 +27,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build installers with electron-builder
-        run: npm run electron:build
-
-      - name: Upload installers artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: installers-${{ matrix.os }}
-          path: |
-            dist/**/*.exe
-            dist/**/*.dmg
-            dist/**/*.AppImage
-            dist/**/*.deb
-            dist/**/*.rpm
-          if-no-files-found: warn
+      - name: Build and publish with electron-builder
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --publish always

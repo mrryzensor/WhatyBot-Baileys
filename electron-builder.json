@@ -9,6 +9,13 @@
     "public/**/*",
     "package.json"
   ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "mrryzensor",
+      "repo": "WhatyBot-Baileys"
+    }
+  ],
   "extraResources": [
     {
       "from": "server",

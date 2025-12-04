@@ -3,6 +3,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { spawn, fork } from 'child_process';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const { autoUpdater } = require('electron-updater');
 import { getProfileBySlug, listProfiles, updateProfilePorts, updateProfileStatus, PROFILE_CONSTANTS } from '../profiles/profileStore.js';
 import { findAvailablePort, isPortAvailable } from '../server/utils/portFinder.js';
 
@@ -25,6 +29,33 @@ const profileArgSlug = getProfileArgument();
 const profileStatuses = PROFILE_CONSTANTS().STATUS;
 let profileContext = null;
 const profileProcesses = new Map();
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('error', (error) => {
+    console.error('[AutoUpdater] Error:', error);
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info?.version);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded:', info?.version);
+  });
+
+  try {
+    autoUpdater.checkForUpdatesAndNotify();
+  } catch (error) {
+    console.error('[AutoUpdater] checkForUpdatesAndNotify failed:', error);
+  }
+}
 
 function getProfileArgument() {
   const cliArg = process.argv.find(arg => arg.startsWith('--profile='));
@@ -666,6 +697,9 @@ app.whenReady().then(async () => {
     });
     
     console.log(`[Instance ${instanceId}] Application initialized successfully`);
+
+    // Start auto-updater once app is initialized
+    setupAutoUpdater();
   } catch (error) {
     console.error(`[Instance ${instanceId}] Failed to start application:`, error);
     console.error(`[Instance ${instanceId}] Error stack:`, error.stack);
