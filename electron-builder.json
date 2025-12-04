@@ -1,0 +1,36 @@
+{
+  "appId": "com.whatbot.app",
+  "productName": "Whatbot",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "public/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "server",
+      "to": "server",
+      "filter": ["**/*"]
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "target": "dmg"
+  },
+  "win": {
+    "target": "nsis"
+  },
+  "linux": {
+    "target": "AppImage"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  }
+}
+

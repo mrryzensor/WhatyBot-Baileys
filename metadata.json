@@ -1,0 +1,5 @@
+{
+  "name": "WhatyBot",
+  "description": "Un panel profesional para automatización de WhatsApp. Envío masivo con variables, extracción de grupos y soporte multimedia.",
+  "requestFramePermissions": []
+}

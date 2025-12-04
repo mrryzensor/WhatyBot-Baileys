@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# WhatsApp session data (IMPORTANT: Never commit this!)
+server/.wwebjs_auth/
+server/.wwebjs_cache/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Uploads and temporary files
+server/uploads/
+uploads/
+
+# Backend data files
+server/data/
+
+# Port info file (generated at runtime)
+.port-info.json
+
+# Environment variables
+.env
+
+# Build artifacts
+release/
+
+# Build artifacts
+release/

@@ -1,0 +1,24 @@
+{
+    "name": "whatybot-dxs-backend",
+    "version": "1.0.0",
+    "description": "WhatsApp Bot Backend with baileys",
+    "main": "server.js",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.86.0",
+        "@whiskeysockets/baileys": "^7.0.0-rc.9",
+        "better-sqlite3": "^12.5.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "multer": "^1.4.5-lts.1",
+        "node-schedule": "^2.1.1",
+        "qrcode": "^1.5.3",
+        "socket.io": "^4.7.2",
+        "uuid": "^13.0.0"
+    }
+}
