@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "main": "public/electron.js",
+  "main": "dist/electron.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -20,7 +20,6 @@
   "dependencies": {
     "@google/genai": "^1.30.0",
     "axios": "^1.6.2",
-    "better-sqlite3": "^9.6.0",
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-confetti": "^6.4.0",

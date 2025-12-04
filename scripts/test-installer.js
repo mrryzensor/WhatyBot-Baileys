@@ -16,10 +16,10 @@ const projectRoot = join(__dirname, '..');
 
 // Buscar el ejecutable instalado
 const possiblePaths = [
-  join(projectRoot, 'release', 'win-unpacked', 'Whatbot.exe'),
-  join(process.env.LOCALAPPDATA || '', 'Programs', 'whatbot', 'Whatbot.exe'),
-  join(process.env.PROGRAMFILES || '', 'Whatbot', 'Whatbot.exe'),
-  join(process.env['PROGRAMFILES(X86)'] || '', 'Whatbot', 'Whatbot.exe')
+  join(projectRoot, 'release', 'win-unpacked', 'Whatybot.exe'),
+  join(process.env.LOCALAPPDATA || '', 'Programs', 'whatybot', 'Whatybot.exe'),
+  join(process.env.PROGRAMFILES || '', 'Whatybot', 'Whatybot.exe'),
+  join(process.env['PROGRAMFILES(X86)'] || '', 'Whatybot', 'Whatybot.exe')
 ];
 
 let exePath = null;
@@ -34,7 +34,7 @@ if (!exePath) {
   console.log('❌ No se encontró el ejecutable instalado.');
   console.log('Buscado en:');
   possiblePaths.forEach(p => console.log(`  - ${p}`));
-  console.log('\n💡 Instala la aplicación primero ejecutando: Whatbot Setup 0.0.0.exe');
+  console.log('\n💡 Instala la aplicación primero ejecutando: Whatybot Setup 0.0.0.exe');
   process.exit(1);
 }
 
