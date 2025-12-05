@@ -24,6 +24,21 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
+  const handleCheckUpdates = async () => {
+    try {
+      const electronAPI = (window as any).electronAPI;
+      if (!electronAPI?.updates?.checkForUpdates) {
+        toast?.error('La comprobación de actualizaciones no está disponible en este entorno.');
+        return;
+      }
+      await electronAPI.updates.checkForUpdates();
+      toast?.info('Buscando actualizaciones...');
+    } catch (error: any) {
+      console.error('Error checking for updates:', error);
+      toast?.error(error?.message || 'No se pudo comprobar si hay actualizaciones');
+    }
+  };
+
   const handleSave = async () => {
     const { messageDelay, maxContactsPerBatch, waitTimeBetweenBatches, headless, defaultCountryCode } = localConfig;
 
@@ -299,6 +314,23 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
               {changingPassword ? 'Cambiando contraseña...' : 'Cambiar contraseña'}
             </button>
           </div>
+        </div>
+
+        {/* Actualizaciones */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Clock size={20} className="text-blue-500" /> Actualizaciones
+          </h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Comprueba manualmente si hay una nueva versión disponible de WhatyBot.
+          </p>
+          <button
+            type="button"
+            onClick={handleCheckUpdates}
+            className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium text-white bg-slate-900 hover:bg-slate-800"
+          >
+            Buscar actualizaciones
+          </button>
         </div>
       </div>
 

@@ -3,16 +3,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { spawn, fork } from 'child_process';
-import { createRequire } from 'module';
+import updaterPkg from 'electron-updater';
 
-const require = createRequire(import.meta.url);
-let autoUpdater = null;
-try {
-  const updaterModule = require('electron-updater');
-  autoUpdater = updaterModule.autoUpdater;
-} catch (error) {
-  console.warn('[AutoUpdater] electron-updater module not available, auto-update disabled:', error?.message || error);
-}
+const { autoUpdater } = updaterPkg;
 import { getProfileBySlug, listProfiles, updateProfilePorts, updateProfileStatus, PROFILE_CONSTANTS } from '../profiles/profileStore.js';
 import { findAvailablePort, isPortAvailable } from '../server/utils/portFinder.js';
 
@@ -72,6 +65,22 @@ function setupAutoUpdater() {
     sendAutoUpdateStatus({ status: 'error', message: error?.message || String(error) });
   }
 }
+
+ipcMain.handle('autoUpdater:check', async () => {
+  if (!autoUpdater) {
+    throw new Error('Auto-updater no está disponible en esta build (módulo electron-updater no cargado).');
+  }
+
+  try {
+    sendAutoUpdateStatus({ status: 'checking' });
+    await autoUpdater.checkForUpdates();
+    return { success: true };
+  } catch (error) {
+    console.error('[AutoUpdater] manual checkForUpdates failed:', error);
+    sendAutoUpdateStatus({ status: 'error', message: error?.message || String(error) });
+    throw error;
+  }
+});
 
 function getProfileArgument() {
   const cliArg = process.argv.find(arg => arg.startsWith('--profile='));

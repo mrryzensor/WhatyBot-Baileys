@@ -6,10 +6,18 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cargar .env desde el mismo directorio que supabase.js
-// En desarrollo, puedes tener también un .env en la raíz, pero para la app empaquetada
-// electron-builder copia el .env raíz a resources/server/.env, que corresponde a __dirname
-dotenv.config({ path: path.join(__dirname, '.env') });
+// Cargar variables de entorno
+// 1) En desarrollo: intenta cargar también el .env de la raíz del proyecto (un nivel arriba)
+// 2) En la app empaquetada: electron-builder copia el .env raíz a resources/server/.env,
+//    que corresponde a __dirname, por lo que sigue funcionando igual.
+
+const rootEnvPath = path.join(__dirname, '..', '.env');
+const serverEnvPath = path.join(__dirname, '.env');
+
+// Primero intenta cargar el .env de la raíz (útil en desarrollo)
+dotenv.config({ path: rootEnvPath });
+// Luego el .env específico de server (útil en producción empaquetada)
+dotenv.config({ path: serverEnvPath });
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

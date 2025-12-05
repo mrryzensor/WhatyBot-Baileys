@@ -12,6 +12,7 @@ const profilesAPI = {
 };
 
 const updatesAPI = {
+  checkForUpdates: () => ipcRenderer.invoke('autoUpdater:check'),
   onStatus: (callback) => {
     const listener = (_event, payload) => {
       callback(payload);
