@@ -24,11 +24,15 @@ dist-ssr
 *.sln
 *.sw?
 
-# WhatsApp session data (IMPORTANT: Never commit this!)
+# WhatsApp / Baileys session data (IMPORTANT: Never commit this!)
 server/.wwebjs_auth/
 server/.wwebjs_cache/
 .wwebjs_auth/
 .wwebjs_cache/
+# Baileys auth directories (profiles, server or root)
+.baileys_auth/
+profiles/**/.baileys_auth/
+server/**/.baileys_auth/
 
 # Uploads and temporary files
 server/uploads/
