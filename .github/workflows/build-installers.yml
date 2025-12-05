@@ -32,5 +32,6 @@ jobs:
 
       - name: Build and publish with electron-builder
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Token personal con permisos repo (configurado en Settings → Secrets → Actions como GH_TOKEN)
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: npx electron-builder --publish always
