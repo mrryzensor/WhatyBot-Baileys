@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Save, Monitor, Clock, Users, Timer } from 'lucide-react';
 import { AppConfig } from '../types';
 import { updateConfig as updateConfigApi } from '../services/api';
+import { changePassword, getCurrentUser } from '../services/authApi';
 
 interface SettingsProps {
   config: AppConfig;
@@ -17,6 +18,11 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) => {
   const [localConfig, setLocalConfig] = useState<AppConfig>(config);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const currentUser = getCurrentUser();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const handleSave = async () => {
     const { messageDelay, maxContactsPerBatch, waitTimeBetweenBatches, headless, defaultCountryCode } = localConfig;
@@ -62,6 +68,48 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
       console.error('Error saving config:', err);
       setSaveStatus('error');
       toast?.error(err?.message || 'No se pudo guardar la configuración');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentUser?.email) {
+      toast?.error('No se pudo obtener el usuario actual. Inicia sesión nuevamente.');
+      return;
+    }
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast?.error('Completa todos los campos de contraseña.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast?.error('La nueva contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast?.error('La nueva contraseña y la confirmación no coinciden.');
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      const response = await changePassword(currentUser.email, currentPassword, newPassword);
+      if (!response?.success) {
+        throw new Error(response?.message || 'No se pudo cambiar la contraseña');
+      }
+
+      toast?.success(response.message || 'Contraseña actualizada correctamente');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      // Intentar mostrar mensaje de error del backend si existe
+      const backendMessage = err?.response?.data?.error || err?.message;
+      toast?.error(backendMessage || 'No se pudo cambiar la contraseña');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -191,6 +239,65 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
                 Tiempo de espera en minutos entre cada lote de envíos. Ejemplo: Si tienes 1000 contactos, máximo 50 por lote y 15 minutos de espera, enviará 50, esperará 15 minutos, enviará otros 50, y así sucesivamente.
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Cuenta y seguridad */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <Users size={20} className="text-red-500" /> Cuenta y Seguridad
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Correo</label>
+              <input
+                type="email"
+                value={currentUser?.email || ''}
+                disabled
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña actual</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nueva contraseña</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Confirmar contraseña</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={changingPassword}
+              className="mt-2 inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {changingPassword ? 'Cambiando contraseña...' : 'Cambiar contraseña'}
+            </button>
           </div>
         </div>
       </div>

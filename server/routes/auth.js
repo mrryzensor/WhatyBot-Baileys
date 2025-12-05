@@ -59,6 +59,46 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// POST /api/auth/change-password - Change user password
+router.post('/change-password', async (req, res) => {
+    try {
+        const { email, currentPassword, newPassword } = req.body;
+
+        if (!email || !currentPassword || !newPassword) {
+            return res.status(400).json({ error: 'Email, contraseña actual y nueva contraseña son requeridos' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Formato de correo electrónico inválido' });
+        }
+
+        const user = await userService.getUserByEmail(email);
+        if (!user) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        const currentHash = hashPassword(currentPassword);
+        if (user.password_hash !== currentHash) {
+            return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
+        }
+
+        await userService.updateUser(user.id, { password: newPassword });
+
+        return res.json({
+            success: true,
+            message: 'Contraseña actualizada correctamente'
+        });
+    } catch (error) {
+        console.error('Error in change-password:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // POST /api/auth/register - Register new user
 router.post('/register', async (req, res) => {
     try {

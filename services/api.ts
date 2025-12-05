@@ -6,6 +6,7 @@ import { ScheduleType } from '../types';
 const DEFAULT_BACKEND_PORT = parseInt(import.meta.env.VITE_BACKEND_PORT || '23456', 10);
 const DISCOVERY_TIMEOUT_MS = 3000;
 const DISCOVERY_RANGE = 20; // How many ports ahead of the base we probe automatically
+const IS_PRODUCTION = !import.meta.env.DEV;
 
 let backendPortReadyResolve: (() => void) | null = null;
 let backendPortReadyResolved = false;
@@ -98,15 +99,61 @@ const getApiBaseUrl = (): string => {
   return `http://localhost:${port}`;
 };
 
+// Socket.io client (declare early to avoid temporal dead zone)
+let socket: Socket | null = null;
+
+export const initializeSocket = () => {
+    if (!socket) {
+        console.log('Connecting to Socket.io server at:', API_BASE_URL);
+        socket = io(API_BASE_URL, {
+            transports: ['polling', 'websocket'], // Try polling first
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10,
+            withCredentials: true
+        });
+
+        socket.on('connect', () => {
+            console.log('Socket.io connected successfully!');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Socket.io connection error:', error);
+            // En producción no intentamos descubrir otros puertos; el backend es fijo
+            if (!IS_PRODUCTION) {
+              discoverBackendPort({ force: true }).catch(() => {});
+            }
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('Socket.io disconnected:', reason);
+            if (!IS_PRODUCTION && (reason === 'transport close' || reason === 'ping timeout')) {
+                discoverBackendPort({ force: true }).catch(() => {});
+            }
+        });
+    }
+    return socket;
+};
+
+export const getSocket = () => socket;
+
 // Initialize API base URL - will be updated when port info is available
 let API_BASE_URL = getApiBaseUrl();
+
+// Create axios instance (must be defined before updateApiBaseUrl uses it)
+const api = axios.create({
+    baseURL: `${API_BASE_URL}/api`,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
 
 // Function to update API base URL when port info is available
 export const updateApiBaseUrl = (port: number) => {
   API_BASE_URL = `http://localhost:${port}`;
   lastResolvedBackendPort = port;
   localStorage.setItem('backendPort', port.toString());
-  // Recreate axios instance with new base URL
+  // Update axios instance base URL
   api.defaults.baseURL = `${API_BASE_URL}/api`;
   // Reconnect socket if it exists
   if (socket) {
@@ -203,25 +250,40 @@ if (typeof window !== 'undefined') {
   const isProduction = !import.meta.env.DEV;
   
   if (isProduction) {
-    // In production, check localStorage first (set by Electron)
-    const savedPort = localStorage.getItem('backendPort');
-    if (savedPort) {
-      const port = parseInt(savedPort, 10);
-      updateApiBaseUrl(port);
-      console.log(`✅ Backend API URL set to: ${API_BASE_URL} (from localStorage)`);
-    } else {
-      // Wait a bit for Electron to set it
-      setTimeout(() => {
-        const savedPort = localStorage.getItem('backendPort');
-        if (savedPort) {
-          const port = parseInt(savedPort, 10);
-          updateApiBaseUrl(port);
-          console.log(`✅ Backend API URL updated to: ${API_BASE_URL} (from localStorage)`);
-        } else {
-          console.log('Using default backend port 23456');
+    const initializePortFromLocalStorage = async () => {
+      const maxAttempts = 20; // up to ~10s if delayMs=500
+      const delayMs = 500;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const savedPort = localStorage.getItem('backendPort');
+          if (savedPort) {
+            const port = parseInt(savedPort, 10);
+            if (Number.isFinite(port)) {
+              // En producción, normalizamos siempre al puerto por defecto (23456)
+              // para evitar valores antiguos o incoherentes de builds previos
+              const normalizedPort = DEFAULT_BACKEND_PORT;
+              if (port !== normalizedPort) {
+                localStorage.setItem('backendPort', normalizedPort.toString());
+              }
+              updateApiBaseUrl(normalizedPort);
+              console.log(`✅ Backend API URL set to: http://localhost:${normalizedPort} (normalized from localStorage, attempt ${attempt + 1})`);
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Error reading backendPort from localStorage:', error);
         }
-      }, 1000);
-    }
+
+        // Wait for Electron to set backendPort
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      console.log('Using default backend port 23456 after waiting for localStorage');
+      updateApiBaseUrl(DEFAULT_BACKEND_PORT);
+    };
+
+    initializePortFromLocalStorage();
   } else {
     const initializePort = async () => {
       const portInfo = await fetchPortInfo();
@@ -239,14 +301,6 @@ if (typeof window !== 'undefined') {
 if (typeof window === 'undefined' || import.meta.env.VITE_API_URL) {
   markBackendPortReady();
 }
-
-// Create axios instance
-const api = axios.create({
-    baseURL: `${API_BASE_URL}/api`,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
 
 // Add interceptor to include userId in headers
 api.interceptors.request.use((config) => {
@@ -273,7 +327,7 @@ api.interceptors.response.use(
     };
     const isNetworkError = error?.code === 'ERR_NETWORK' || error?.message === 'Network Error';
 
-    if (isNetworkError && !config.__retryAfterPortDetect) {
+    if (isNetworkError && !config.__retryAfterPortDetect && !IS_PRODUCTION) {
       config.__retryAfterPortDetect = true;
       await discoverBackendPort({ force: true });
       config.baseURL = api.defaults.baseURL;
@@ -283,41 +337,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Socket.io client
-let socket: Socket | null = null;
-
-export const initializeSocket = () => {
-    if (!socket) {
-        console.log('Connecting to Socket.io server at:', API_BASE_URL);
-        socket = io(API_BASE_URL, {
-            transports: ['polling', 'websocket'], // Try polling first
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionAttempts: 10,
-            withCredentials: true
-        });
-
-        socket.on('connect', () => {
-            console.log('Socket.io connected successfully!');
-        });
-
-        socket.on('connect_error', (error) => {
-            console.error('Socket.io connection error:', error);
-            discoverBackendPort({ force: true }).catch(() => {});
-        });
-
-        socket.on('disconnect', (reason) => {
-            console.log('Socket.io disconnected:', reason);
-            if (reason === 'transport close' || reason === 'ping timeout') {
-                discoverBackendPort({ force: true }).catch(() => {});
-            }
-        });
-    }
-    return socket;
-};
-
-export const getSocket = () => socket;
 
 export const resetWhatsAppSession = async () => {
   await waitForBackendPort();

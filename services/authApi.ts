@@ -12,6 +12,11 @@ export interface RegisterResponse {
   message?: string;
 }
 
+export interface ChangePasswordResponse {
+  success: boolean;
+  message?: string;
+}
+
 export const login = async (email: string, password: string): Promise<LoginResponse> => {
   const response = await api.post('/auth/login', { email, password });
   return response.data;
@@ -19,6 +24,19 @@ export const login = async (email: string, password: string): Promise<LoginRespo
 
 export const register = async (email: string, password: string): Promise<RegisterResponse> => {
   const response = await api.post('/auth/register', { email, password });
+  return response.data;
+};
+
+export const changePassword = async (
+  email: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<ChangePasswordResponse> => {
+  const response = await api.post('/auth/change-password', {
+    email,
+    currentPassword,
+    newPassword,
+  });
   return response.data;
 };
 

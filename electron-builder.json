@@ -1,12 +1,15 @@
 {
-  "appId": "com.whatbot.app",
-  "productName": "Whatbot",
+  "appId": "com.whatybot.app",
+  "productName": "WhatyBot-DxS",
   "directories": {
     "output": "release"
   },
   "files": [
     "dist/**/*",
     "public/**/*",
+    "server/utils/**/*",
+    "profiles/**/*",
+    "node_modules/**/*",
     "package.json"
   ],
   "publish": [
@@ -21,23 +24,36 @@
       "from": "server",
       "to": "server",
       "filter": ["**/*"]
+    },
+    {
+      "from": "server/node_modules",
+      "to": "server/node_modules",
+      "filter": ["**/*"]
+    },
+    {
+      "from": ".env",
+      "to": "server/.env"
     }
   ],
   "mac": {
     "category": "public.app-category.productivity",
-    "target": "dmg"
+    "target": "dmg",
+    "icon": "icons/icon.icns"
   },
   "win": {
-    "target": "nsis"
+    "target": "nsis",
+    "icon": "icons/icon.ico"
   },
   "linux": {
-    "target": "AppImage"
+    "target": "AppImage",
+    "icon": "icons"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+    "createStartMenuShortcut": true,
+    "uninstallerIcon": "icons/Uninstall.ico"
   }
 }
 

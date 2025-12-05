@@ -6,7 +6,13 @@ import { spawn, fork } from 'child_process';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { autoUpdater } = require('electron-updater');
+let autoUpdater = null;
+try {
+  const updaterModule = require('electron-updater');
+  autoUpdater = updaterModule.autoUpdater;
+} catch (error) {
+  console.warn('[AutoUpdater] electron-updater module not available, auto-update disabled:', error?.message || error);
+}
 import { getProfileBySlug, listProfiles, updateProfilePorts, updateProfileStatus, PROFILE_CONSTANTS } from '../profiles/profileStore.js';
 import { findAvailablePort, isPortAvailable } from '../server/utils/portFinder.js';
 
@@ -31,7 +37,7 @@ let profileContext = null;
 const profileProcesses = new Map();
 
 function setupAutoUpdater() {
-  if (!app.isPackaged) {
+  if (!app.isPackaged || !autoUpdater) {
     return;
   }
 
@@ -51,7 +57,7 @@ function setupAutoUpdater() {
   });
 
   try {
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates();
   } catch (error) {
     console.error('[AutoUpdater] checkForUpdatesAndNotify failed:', error);
   }
@@ -75,10 +81,24 @@ function ensureDir(targetPath) {
   }
 }
 
-// Helper function to read port info
+// Helper functions to manage port info files
+// In production, use a writable directory (userData) instead of app.asar
+function getPortInfoDir() {
+  if (app.isPackaged) {
+    const dir = app.getPath('userData');
+    ensureDir(dir);
+    return dir;
+  }
+  // En desarrollo, usar la raíz del proyecto (una carpeta arriba de public/)
+  const dir = path.join(__dirname, '..');
+  ensureDir(dir);
+  return dir;
+}
+
 // Each instance will have its own port info based on instance ID
 function getPortInfoPath() {
-  const portInfoPath = path.join(__dirname, '..', `.port-info-${instanceId}.json`);
+  const dir = getPortInfoDir();
+  const portInfoPath = path.join(dir, `.port-info-${instanceId}.json`);
   return portInfoPath;
 }
 
@@ -90,7 +110,8 @@ function readPortInfo() {
       return JSON.parse(content);
     }
     // Fallback to default port info file if process-specific doesn't exist
-    const defaultPath = path.join(__dirname, '..', '.port-info.json');
+    const dir = getPortInfoDir();
+    const defaultPath = path.join(dir, '.port-info.json');
     if (existsSync(defaultPath)) {
       const content = readFileSync(defaultPath, 'utf8');
       return JSON.parse(content);
@@ -101,8 +122,8 @@ function readPortInfo() {
   return null;
 }
 
-// Calculate instance-specific default ports
-// Each instance gets a unique offset to avoid conflicts
+// Calculate default ports
+// En desarrollo permitimos offsets por instancia, pero en producción usamos puertos fijos
 const getInstanceDefaultPorts = () => {
   if (profileContext?.frontendPort && profileContext?.backendPort) {
     return {
@@ -113,11 +134,19 @@ const getInstanceDefaultPorts = () => {
 
   const baseFrontendPort = 12345;
   const baseBackendPort = 23456;
-  
-  // Add offset based on instance ID, but keep it within reasonable range
+
+  // En la app empaquetada usamos puertos fijos para que coincidan con api.ts y el backend
+  if (app.isPackaged) {
+    return {
+      frontendPort: baseFrontendPort,
+      backendPort: baseBackendPort
+    };
+  }
+
+  // En desarrollo, cada instancia obtiene un offset para evitar conflictos
   const frontendOffset = INSTANCE_PORT_OFFSET;
   const backendOffset = INSTANCE_PORT_OFFSET + 5000; // Separate offset for backend
-  
+
   return {
     frontendPort: baseFrontendPort + (frontendOffset % 50000), // Keep in 5-digit range
     backendPort: baseBackendPort + (backendOffset % 50000)    // Keep in 5-digit range
@@ -309,16 +338,28 @@ async function startBackendServer() {
     // This tells Electron to run as a Node.js process instead of Electron
     
     let nodeExecutable;
+
+    // Configurar entorno para que el backend pueda resolver sus dependencias
+    // En producción, usamos los node_modules locales del servidor (resources/server/node_modules)
+    // En desarrollo, se usan los node_modules de la raíz del proyecto
+    let nodeModulesPath;
+    if (app.isPackaged) {
+      const resourcesPath = process.resourcesPath || path.dirname(app.getAppPath());
+      nodeModulesPath = path.join(resourcesPath, 'server', 'node_modules');
+    } else {
+      nodeModulesPath = path.join(__dirname, '..', 'node_modules');
+    }
+
     const envVars = {
       ...process.env,
       PORT: backendPort.toString(),
       NODE_ENV: 'production',
-      NODE_PATH: path.join(serverDir, 'node_modules')
+      NODE_PATH: nodeModulesPath
     };
     
     if (app.isPackaged) {
       // In packaged app, we need to use Electron's embedded Node.js
-      // The issue is that process.execPath points to Whatbot.exe which may have issues
+      // The issue is that process.execPath points to whatybot.exe which may have issues
       // We'll use a different approach: find the actual Electron executable or use fork
       
       // Try to use fork() which works better with Electron's Node.js
@@ -328,13 +369,15 @@ async function startBackendServer() {
       nodeExecutable = process.execPath;
       envVars.ELECTRON_RUN_AS_NODE = '1';
       
-      // On Windows, we need to handle paths with spaces
-      // Use shell: true on Windows to handle path quoting
-      const useShell = process.platform === 'win32';
+      // En la app empaquetada, usamos spawn directo sin shell. process.execPath
+      // puede contener espacios (por ejemplo C:\Users\Ing. David\...), pero
+      // spawn los maneja correctamente cuando shell:false.
+      const useShell = false;
       
       console.log(`[Instance ${instanceId}] Using Electron's embedded Node.js`);
       console.log(`[Instance ${instanceId}] Executable: ${nodeExecutable}`);
       console.log(`[Instance ${instanceId}] Server path: ${serverPath}`);
+      console.log(`[Instance ${instanceId}] NODE_PATH: ${envVars.NODE_PATH}`);
       console.log(`[Instance ${instanceId}] Using shell: ${useShell}`);
       
       // Start the server as a child process
@@ -361,7 +404,7 @@ async function startBackendServer() {
         cwd: serverDir,
         env: envVars,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: useShell // shell: true on Windows helps with paths containing spaces
+        shell: useShell
       });
     } else {
       // In development, use system Node.js
@@ -478,6 +521,22 @@ function createWindow() {
     show: false, // Don't show until ready-to-show
     autoHideMenuBar: true
   });
+
+  // In production, block common DevTools shortcuts (F12, Ctrl+Shift+I, Cmd+Alt+I)
+  if (!isDev) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      const isDevToolsShortcut =
+        input.type === 'keyDown' && (
+          input.key === 'F12' ||
+          (input.control && input.shift && input.key.toUpperCase() === 'I') ||
+          (input.meta && input.alt && input.key.toUpperCase() === 'I')
+        );
+
+      if (isDevToolsShortcut) {
+        event.preventDefault();
+      }
+    });
+  }
 
   // Load the app
   if (isDev) {
@@ -799,7 +858,7 @@ app.on('web-contents-created', (event, contents) => {
   });
 });
 
-// Set application menu
+// Set application menu (disable DevTools menu in production)
 const template = [
   {
     label: 'File',
@@ -820,7 +879,8 @@ const template = [
     submenu: [
       { role: 'reload' },
       { role: 'forceReload' },
-      { role: 'toggleDevTools' },
+      // Only allow DevTools from menu in development
+      ...(isDev ? [{ role: 'toggleDevTools' }] : []),
       { type: 'separator' },
       { role: 'resetZoom' },
       { role: 'zoomIn' },

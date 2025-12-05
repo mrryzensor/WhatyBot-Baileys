@@ -21,9 +21,9 @@ Este comando:
 ## Archivos Generados
 
 Los archivos compilados se generarán en la carpeta `release/`:
-- **Windows**: `release/Whatbot Setup X.X.X.exe` (instalador NSIS)
-- **macOS**: `release/Whatbot-X.X.X.dmg`
-- **Linux**: `release/Whatbot-X.X.X.AppImage`
+- **Windows**: `release/whatybot Setup X.X.X.exe` (instalador NSIS)
+- **macOS**: `release/whatybot-X.X.X.dmg`
+- **Linux**: `release/whatybot-X.X.X.AppImage`
 
 ## Múltiples Instancias
 
@@ -56,22 +56,22 @@ La configuración de build se encuentra en `electron-builder.json`:
 
 1. **Verifica los logs**: Ejecuta el instalador desde la terminal para ver errores:
    ```powershell
-   .\release\Whatbot Setup 0.0.0.exe
+   .\release\whatybot Setup 0.0.0.exe
    ```
 
 2. **Verifica que los archivos estén presentes**:
    - Después de instalar, verifica que existan:
-     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatbot\Whatbot.exe`
-     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatbot\resources\app\dist\index.html`
-     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatbot\resources\app\server\server.js`
+     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatybot\whatybot.exe`
+     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatybot\resources\app\dist\index.html`
+     - `C:\Users\[TuUsuario]\AppData\Local\Programs\whatybot\resources\app\server\server.js`
 
 3. **Ejecuta desde la terminal para ver logs**:
    ```powershell
-   cd "C:\Users\[TuUsuario]\AppData\Local\Programs\whatbot"
-   .\Whatbot.exe
+   cd "C:\Users\[TuUsuario]\AppData\Local\Programs\whatybot"
+   .\Whatybot.exe
    ```
 
 4. **Verifica el Event Viewer de Windows**:
    - Abre "Visor de eventos" → "Registros de Windows" → "Aplicación"
-   - Busca errores relacionados con "Whatbot"
+   - Busca errores relacionados con "Whatybot"
 

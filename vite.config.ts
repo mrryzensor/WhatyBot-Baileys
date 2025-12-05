@@ -116,6 +116,7 @@ export default defineConfig(async ({ mode }) => {
       build: {
         outDir: 'dist',
         assetsDir: 'assets',
+        sourcemap: true,
         rollupOptions: {
           input: {
             main: path.resolve(__dirname, 'index.html')
