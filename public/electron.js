@@ -46,20 +46,30 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error);
+    sendAutoUpdateStatus({ status: 'error', message: error?.message || String(error) });
   });
 
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdater] Update available:', info?.version);
+    sendAutoUpdateStatus({ status: 'available', version: info?.version || null });
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info?.version);
+    sendAutoUpdateStatus({ status: 'downloaded', version: info?.version || null });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] No update available');
+    sendAutoUpdateStatus({ status: 'no-update', version: info?.version || null });
   });
 
   try {
+    sendAutoUpdateStatus({ status: 'checking' });
     autoUpdater.checkForUpdates();
   } catch (error) {
     console.error('[AutoUpdater] checkForUpdatesAndNotify failed:', error);
+    sendAutoUpdateStatus({ status: 'error', message: error?.message || String(error) });
   }
 }
 
@@ -265,6 +275,16 @@ let mainWindow;
 let serverProcess = null;
 let backendPort = null;
 let frontendPort = null;
+
+function sendAutoUpdateStatus(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.webContents.send('autoUpdater:status', payload);
+    } catch (err) {
+      console.error('[AutoUpdater] Failed to send status to renderer:', err);
+    }
+  }
+}
 
 // Function to start the backend server in production mode
 async function startBackendServer() {

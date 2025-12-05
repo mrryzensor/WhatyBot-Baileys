@@ -11,9 +11,22 @@ const profilesAPI = {
   }
 };
 
+const updatesAPI = {
+  onStatus: (callback) => {
+    const listener = (_event, payload) => {
+      callback(payload);
+    };
+    ipcRenderer.on('autoUpdater:status', listener);
+    return () => {
+      ipcRenderer.removeListener('autoUpdater:status', listener);
+    };
+  }
+};
+
 // Expose protected methods to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
   profiles: profilesAPI,
+  updates: updatesAPI,
   platform: process.platform,
   version: process.version
 });

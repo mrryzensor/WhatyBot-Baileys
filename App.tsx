@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { SingleSender } from './components/SingleSender';
@@ -59,6 +59,44 @@ function App() {
 
   const bulkQueueControl = useBulkQueueControl(bulkProgress);
   const [showCancelBulkModal, setShowCancelBulkModal] = useState(false);
+
+  // Listen for auto-updater status events from main process and show toasts
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI || !electronAPI.updates || !electronAPI.updates.onStatus) {
+      return;
+    }
+
+    const unsubscribe = electronAPI.updates.onStatus((payload: { status: string; version?: string | null; message?: string }) => {
+      const version = payload.version ? ` (${payload.version})` : '';
+      switch (payload.status) {
+        case 'checking':
+          toast.info('Buscando actualizaciones...');
+          break;
+        case 'available':
+          toast.info(`Actualización disponible${version}, descargando...`);
+          break;
+        case 'downloaded':
+          toast.success(`Actualización descargada${version}. Se instalará al cerrar la aplicación.`);
+          break;
+        case 'no-update':
+          // No mostrar toast para no molestar en cada inicio; descomentar si se quiere informar siempre
+          // toast.info('Ya estás usando la última versión.');
+          break;
+        case 'error':
+          toast.error(`Error al comprobar actualizaciones: ${payload.message || 'desconocido'}`);
+          break;
+        default:
+          break;
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   const handleLoginSuccess = async (user: any) => {
     setCurrentUser(user);
