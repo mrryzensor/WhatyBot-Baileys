@@ -17,9 +17,10 @@ interface DashboardProps {
 interface DashboardPropsWithUser extends DashboardProps {
   currentUserId?: number | null;
   currentUser?: any;
+  connectedPhone?: string | null;
 }
 
-export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs, qrCode, onInitialize, onResetSession, isInitializing, socketStatus, currentUserId, currentUser: propCurrentUser }) => {
+export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs, qrCode, onInitialize, onResetSession, isInitializing, socketStatus, currentUserId, currentUser: propCurrentUser, connectedPhone }) => {
   console.log('Dashboard render:', { isConnected, hasQrCode: !!qrCode, qrCodeLength: qrCode?.length, isInitializing, socketStatus });
   
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -55,6 +56,21 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
     } finally {
       setLoading(false);
     }
+  };
+ 
+  const formatPhone = (phone?: string | null) => {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    // Caso típico Colombia: 57 + 10 dígitos (ej: 573001112233)
+    if (digits.length === 12 && digits.startsWith('57')) {
+      const cc = digits.slice(0, 2);
+      const part1 = digits.slice(2, 5);
+      const part2 = digits.slice(5, 8);
+      const part3 = digits.slice(8);
+      return `+${cc} ${part1} ${part2} ${part3}`;
+    }
+    // Fallback genérico: +<todo>
+    return `+${digits}`;
   };
   
   // Filter logs by current user
@@ -249,7 +265,11 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
           <div>
             <p className="text-sm font-medium text-slate-500">Estado del Cliente</p>
             <h3 className={`text-xl font-bold ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-              {isConnected ? 'Conectado' : 'Desconectado - Conectar'}
+              {isConnected
+                ? connectedPhone
+                  ? `Conectado: ${formatPhone(connectedPhone)}`
+                  : 'Conectado'
+                : 'Desconectado - Conectar'}
             </h3>
           </div>
         </div>
@@ -296,6 +316,14 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
                 </div>
                 <h4 className="text-lg font-bold text-slate-800">WhatsApp está Listo</h4>
                 <p className="text-slate-500 mt-2">La sesión está activa. Puedes comenzar a enviar mensajes.</p>
+                {onResetSession && (
+                  <button
+                    onClick={onResetSession}
+                    className="mt-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Desconectar / Cambiar número
+                  </button>
+                )}
               </div>
             ) : qrCode ? (
               <div className="text-center">

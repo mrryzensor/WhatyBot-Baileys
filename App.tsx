@@ -45,6 +45,7 @@ function App() {
   const [limitError, setLimitError] = useState<any>(null);
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
   const [socketInstance, setSocketInstance] = useState<any>(null);
+  const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{
     current: number;
     total: number;
@@ -215,9 +216,14 @@ function App() {
       });
 
       // Listen for status event (sent on connection)
-      socket.on('status', async (status: { isReady: boolean; hasQR: boolean; qr?: string | null }) => {
+      socket.on('status', async (status: any) => {
         console.log('STATUS RECEIVED:', status);
-        setIsConnected(status.isReady);
+        setIsConnected(!!status.isReady);
+
+        // Try to read phone from status.info.phone
+        const phone = status?.info?.phone || null;
+        setConnectedPhone(phone || null);
+
         if (status.isReady) {
           setQrCode(null);
           setIsInitializing(false);
@@ -254,9 +260,12 @@ function App() {
       });
 
       // Listen for ready event
-      socket.on('ready', () => {
-        console.log('WhatsApp connected');
+      socket.on('ready', (data?: any) => {
+        console.log('WhatsApp connected', data);
         setIsConnected(true);
+        if (data && data.phone) {
+          setConnectedPhone(data.phone);
+        }
         setQrCode(null);
         setIsInitializing(false);
         loadGroups().catch((e) => {
@@ -265,14 +274,18 @@ function App() {
       });
 
       // Listen for authenticated event
-      socket.on('authenticated', () => {
-        console.log('Authenticated');
+      socket.on('authenticated', (data?: any) => {
+        console.log('Authenticated', data);
+        if (data && data.phone) {
+          setConnectedPhone(data.phone);
+        }
       });
 
       // Listen for disconnected event
       socket.on('disconnected', (data: { reason: string }) => {
         console.log('Disconnected:', data.reason);
         setIsConnected(false);
+        setConnectedPhone(null);
       });
 
       // Listen for message logs - only add logs for current user
@@ -580,6 +593,7 @@ function App() {
             socketStatus={socketStatus}
             currentUserId={currentUser?.id}
             currentUser={currentUser}
+            connectedPhone={connectedPhone}
           />
         );
       case Tab.SINGLE_SENDER:
@@ -643,6 +657,7 @@ function App() {
             socketStatus={socketStatus}
             currentUserId={currentUser?.id}
             currentUser={currentUser}
+            connectedPhone={connectedPhone}
           />
         );
     }

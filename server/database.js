@@ -798,6 +798,62 @@ export const subscriptionContactLinksService = {
     }
 };
 
+// Phone numbers service
+export const phoneNumberService = {
+    async linkPhoneToUser(userId, phoneNumber) {
+        const normalized = (phoneNumber || '').replace(/\D/g, '');
+        if (!normalized) {
+            throw new Error('Invalid phone number');
+        }
+
+        const { data: existing } = await supabase
+            .from('user_phone_numbers')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('phone_number', normalized)
+            .single();
+
+        if (existing) {
+            return existing;
+        }
+
+        const { data, error } = await supabase
+            .from('user_phone_numbers')
+            .insert({
+                user_id: userId,
+                phone_number: normalized
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error linking phone number to user:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    async countUsersForPhone(phoneNumber) {
+        const normalized = (phoneNumber || '').replace(/\D/g, '');
+        if (!normalized) {
+            return 0;
+        }
+
+        const { count, error } = await supabase
+            .from('user_phone_numbers')
+            .select('id', { count: 'exact', head: true })
+            .eq('phone_number', normalized);
+
+        if (error) {
+            console.error('Error counting users for phone number:', error);
+            return 0;
+        }
+
+        return count || 0;
+    }
+};
+
 // Group selections service
 export const groupSelectionService = {
     // Get all selections for a user

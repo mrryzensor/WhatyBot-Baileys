@@ -262,8 +262,38 @@ class WhatsAppClient {
         this.isReady = true;
         this.qrCode = null;
         this.qrDataUrl = null;
-        this.io.emit('authenticated');
-        this.io.emit('ready', { status: 'connected' });
+
+        let phoneNumber = null;
+        try {
+          const jid = this.sock?.user?.id || this.sock?.user?.jid;
+          if (jid) {
+            phoneNumber = jid.split('@')[0].replace(/\D/g, '');
+          }
+
+          if (phoneNumber && this.activeUserId) {
+            const { phoneNumberService } = await import('./database.js');
+            const usageCount = await phoneNumberService.countUsersForPhone(phoneNumber);
+
+            if (usageCount >= 2) {
+              if (this.io) {
+                this.io.emit('phone_limit_exceeded', {
+                  phone: phoneNumber,
+                  userId: this.activeUserId
+                });
+                this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
+              }
+              await this.destroy();
+              return;
+            }
+
+            await phoneNumberService.linkPhoneToUser(this.activeUserId, phoneNumber);
+          }
+        } catch (error) {
+          console.error('Error validating phone number usage:', error);
+        }
+
+        this.io?.emit('authenticated', { phone: phoneNumber });
+        this.io?.emit('ready', { status: 'connected', phone: phoneNumber });
       } else if (connection === 'close') {
         this.isReady = false;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
@@ -708,10 +738,18 @@ class WhatsAppClient {
   }
 
   getStatus() {
+    let phone = null;
+    try {
+      const jid = this.sock?.user?.id || this.sock?.user?.jid;
+      if (jid) {
+        phone = jid.split('@')[0].replace(/\D/g, '');
+      }
+    } catch {}
+
     return {
       isReady: this.isReady,
       hasQR: !!this.qrCode,
-      info: this.isReady ? { user: this.sock?.user } : null,
+      info: this.isReady ? { user: this.sock?.user, phone } : null,
       qr: this.qrDataUrl || null
     };
   }
