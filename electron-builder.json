@@ -9,8 +9,17 @@
     "public/**/*",
     "server/utils/**/*",
     "profiles/**/*",
-    "node_modules/**/*",
-    "package.json"
+    "package.json",
+    "node_modules/electron-updater/**/*",
+    "node_modules/builder-util-runtime/**/*",
+    "node_modules/lazy-val/**/*",
+    "node_modules/semver/**/*",
+    "node_modules/lodash.isequal/**/*"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/electron-updater/**/*",
+    "node_modules/builder-util-runtime/**/*"
   ],
   "publish": [
     {

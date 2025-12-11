@@ -3,9 +3,18 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { spawn, fork } from 'child_process';
-import updaterPkg from 'electron-updater';
 
-const { autoUpdater } = updaterPkg;
+// electron-updater: carga con createRequire para compatibilidad ESM + CommonJS en Electron
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+let autoUpdater = null;
+try {
+  const { autoUpdater: au } = require('electron-updater');
+  autoUpdater = au;
+} catch (err) {
+  console.warn('[AutoUpdater] No se pudo cargar electron-updater:', err.message);
+}
 import { getProfileBySlug, listProfiles, updateProfilePorts, updateProfileStatus, PROFILE_CONSTANTS } from '../profiles/profileStore.js';
 import { findAvailablePort, isPortAvailable } from '../server/utils/portFinder.js';
 
