@@ -28,11 +28,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Enable pnpm (for electron-builder)
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.0 --activate
-
       - name: Install dependencies
         run: npm ci
 
@@ -45,6 +40,13 @@ jobs:
       - name: Copy Electron files
         run: npm run copy-electron-files
 
+      - name: Temporarily disable pnpm detection (force npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then mv pnpm-lock.yaml pnpm-lock.yaml.bak; fi
+          if [ -f pnpm-workspace.yaml ]; then mv pnpm-workspace.yaml pnpm-workspace.yaml.bak; fi
+
       - name: Build and publish with electron-builder
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,6 +55,14 @@ jobs:
       - name: Restore package.json main (always)
         if: always()
         run: npm run restore-package
+
+      - name: Restore pnpm files (always)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml.bak ]; then mv pnpm-lock.yaml.bak pnpm-lock.yaml; fi
+          if [ -f pnpm-workspace.yaml.bak ]; then mv pnpm-workspace.yaml.bak pnpm-workspace.yaml; fi
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
