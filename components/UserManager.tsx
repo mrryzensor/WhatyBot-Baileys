@@ -62,6 +62,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<number | null>(null);
+  const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number; isDeleting: boolean }>({ current: 0, total: 0, isDeleting: false });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -202,6 +205,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
 
+    setIsDeleting(true);
     try {
       const response = await deleteUser(userToDelete);
       if (response.success) {
@@ -212,6 +216,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     } catch (error: any) {
       toast.error(`Error al eliminar usuario: ${error.message}`);
     } finally {
+      setIsDeleting(false);
       setShowDeleteModal(false);
       setUserToDelete(null);
     }
@@ -227,15 +232,32 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   };
 
   const confirmDeleteBulk = async () => {
-    try {
-      const response = await deleteUsersBulk(Array.from(selectedUsers));
-      if (response.success) {
-        toast.success(`${response.results.success} usuario(s) eliminado(s) exitosamente`);
-        setSelectedUsers(new Set());
-        loadUsers();
+    const userIds = Array.from(selectedUsers) as number[];
+    const total = userIds.length;
+    
+    setDeleteProgress({ current: 0, total, isDeleting: true });
+    const results = { success: 0, failed: 0 };
+    
+    for (let i = 0; i < userIds.length; i++) {
+      try {
+        await deleteUser(userIds[i]);
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
       }
-    } catch (error: any) {
-      toast.error(`Error al eliminar usuarios: ${error.message}`);
+      setDeleteProgress({ current: i + 1, total, isDeleting: true });
+    }
+    
+    setDeleteProgress({ current: 0, total: 0, isDeleting: false });
+    setShowBulkDeleteModal(false);
+    
+    if (results.success > 0) {
+      toast.success(`${results.success} usuario(s) eliminado(s) exitosamente`);
+      setSelectedUsers(new Set());
+      loadUsers();
+    }
+    if (results.failed > 0) {
+      toast.error(`${results.failed} usuario(s) no se pudieron eliminar`);
     }
   };
 
@@ -456,6 +478,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
         return;
       }
 
+      setIsSaving(true);
       try {
         const response = await createUser(username, editEmail.trim(), editSubscriptionType || 'gratuito', editPassword || undefined);
         if (response.success) {
@@ -465,6 +488,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
         }
       } catch (error: any) {
         toast.error(`Error al crear usuario: ${error.message}`);
+      } finally {
+        setIsSaving(false);
       }
       return;
     }
@@ -472,6 +497,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     // If editing existing user
     if (!editingUser) return;
     
+    setIsSaving(true);
     try {
       const updates: any = {};
       // Username is optional - only update if changed and not empty
@@ -508,6 +534,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       }
     } catch (error: any) {
       toast.error(`Error al actualizar usuario: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -708,8 +736,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
               <p>{searchQuery ? 'No se encontraron usuarios' : 'No hay usuarios registrados'}</p>
             </div>
           ) : (
+            <div className="max-h-96 overflow-y-auto">
             <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
+              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-3 text-left">
                     <input
@@ -834,6 +863,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
@@ -1020,15 +1050,24 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
             <div className="flex gap-2 mt-6">
               <button
                 onClick={handleCloseUserModal}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveUser}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isCreatingUser ? 'Crear' : 'Guardar'}
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    {isCreatingUser ? 'Creando...' : 'Guardando...'}
+                  </>
+                ) : (
+                  isCreatingUser ? 'Crear' : 'Guardar'
+                )}
               </button>
             </div>
           </div>
@@ -1271,32 +1310,91 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
         />
       )}
 
-      {/* Delete User Confirmation Modal */}
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false);
-          setUserToDelete(null);
-        }}
-        onConfirm={confirmDeleteUser}
-        title="Eliminar Usuario"
-        message="¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      {/* Delete User Confirmation Modal with Loader */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Eliminar Usuario</h3>
+            <p className="text-slate-600 mb-6">
+              ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setUserToDelete(null);
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  'Eliminar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Bulk Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={showBulkDeleteModal}
-        onClose={() => setShowBulkDeleteModal(false)}
-        onConfirm={confirmDeleteBulk}
-        title="Eliminar Usuarios"
-        message={`¿Estás seguro de que deseas eliminar ${selectedUsers.size} usuario(s)? Esta acción no se puede deshacer.`}
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        type="danger"
-      />
+      {/* Bulk Delete Confirmation Modal with Progress */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+              {deleteProgress.isDeleting ? 'Eliminando Usuarios...' : 'Eliminar Usuarios'}
+            </h3>
+            
+            {deleteProgress.isDeleting ? (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  Eliminando {deleteProgress.current} de {deleteProgress.total} usuarios...
+                </p>
+                <div className="w-full bg-slate-200 rounded-full h-3">
+                  <div 
+                    className="bg-red-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-sm text-slate-500 text-center">
+                  {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% completado
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-slate-600 mb-6">
+                  ¿Estás seguro de que deseas eliminar {selectedUsers.size} usuario(s)? Esta acción no se puede deshacer.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setShowBulkDeleteModal(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmDeleteBulk}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

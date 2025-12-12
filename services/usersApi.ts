@@ -51,8 +51,22 @@ export const getUserById = async (id: number) => {
   return response.data;
 };
 
-export const createUser = async (username: string, email: string, subscriptionType: string, password?: string) => {
-  const response = await api.post('/users', { username, email, subscriptionType, password });
+export const createUser = async (
+  username: string,
+  email: string,
+  subscriptionType: string,
+  password?: string,
+  subscriptionStartDate?: string,
+  subscriptionEndDate?: string
+) => {
+  const response = await api.post('/users', {
+    username,
+    email,
+    subscriptionType,
+    password,
+    subscriptionStartDate,
+    subscriptionEndDate,
+  });
   return response.data;
 };
 

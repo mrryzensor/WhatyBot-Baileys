@@ -230,21 +230,34 @@ export const userService = {
         return data;
     },
 
-    // Create user (with optional password)
-    async createUser(username, email, subscriptionType = 'gratuito', password = null) {
+    // Create user (with optional password and optional custom subscription dates)
+    async createUser(username, email, subscriptionType = 'gratuito', password = null, subscriptionStartDate = null, subscriptionEndDate = null) {
         const limits = await getSubscriptionLimitsFromDB();
         const limit = limits[subscriptionType];
         if (!limit) {
             throw new Error(`Invalid subscription type: ${subscriptionType}`);
         }
 
-        const startDate = new Date().toISOString();
-        let endDate = null;
+        // Si vienen fechas explícitas, se respetan. Si no, se calcula por duración del plan.
+        let startDate = subscriptionStartDate;
+        let endDate = subscriptionEndDate;
 
-        if (limit.duration) {
-            const end = new Date();
-            end.setMonth(end.getMonth() + limit.duration);
-            endDate = end.toISOString();
+        if (!startDate) {
+            startDate = new Date().toISOString();
+        }
+
+        if (!endDate) {
+            if (limit.duration) {
+                const end = new Date(startDate);
+                // duration en meses (como en createUser original)
+                end.setMonth(end.getMonth() + limit.duration);
+                endDate = end.toISOString();
+            } else {
+                endDate = null;
+            }
+        } else if (typeof endDate === 'string' && endDate.length === 10) {
+            // Normalizar formato yyyy-mm-dd a ISO
+            endDate = new Date(endDate + 'T00:00:00').toISOString();
         }
 
         // Hash password if provided
@@ -355,6 +368,10 @@ export const userService = {
             updateData.password_hash = crypto.createHash('sha256').update(password).digest('hex');
         }
 
+        // Si se proporciona explícitamente la fecha de inicio/fin (por ejemplo desde Excel),
+        // deben respetarse y no ser sobreescritas por el cálculo automático.
+        const hasExplicitDates = subscriptionStartDate !== undefined || subscriptionEndDate !== undefined;
+
         if (subscriptionType !== undefined) {
             const limits = await getSubscriptionLimitsFromDB();
             const limit = limits[subscriptionType];
@@ -364,33 +381,38 @@ export const userService = {
 
             updateData.subscription_type = subscriptionType;
 
-            const startDate = new Date().toISOString();
-            let endDate = null;
+            // Solo recalcular fechas automáticamente si NO se mandaron fechas explícitas
+            if (!hasExplicitDates) {
+                const startDate = new Date().toISOString();
+                let endDate = null;
 
-            const duration = durationDays !== null ? durationDays : limit.duration;
-            if (duration) {
-                const end = new Date();
-                end.setDate(end.getDate() + duration);
-                endDate = end.toISOString();
+                const duration = durationDays !== null && durationDays !== undefined ? durationDays : limit.duration;
+                if (duration) {
+                    const end = new Date();
+                    end.setDate(end.getDate() + duration);
+                    endDate = end.toISOString();
+                }
+
+                updateData.subscription_start_date = startDate;
+                updateData.subscription_end_date = endDate;
             }
+        }
 
-            updateData.subscription_start_date = startDate;
-            updateData.subscription_end_date = endDate;
-        } else if (subscriptionStartDate !== undefined || subscriptionEndDate !== undefined) {
-            if (subscriptionStartDate !== undefined) updateData.subscription_start_date = subscriptionStartDate;
-            if (subscriptionEndDate !== undefined) updateData.subscription_end_date = subscriptionEndDate || null;
-        } else if (durationDays !== null && durationDays !== undefined) {
-            const user = await this.getUserById(userId);
-            if (user && user.subscription_start_date) {
-                const startDate = new Date(user.subscription_start_date);
-                const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + durationDays);
-                updateData.subscription_end_date = endDate.toISOString();
+        // Fechas explícitas siempre tienen prioridad sobre cualquier cálculo previo
+        if (subscriptionStartDate !== undefined) {
+            updateData.subscription_start_date = subscriptionStartDate;
+        }
+        if (subscriptionEndDate !== undefined) {
+            // Normalizar a ISO si viene en formato yyyy-mm-dd
+            if (typeof subscriptionEndDate === 'string' && subscriptionEndDate.length === 10) {
+                updateData.subscription_end_date = new Date(subscriptionEndDate + 'T00:00:00').toISOString();
+            } else {
+                updateData.subscription_end_date = subscriptionEndDate;
             }
         }
 
         if (Object.keys(updateData).length === 0) {
-            throw new Error('No fields to update');
+            return await this.getUserById(userId);
         }
 
         const { data, error } = await supabase
@@ -851,6 +873,47 @@ export const phoneNumberService = {
         }
 
         return count || 0;
+    },
+
+    async countOtherUsersForPhone(phoneNumber, excludeUserId) {
+        const normalized = (phoneNumber || '').replace(/\D/g, '');
+        if (!normalized) {
+            return 0;
+        }
+
+        const { count, error } = await supabase
+            .from('user_phone_numbers')
+            .select('id', { count: 'exact', head: true })
+            .eq('phone_number', normalized)
+            .neq('user_id', excludeUserId);
+
+        if (error) {
+            console.error('Error counting other users for phone number:', error);
+            return 0;
+        }
+
+        return count || 0;
+    },
+
+    async unlinkPhoneFromUser(userId, phoneNumber) {
+        const normalized = (phoneNumber || '').replace(/\D/g, '');
+        if (!normalized || !userId) {
+            return false;
+        }
+
+        const { error } = await supabase
+            .from('user_phone_numbers')
+            .delete()
+            .eq('user_id', userId)
+            .eq('phone_number', normalized);
+
+        if (error) {
+            console.error('Error unlinking phone number from user:', error);
+            return false;
+        }
+
+        console.log(`Phone ${normalized} unlinked from user ${userId}`);
+        return true;
     }
 };
 

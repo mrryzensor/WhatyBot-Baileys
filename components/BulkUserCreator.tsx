@@ -28,6 +28,9 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Índices de filas seleccionadas en la tabla (incluye usuarios nuevos)
+  const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
+  const [progress, setProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -50,6 +53,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
       setExistingUsers([]);
       setShowComparison(false);
       setSelectedIds(new Set());
+      setSelectedRowIndices(new Set());
     }
   }, [isOpen]);
 
@@ -205,8 +209,8 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     e.stopPropagation();
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    const file = files.find(f => 
+    const files: File[] = Array.from(e.dataTransfer.files);
+    const file = files.find((f: File) => 
       f.name.endsWith('.csv') || 
       f.name.endsWith('.txt') || 
       f.name.endsWith('.json') || 
@@ -215,7 +219,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     );
     
     if (file) {
-      handleFileUpload(file);
+      handleFileUpload(file as File);
     } else {
       toast.error('Por favor, sube un archivo CSV, TXT, JSON o Excel');
     }
@@ -226,6 +230,24 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     if (file) {
       handleFileUpload(file);
     }
+  };
+
+  // Asignar plan y vigencia masivamente a usuarios del Excel
+  const handleBulkAssign = (selectedIndices: number[], plan: string, endDate: string) => {
+    setExcelUsers(prev => {
+      const updated = [...prev];
+      selectedIndices.forEach(index => {
+        if (updated[index]) {
+          updated[index] = {
+            ...updated[index],
+            subscriptionType: plan,
+            subscriptionEndDate: endDate,
+            subscriptionStartDate: new Date().toISOString().split('T')[0]
+          };
+        }
+      });
+      return updated;
+    });
   };
 
   // Actualizar usuarios masivamente
@@ -264,35 +286,55 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     }
   };
 
-  // Crear usuarios nuevos
+  // Crear usuarios nuevos (solo filas nuevas seleccionadas)
   const handleCreateNewUsers = async () => {
-    const newUsers = compareUsers.filter(c => !c.existingUser);
-    
-    if (newUsers.length === 0) {
-      toast.error('No hay usuarios nuevos para crear');
+    // Tomar solo comparaciones que NO tienen existingUser y cuyo índice está seleccionado
+    const newUsersWithIndex = compareUsers
+      .map((c, index) => ({ comparison: c, index }))
+      .filter(({ comparison, index }) => !comparison.existingUser && selectedRowIndices.has(index));
+
+    if (newUsersWithIndex.length === 0) {
+      toast.error('Selecciona al menos un usuario nuevo para crear');
       return;
     }
 
     setIsProcessing(true);
+    setProgress({ current: 0, total: newUsersWithIndex.length });
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
-    for (const comparison of newUsers) {
+    for (let i = 0; i < newUsersWithIndex.length; i++) {
+      const { comparison } = newUsersWithIndex[i];
       try {
         const username = comparison.excelUser.username || 
                          comparison.excelUser.email?.split('@')[0] || 
                          `user_${Date.now()}`;
         const email = comparison.excelUser.email || '';
         const subscriptionType = comparison.excelUser.subscriptionType || defaultSubscriptionType;
-        
-        await createUser(username, email, subscriptionType);
+
+        // Determinar fechas a enviar directamente al backend
+        const startDateForCreate = comparison.excelUser.subscriptionStartDate || null;
+        const endDateForCreate = comparison.excelUser.subscriptionEndDate || null;
+
+        // Una sola llamada: el backend respetará estas fechas gracias a la nueva lógica de createUser
+        await createUser(
+          username,
+          email,
+          subscriptionType,
+          undefined,
+          startDateForCreate || undefined,
+          endDateForCreate || undefined
+        );
+
         results.success++;
       } catch (error: any) {
         results.failed++;
         results.errors.push(`${comparison.excelUser.email || comparison.excelUser.username}: ${error.response?.data?.error || error.message}`);
       }
+      setProgress({ current: i + 1, total: newUsersWithIndex.length });
     }
 
     setIsProcessing(false);
+    setProgress({ current: 0, total: 0 });
 
     if (results.success > 0) {
       toast.success(`${results.success} usuarios creados exitosamente`);
@@ -322,6 +364,10 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
   };
 
   const newUsersCount = compareUsers.filter(c => !c.existingUser).length;
+  const selectedNewUsersCount = compareUsers
+    .map((c, index) => ({ comparison: c, index }))
+    .filter(({ comparison, index }) => !comparison.existingUser && selectedRowIndices.has(index))
+    .length;
   const needsUpdateCount = compareUsers.filter(c => c.needsUpdate && c.existingUser).length;
 
   return (
@@ -449,11 +495,12 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     placeholder="usuario1,email1@example.com,gratuito&#10;usuario2,email2@example.com,pro&#10;..."
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg h-32 font-mono text-sm"
                     onPaste={(e) => {
+                      const target = e.currentTarget;
                       setTimeout(() => {
-                        const text = e.currentTarget.value;
+                        const text = target.value;
                         if (text) {
                           handlePasteText(text);
-                          e.currentTarget.value = '';
+                          target.value = '';
                         }
                       }, 100);
                     }}
@@ -469,8 +516,12 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
                 onBulkUpdate={handleBulkUpdate}
+                onBulkAssign={handleBulkAssign}
+                selectedRowIndices={selectedRowIndices}
+                onRowSelectionChange={setSelectedRowIndices}
                 isLoading={isProcessing}
                 toast={toast}
+                subscriptionTypes={subscriptionLimits.map((l: any) => l.subscription_type || l.type).filter(Boolean)}
               />
 
               {/* Acciones */}
@@ -486,23 +537,33 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                   Cargar Otro Archivo
                 </button>
                 {newUsersCount > 0 && (
-                  <button
-                    onClick={handleCreateNewUsers}
-                    disabled={isProcessing}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <RefreshCw size={16} className="animate-spin" />
-                        Creando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle size={16} />
-                        Crear {newUsersCount} Usuario(s) Nuevo(s)
-                      </>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={handleCreateNewUsers}
+                      disabled={isProcessing || selectedNewUsersCount === 0}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          Creando {progress.current}/{progress.total}...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          Crear {selectedNewUsersCount || newUsersCount} Usuario(s) Nuevo(s)
+                        </>
+                      )}
+                    </button>
+                    {isProcessing && progress.total > 0 && (
+                      <div className="w-full bg-slate-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                        />
+                      </div>
                     )}
-                  </button>
+                  </div>
                 )}
                 <button
                   onClick={() => {
