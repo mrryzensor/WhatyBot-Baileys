@@ -50,6 +50,22 @@ jobs:
           if [ -f pnpm-lock.yaml ]; then mv pnpm-lock.yaml pnpm-lock.yaml.bak; fi
           if [ -f pnpm-workspace.yaml ]; then mv pnpm-workspace.yaml pnpm-workspace.yaml.bak; fi
 
+      - name: Create .env for packaged backend (from GitHub Secrets)
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secrets. Skipping .env creation."
+            exit 0
+          fi
+          {
+            echo "SUPABASE_URL=${SUPABASE_URL}";
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}";
+          } > .env
+
       - name: Build and publish with electron-builder
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -66,6 +82,12 @@ jobs:
           set -euo pipefail
           if [ -f pnpm-lock.yaml.bak ]; then mv pnpm-lock.yaml.bak pnpm-lock.yaml; fi
           if [ -f pnpm-workspace.yaml.bak ]; then mv pnpm-workspace.yaml.bak pnpm-workspace.yaml; fi
+
+      - name: Cleanup .env (always)
+        if: always()
+        shell: bash
+        run: |
+          rm -f .env
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
