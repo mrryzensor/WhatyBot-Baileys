@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -25,11 +25,12 @@ function App() {
   const [isAuthenticatedState, setIsAuthenticatedState] = useState<boolean>(checkAuth());
   const [currentUser, setCurrentUser] = useState<any>(getCurrentUser());
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
-  const [isConnected, setIsConnected] = useState(false);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [logs, setLogs] = useState<MessageLog[]>([]);
-  const [rules, setRules] = useState<AutoReplyRule[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
+  const lastGroupsLoadRef = useRef<number>(0);
+  const isLoadingGroupsRef = useRef<boolean>(false);
   const [config, setConfig] = useState<AppConfig>({
     chromePath: '',
     headless: false,
@@ -45,7 +46,6 @@ function App() {
   const [limitError, setLimitError] = useState<any>(null);
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
   const [socketInstance, setSocketInstance] = useState<any>(null);
-  const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{
     current: number;
     total: number;
@@ -57,6 +57,8 @@ function App() {
   const [bulkWaitSecondsLeft, setBulkWaitSecondsLeft] = useState<number | null>(null);
   const [groupProgress, setGroupProgress] = useState<{ current: number; total: number } | null>(null);
   const [groupsCache, setGroupsCache] = useState<Group[]>([]);
+  const [logs, setLogs] = useState<MessageLog[]>([]);
+  const [rules, setRules] = useState<AutoReplyRule[]>([]);
 
   const bulkQueueControl = useBulkQueueControl(bulkProgress);
   const [showCancelBulkModal, setShowCancelBulkModal] = useState(false);
@@ -463,14 +465,23 @@ function App() {
   }, [isAuthenticatedState, currentUser]); // Reload when auth state or user changes
 
   const loadGroups = async () => {
+    // Prevent spamming the backend when socket emits repeated ready/status events
+    const now = Date.now();
+    if (isLoadingGroupsRef.current) return;
+    if (now - lastGroupsLoadRef.current < 3000) return;
+
     try {
+      isLoadingGroupsRef.current = true;
+      lastGroupsLoadRef.current = now;
       await waitForBackendPort();
       const response = await getGroups();
-      if (response.success && Array.isArray(response.groups)) {
+      if (Array.isArray(response.groups)) {
         setGroupsCache(response.groups);
       }
     } catch (error) {
       console.error('Error loading groups:', error);
+    } finally {
+      isLoadingGroupsRef.current = false;
     }
   };
 

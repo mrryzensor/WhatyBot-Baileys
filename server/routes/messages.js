@@ -103,6 +103,7 @@ router.post('/send', async (req, res) => {
                 return res.status(403).json({ 
                     error: validation.reason,
                     limitExceeded: validation.limitExceeded || false,
+                    subscriptionExpired: validation.subscriptionExpired || false,
                     currentCount: validation.currentCount,
                     limit: validation.limit,
                     subscriptionType: validation.subscriptionType
@@ -224,6 +225,7 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
                 return res.status(403).json({ 
                     error: validation.reason,
                     limitExceeded: validation.limitExceeded || false,
+                    subscriptionExpired: validation.subscriptionExpired || false,
                     currentCount: validation.currentCount,
                     limit: validation.limit,
                     subscriptionType: validation.subscriptionType
@@ -398,6 +400,7 @@ router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
                 return res.status(403).json({ 
                     error: validation.reason,
                     limitExceeded: validation.limitExceeded || false,
+                    subscriptionExpired: validation.subscriptionExpired || false,
                     currentCount: validation.currentCount,
                     limit: validation.limit,
                     subscriptionType: validation.subscriptionType

@@ -216,10 +216,15 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 router.get('/subscription/limits', async (req, res) => {
     try {
         const limits = await getSubscriptionLimitsFromDB();
-        const limitsArray = Object.keys(limits).map(type => ({
-            type,
-            ...limits[type]
-        }));
+        const limitsArray = Object.keys(limits).map(type => {
+            const limit = limits[type] || {};
+            return {
+                type,
+                ...limit,
+                // JSON-safe: Infinity becomes null when serialized
+                messages: limit.messages === Infinity ? -1 : limit.messages
+            };
+        });
         res.json({ success: true, limits: limitsArray });
     } catch (error) {
         console.error('Error getting subscription limits:', error);

@@ -480,7 +480,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
       setIsSaving(true);
       try {
-        const response = await createUser(username, editEmail.trim(), editSubscriptionType || 'gratuito', editPassword || undefined);
+        const response = await createUser(
+          username,
+          editEmail.trim(),
+          editSubscriptionType || 'gratuito',
+          editPassword || undefined,
+          editStartDate || undefined,
+          editEndDate || undefined
+        );
         if (response.success) {
           toast.success('Usuario creado exitosamente');
           handleCloseUserModal();
@@ -574,6 +581,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       case 'administrador': return <Crown className="text-yellow-600" size={20} />;
       case 'pro': return <Zap className="text-blue-600" size={20} />;
       case 'elite': return <TrendingUp className="text-purple-600" size={20} />;
+      case 'platino': return <Crown className="text-amber-600" size={20} />;
       default: return <Gift className="text-green-600" size={20} />;
     }
   };
@@ -583,6 +591,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       case 'administrador': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       case 'pro': return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'elite': return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'platino': return 'bg-amber-100 text-amber-800 border-amber-300';
       default: return 'bg-green-100 text-green-800 border-green-300';
     }
   };
@@ -942,6 +951,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                   <option value="gratuito">Gratuito</option>
                   <option value="pro">Pro</option>
                   <option value="elite">Elite</option>
+                  <option value="platino">Platino</option>
                   <option value="administrador">Administrador</option>
                 </select>
               </div>

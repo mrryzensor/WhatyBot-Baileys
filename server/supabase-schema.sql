@@ -113,8 +113,103 @@ VALUES
     ('administrador', -1, NULL, 0),
     ('gratuito', 50, 30, 0),
     ('pro', 500, 30, 10),
-    ('elite', 2000, 30, 15)
+    ('elite', 2000, 30, 15),
+    ('platino', -1, 30, 25)
 ON CONFLICT (subscription_type) DO NOTHING;
 
 -- Nota: -1 representa Infinity para mensajes ilimitados
+
+-- 1) Columna auth_user_id y constraint
+alter table public.users
+add column if not exists auth_user_id uuid;
+
+create unique index if not exists users_auth_user_id_unique
+on public.users(auth_user_id);
+
+-- 2) Trigger: al crear auth.users, crear/actualizar public.users
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.users (auth_user_id, email, username, subscription_type, is_active, created_at, updated_at)
+  values (
+    new.id,
+    new.email,
+    split_part(new.email, '@', 1),
+    'gratuito',
+    true,
+    now(),
+    now()
+  )
+  on conflict (auth_user_id)
+  do update set
+    email = excluded.email,
+    updated_at = now();
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute procedure public.handle_new_auth_user();
+
+
+-- 3) RPC admin delete (Auth + public) Esta RPC es la que llama tu frontend (delete_user_everywhere con target_auth_user_id).
+
+create or replace function public.delete_user_everywhere(target_auth_user_id uuid)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  caller_is_admin boolean;
+begin
+  -- validar que el caller está autenticado
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  -- validar que el caller es admin según public.users
+  select (u.subscription_type = 'administrador')
+    into caller_is_admin
+  from public.users u
+  where u.auth_user_id = auth.uid();
+
+  if caller_is_admin is distinct from true then
+    raise exception 'not_authorized';
+  end if;
+
+  -- borrar perfil (y cascadas) primero o después, como prefieras
+  delete from public.users where auth_user_id = target_auth_user_id;
+
+  -- borrar usuario de Auth (requiere privileges internos de Supabase; security definer ayuda)
+  perform auth.admin_delete_user(target_auth_user_id);
+
+end;
+$$;
+
+grant execute on function public.delete_user_everywhere(uuid) to authenticated;
+
+-- crear/ajustar la función en Supabase (SQL)
+create or replace function public.delete_user_everywhere(target_auth_user_id uuid)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  -- Eliminar el perfil (public.users)
+  delete from public.users where auth_user_id = target_auth_user_id;
+
+  -- Eliminar del Auth (auth.users)
+  delete from auth.users where id = target_auth_user_id;
+end;
+$$;
+
+-- Importante: que sea ejecutable desde el cliente logueado
+grant execute on function public.delete_user_everywhere(uuid) to authenticated;
 

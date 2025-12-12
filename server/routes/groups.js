@@ -45,8 +45,20 @@ const upload = multer({
 router.get('/', async (req, res) => {
     try {
         const whatsappClient = req.app.get('whatsappClient');
-        const groups = await whatsappClient.getGroups();
-        res.json({ success: true, groups });
+        if (!whatsappClient || typeof whatsappClient.getGroups !== 'function') {
+            return res.status(503).json({ success: false, groups: [], error: 'WhatsApp client no disponible' });
+        }
+
+        try {
+            const groups = await whatsappClient.getGroups();
+            return res.json({ success: true, groups });
+        } catch (innerError) {
+            const message = innerError?.message || 'Error getting groups';
+            if (typeof message === 'string' && message.toLowerCase().includes('no está listo')) {
+                return res.json({ success: false, groups: [], error: message });
+            }
+            throw innerError;
+        }
     } catch (error) {
         console.error('Error getting groups:', error);
         res.status(500).json({ error: error.message });
@@ -149,6 +161,7 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
                 return res.status(403).json({ 
                     error: validation.reason,
                     limitExceeded: validation.limitExceeded || false,
+                    subscriptionExpired: validation.subscriptionExpired || false,
                     currentCount: validation.currentCount,
                     limit: validation.limit,
                     subscriptionType: validation.subscriptionType

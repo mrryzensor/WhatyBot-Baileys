@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build for ${{ matrix.os }}
@@ -23,15 +26,32 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Prepare build (package.json main -> dist/electron.js)
+        run: npm run prepare-build
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Copy Electron files
+        run: npm run copy-electron-files
 
       - name: Build and publish with electron-builder
         env:
-          # Token personal con permisos repo (configurado en Settings → Secrets → Actions como GH_TOKEN)
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --publish always
+
+      - name: Restore package.json main (always)
+        if: always()
+        run: npm run restore-package
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: release/**
+          if-no-files-found: error

@@ -188,7 +188,11 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
             console.error('Error sending message:', error);
             
             // Check if error is due to limit exceeded
-            if (error.response?.status === 403 && error.response?.data?.limitExceeded && !isAdmin) {
+            if (
+                error.response?.status === 403 &&
+                (error.response?.data?.limitExceeded || error.response?.data?.subscriptionExpired) &&
+                !isAdmin
+            ) {
                 setLimitError(error.response.data);
                 setShowUpgradeModal(true);
             } else {
@@ -222,6 +226,8 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                     currentPlan={currentUser.subscription_type}
                     currentLimit={limitError.limit || 0}
                     currentUsed={limitError.currentCount || 0}
+                    subscriptionExpired={!!limitError.subscriptionExpired}
+                    subscriptionEndDate={limitError.endDate}
                     subscriptionLimits={subscriptionLimits}
                     userEmail={currentUser.email || ''}
                     isConnected={isConnected}

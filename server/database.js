@@ -98,7 +98,8 @@ async function initializeSubscriptionLimits() {
             { subscription_type: 'administrador', messages: -1, duration_days: null, price: 0 },
             { subscription_type: 'gratuito', messages: 50, duration_days: 30, price: 0 },
             { subscription_type: 'pro', messages: 500, duration_days: 30, price: 10 },
-            { subscription_type: 'elite', messages: 2000, duration_days: 30, price: 15 }
+            { subscription_type: 'elite', messages: 2000, duration_days: 30, price: 15 },
+            { subscription_type: 'platino', messages: -1, duration_days: 30, price: 25 }
         ];
 
         const { error } = await supabase
@@ -138,7 +139,8 @@ async function getSubscriptionLimitsFromDB() {
             'administrador': { messages: Infinity, duration: null, price: 0 },
             'gratuito': { messages: 50, duration: 30, price: 0 },
             'pro': { messages: 500, duration: 30, price: 10 },
-            'elite': { messages: 2000, duration: 30, price: 15 }
+            'elite': { messages: 2000, duration: 30, price: 15 },
+            'platino': { messages: Infinity, duration: 30, price: 25 }
         };
     }
 }
@@ -249,6 +251,11 @@ export const userService = {
         // Si vienen fechas explícitas, se respetan. Si no, se calcula por duración del plan.
         let startDate = subscriptionStartDate;
         let endDate = subscriptionEndDate;
+
+        if (typeof startDate === 'string' && startDate.length === 10) {
+            // Normalizar formato yyyy-mm-dd a ISO
+            startDate = new Date(startDate + 'T00:00:00').toISOString();
+        }
 
         if (!startDate) {
             startDate = new Date().toISOString();
@@ -619,16 +626,7 @@ export const validationService = {
             return { allowed: false, reason: 'Usuario no encontrado' };
         }
 
-        // Check subscription expiration
-        if (user.subscription_end_date) {
-            const endDate = new Date(user.subscription_end_date);
-            const now = new Date();
-            if (endDate < now) {
-                return { allowed: false, reason: 'Suscripción expirada' };
-            }
-        }
-
-        // Check message limits
+        // Resolve limits early (needed for both expiration and message-limit checks)
         const limits = await getSubscriptionLimitsFromDB();
         const subscriptionType = (user.subscription_type || '').toString().toLowerCase();
         const limit = limits[subscriptionType] || limits[user.subscription_type];
@@ -638,6 +636,26 @@ export const validationService = {
                 reason: `Tipo de suscripción inválido: ${user.subscription_type}`
             };
         }
+
+        // Check subscription expiration (administrador is never blocked)
+        if (user.subscription_end_date && limit.messages !== Infinity) {
+            const endDate = new Date(user.subscription_end_date);
+            const now = new Date();
+            if (endDate < now) {
+                const currentCount = await messageCountService.getCurrentMonthCount(userId);
+                return {
+                    allowed: false,
+                    reason: 'Suscripción expirada',
+                    subscriptionExpired: true,
+                    currentCount,
+                    limit: limit.messages,
+                    subscriptionType: user.subscription_type,
+                    endDate: user.subscription_end_date
+                };
+            }
+        }
+
+        // Check message limits
 
         // Administrador has unlimited messages
         if (limit.messages === Infinity) {
@@ -667,6 +685,11 @@ export const validationService = {
         console.log(`[Validation] ALLOWED: User ${userId} can send ${messageCount} message(s) (${newCount} <= ${limit.messages})`);
 
         return { allowed: true, reason: null };
+    },
+
+    // Backward-compatible alias (used by routes and WhatsApp client)
+    async canSendMessages(userId, messageCount = 1) {
+        return await this.validateMessageLimit(userId, messageCount);
     },
 
     // Get subscription info

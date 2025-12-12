@@ -11,6 +11,8 @@ interface SubscriptionUpgradeModalProps {
   currentUsed: number;
   subscriptionLimits: SubscriptionLimit[];
   userEmail: string;
+  subscriptionExpired?: boolean;
+  subscriptionEndDate?: string;
   isConnected?: boolean;
 }
 
@@ -22,6 +24,8 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
   currentUsed,
   subscriptionLimits,
   userEmail,
+  subscriptionExpired = false,
+  subscriptionEndDate,
   isConnected = false
 }) => {
   const [sending, setSending] = useState<string | null>(null);
@@ -55,10 +59,25 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
 
   if (!isOpen) return null;
 
-  // Get available upgrade plans (excluding current and admin, including free plan)
-  const availablePlans = subscriptionLimits.filter(
-    limit => limit.type !== currentPlan && limit.type !== 'administrador'
-  );
+  const planOrder: Record<string, number> = {
+    gratuito: 0,
+    pro: 1,
+    elite: 2,
+    platino: 3,
+    administrador: 99
+  };
+
+  const currentPlanKey = (currentPlan || '').toString().toLowerCase();
+  const currentRank = planOrder[currentPlanKey] ?? 0;
+
+  const availablePlans = subscriptionLimits.filter((limit) => {
+    const type = (limit.type || '').toString().toLowerCase();
+    if (!type) return false;
+    if (type === 'administrador') return false;
+    if (type === 'gratuito') return false;
+    const rank = planOrder[type] ?? 0;
+    return rank > currentRank;
+  });
 
   const handleUpgrade = async (planType: string, planPrice: number) => {
     const planName = planType.charAt(0).toUpperCase() + planType.slice(1);
@@ -108,6 +127,7 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
     switch (type) {
       case 'pro': return <Zap className="text-blue-600" size={24} />;
       case 'elite': return <TrendingUp className="text-purple-600" size={24} />;
+      case 'platino': return <Crown className="text-amber-600" size={24} />;
       default: return <Crown className="text-yellow-600" size={24} />;
     }
   };
@@ -116,6 +136,7 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
     switch (type) {
       case 'pro': return 'border-blue-300 bg-blue-50 hover:bg-blue-100';
       case 'elite': return 'border-purple-300 bg-purple-50 hover:bg-purple-100';
+      case 'platino': return 'border-amber-300 bg-amber-50 hover:bg-amber-100';
       default: return 'border-yellow-300 bg-yellow-50 hover:bg-yellow-100';
     }
   };
@@ -124,9 +145,19 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
     switch (type) {
       case 'pro': return 'Pro';
       case 'elite': return 'Elite';
+      case 'platino': return 'Platino';
       default: return type.charAt(0).toUpperCase() + type.slice(1);
     }
   };
+
+  const formatEndDate = (dateString?: string) => {
+    if (!dateString) return null;
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  const formattedEndDate = formatEndDate(subscriptionEndDate);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
@@ -141,13 +172,23 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
           </button>
           
           <div className="text-center text-white">
-            <h2 className="text-3xl font-bold mb-2">Has alcanzado tu límite de mensajes</h2>
-            <p className="text-lg opacity-90">
-              Has usado {currentUsed} de {currentLimit} mensajes este mes
-            </p>
+            <h2 className="text-3xl font-bold mb-2">
+              {subscriptionExpired ? 'Tu suscripción está expirada' : 'Has alcanzado tu límite de mensajes'}
+            </h2>
+            {subscriptionExpired ? (
+              <p className="text-lg opacity-90">
+                {formattedEndDate ? `Venció el ${formattedEndDate}` : 'Tu plan ya no está activo.'}
+              </p>
+            ) : (
+              <p className="text-lg opacity-90">
+                Has usado {currentUsed} de {currentLimit} mensajes este mes
+              </p>
+            )}
             <div className="mt-4 bg-white/20 rounded-lg p-4 inline-block">
               <p className="text-sm font-medium">
-                Actualiza tu plan para continuar enviando mensajes ilimitados
+                {subscriptionExpired
+                  ? 'Actualiza tu plan para volver a enviar mensajes'
+                  : 'Actualiza tu plan para continuar enviando mensajes ilimitados'}
               </p>
             </div>
           </div>
@@ -180,7 +221,9 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
                   <div className="flex items-center gap-2 text-slate-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span className="text-sm">
-                      {plan.messages === Infinity ? 'Mensajes ilimitados' : `${plan.messages.toLocaleString()} mensajes por mes`}
+                      {plan.messages === -1 || plan.messages === Infinity || plan.messages == null
+                        ? 'Mensajes ilimitados'
+                        : `${Number(plan.messages).toLocaleString()} mensajes por mes`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-700">
