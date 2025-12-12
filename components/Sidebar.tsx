@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser }) => {
-  const isAdmin = currentUser?.subscription_type === 'administrador';
+  const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
   
   const navItems = [
     { id: Tab.DASHBOARD, label: 'Panel Principal', icon: LayoutDashboard },

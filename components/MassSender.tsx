@@ -42,6 +42,8 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [limitError, setLimitError] = useState<any>(null);
+
+  const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
   const [isDraggingCSV, setIsDraggingCSV] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
@@ -810,7 +812,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
       console.error('Error sending bulk messages:', error);
       
       // Check if error is due to limit exceeded (but not for administrators)
-      if (error.response?.status === 403 && error.response?.data?.limitExceeded && currentUser?.subscription_type !== 'administrador') {
+      if (error.response?.status === 403 && error.response?.data?.limitExceeded && !isAdmin) {
         setLimitError(error.response.data);
         setShowUpgradeModal(true);
       } else {

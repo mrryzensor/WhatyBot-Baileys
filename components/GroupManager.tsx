@@ -47,6 +47,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
   const [viewingGroupName, setViewingGroupName] = useState<string>('');
   const [showMembersViewer, setShowMembersViewer] = useState(false);
 
+  const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
+
   const schedule = useSchedule();
 
   React.useEffect(() => {
@@ -215,7 +217,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
       console.error('Error sending to groups:', error);
       
       // Check if error is due to limit exceeded
-      if (error.response?.status === 403 && error.response?.data?.limitExceeded && currentUser?.subscription_type !== 'administrador') {
+      if (error.response?.status === 403 && error.response?.data?.limitExceeded && !isAdmin) {
         setLimitError(error.response.data);
         setShowUpgradeModal(true);
       } else {

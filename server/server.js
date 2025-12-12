@@ -175,15 +175,15 @@ const persistPortInfo = (info) => {
       }
       
       // Listen for user login/logout events
-      socket.on('user_logged_in', (data) => {
+      socket.on('user_logged_in', async (data) => {
         if (data && data.userId) {
-          whatsappClient.setActiveUserId(data.userId);
+          await whatsappClient.setActiveUserId(data.userId);
           console.log(`[Server] Active user set to: ${data.userId}`);
         }
       });
       
-      socket.on('user_logged_out', () => {
-        whatsappClient.setActiveUserId(null);
+      socket.on('user_logged_out', async () => {
+        await whatsappClient.setActiveUserId(null);
         console.log('[Server] Active user cleared');
       });
       

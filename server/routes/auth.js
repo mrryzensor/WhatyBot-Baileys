@@ -1,13 +1,8 @@
 import express from 'express';
 import { userService, messageCountService } from '../database.js';
-import crypto from 'crypto';
+import { supabaseAnon } from '../supabase.js';
 
 const router = express.Router();
-
-// Simple password hash function (for demo purposes, in production use bcrypt)
-const hashPassword = (password) => {
-    return crypto.createHash('sha256').update(password).digest('hex');
-};
 
 // POST /api/auth/login - Login user
 router.post('/login', async (req, res) => {
@@ -24,33 +19,50 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ error: 'Formato de correo electrónico inválido' });
         }
 
-        // Find user by email
-        const user = await userService.getUserByEmail(email);
+        // Try Auth sign-in first
+        const { data: authData, error: authError } = await supabaseAnon.auth.signInWithPassword({
+            email,
+            password
+        });
 
-        if (!user) {
-            return res.status(404).json({ 
-                error: 'Usuario no encontrado',
-                message: 'No existe una cuenta con este correo electrónico'
-            });
-        }
+        // Legacy behavior for old frontend:
+        // If sign-in fails AND user profile doesn't exist in public.users, return 404 to trigger "create user" modal.
+        if (authError || !authData?.user) {
+            const maybeProfile = await userService.getUserByEmail(email);
+            if (!maybeProfile) {
+                return res.status(404).json({
+                    error: 'Usuario no encontrado',
+                    message: 'No existe una cuenta con este correo electrónico'
+                });
+            }
 
-        // Verify password
-        const passwordHash = hashPassword(password);
-        if (user.password_hash !== passwordHash) {
             return res.status(401).json({ error: 'Contraseña incorrecta' });
         }
 
+        // Ensure we have a public.users profile linked to this auth user
+        const user = await userService.getUserByEmail(email);
+        if (!user) {
+            const username = email.split('@')[0];
+            try {
+                await userService.ensureProfileForAuthUser(authData.user.id, username, email);
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        const freshProfile = await userService.getUserByEmail(email);
+        if (!freshProfile) {
+            return res.status(500).json({ error: 'No se pudo cargar el perfil del usuario' });
+        }
+
         // Check if user is active
-        if (!user.is_active) {
+        if (freshProfile.is_active === false) {
             return res.status(403).json({ error: 'Usuario inactivo' });
         }
 
-        // Remove password from response
-        const { password_hash, ...userWithoutPassword } = user;
-
         res.json({
             success: true,
-            user: userWithoutPassword,
+            user: freshProfile,
             message: 'Login exitoso'
         });
     } catch (error) {
@@ -77,17 +89,23 @@ router.post('/change-password', async (req, res) => {
             return res.status(400).json({ error: 'Formato de correo electrónico inválido' });
         }
 
-        const user = await userService.getUserByEmail(email);
-        if (!user) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
+        // Verify current password with Auth
+        const { data: authData, error: authError } = await supabaseAnon.auth.signInWithPassword({
+            email,
+            password: currentPassword
+        });
 
-        const currentHash = hashPassword(currentPassword);
-        if (user.password_hash !== currentHash) {
+        if (authError || !authData?.user) {
             return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
         }
 
-        await userService.updateUser(user.id, { password: newPassword });
+        // Update password in Auth via admin API (service role)
+        const profile = await userService.getUserByEmail(email);
+        if (!profile?.auth_user_id) {
+            return res.status(400).json({ error: 'El usuario no tiene auth_user_id asociado' });
+        }
+
+        await userService.updateUser(profile.id, { password: newPassword });
 
         return res.json({
             success: true,
@@ -114,7 +132,7 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Formato de correo electrónico inválido' });
         }
 
-        // Check if user already exists
+        // Check if user already exists in public.users
         const existingUser = await userService.getUserByEmail(email);
         if (existingUser) {
             return res.status(409).json({ error: 'Ya existe una cuenta con este correo electrónico' });
@@ -128,18 +146,12 @@ router.post('/register', async (req, res) => {
         // Create username from email (before @)
         const username = email.split('@')[0];
 
-        // Hash password
-        const passwordHash = hashPassword(password);
-
-        // Create user with free subscription
-        const user = await userService.createUserWithPassword(username, email, passwordHash, 'gratuito');
-
-        // Remove password from response
-        const { password_hash, ...userWithoutPassword } = user;
+        // Create Auth user (admin) + profile
+        const user = await userService.createUser(username, email, 'gratuito', password);
 
         res.json({
             success: true,
-            user: userWithoutPassword,
+            user,
             message: 'Cuenta creada exitosamente'
         });
     } catch (error) {

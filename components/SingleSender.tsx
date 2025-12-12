@@ -44,6 +44,8 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
     const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
     const [limitError, setLimitError] = useState<any>(null);
 
+    const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
+
     const schedule = useSchedule();
 
     React.useEffect(() => {
@@ -186,7 +188,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
             console.error('Error sending message:', error);
             
             // Check if error is due to limit exceeded
-            if (error.response?.status === 403 && error.response?.data?.limitExceeded && currentUser?.subscription_type !== 'administrador') {
+            if (error.response?.status === 403 && error.response?.data?.limitExceeded && !isAdmin) {
                 setLimitError(error.response.data);
                 setShowUpgradeModal(true);
             } else {

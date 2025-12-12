@@ -60,6 +60,7 @@ function App() {
 
   const bulkQueueControl = useBulkQueueControl(bulkProgress);
   const [showCancelBulkModal, setShowCancelBulkModal] = useState(false);
+  const [phoneLimitModal, setPhoneLimitModal] = useState<{ show: boolean; phone: string | null; message: string | null }>({ show: false, phone: null, message: null });
 
   // Listen for auto-updater status events from main process and show toasts
   useEffect(() => {
@@ -286,6 +287,16 @@ function App() {
         console.log('Disconnected:', data.reason);
         setIsConnected(false);
         setConnectedPhone(null);
+      });
+
+      // Listen for phone limit exceeded event
+      socket.on('phone_limit_exceeded', (data: { phone: string; userId: string; message?: string }) => {
+        console.log('Phone limit exceeded:', data);
+        setPhoneLimitModal({
+          show: true,
+          phone: data.phone,
+          message: data.message || 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
+        });
       });
 
       // Listen for message logs - only add logs for current user
@@ -633,7 +644,8 @@ function App() {
         return <AutoReplyManager rules={rules} setRules={setRules} toast={{ success, error, warning, info }} />;
       case Tab.USERS:
         // Solo administradores pueden acceder a la gestión de usuarios
-        if (currentUser?.subscription_type !== 'administrador') {
+        const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
+        if (!isAdmin) {
           return (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -757,6 +769,45 @@ function App() {
           userEmail={currentUser.email || ''}
           isConnected={isConnected}
         />
+      )}
+
+      {/* Modal for phone number limit exceeded */}
+      {phoneLimitModal.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="bg-red-600 px-6 py-4">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                Número no permitido
+              </h3>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-700 mb-4">
+                {phoneLimitModal.message}
+              </p>
+              {phoneLimitModal.phone && (
+                <p className="text-sm text-slate-500 mb-4">
+                  Número: <span className="font-mono font-medium">+{phoneLimitModal.phone}</span>
+                </p>
+              )}
+              <p className="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <strong>Nota:</strong> Si deseas usar este número en esta cuenta, primero debes desvincularlo de una de las otras cuentas donde está registrado.
+              </p>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setPhoneLimitModal({ show: false, phone: null, message: null })}
+                className="bg-slate-600 hover:bg-slate-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

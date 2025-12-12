@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import supabase from './supabase.js';
+import supabase, { supabaseAnon } from './supabase.js';
 
 // Cache para límites de suscripción
 let SUBSCRIPTION_LIMITS = {};
@@ -32,46 +32,57 @@ async function initializeDatabase() {
 
 // Asegurar que existe el usuario admin
 async function ensureAdminUser() {
-    const hashPassword = (password) => {
-        return crypto.createHash('sha256').update(password).digest('hex');
-    };
-
     const { data: existingAdmin } = await supabase
         .from('users')
         .select('*')
         .or('username.eq.admin,email.eq.daviex14@gmail.com')
-        .single();
+        .maybeSingle();
 
     if (!existingAdmin) {
-        const passwordHash = hashPassword('DxS000DxS*');
-        const { error } = await supabase
+        const adminEmail = 'daviex14@gmail.com';
+        const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'DxS000DxS*';
+
+        const { data: createdAuth, error: createAuthError } = await supabase.auth.admin.createUser({
+            email: adminEmail,
+            password: adminPassword,
+            email_confirm: true
+        });
+
+        if (createAuthError) {
+            console.error('Error creando usuario admin (auth):', createAuthError);
+            return;
+        }
+
+        // Esperar a que el trigger cree public.users, luego actualizar campos de negocio
+        const { error: upsertError } = await supabase
             .from('users')
-            .insert({
+            .upsert({
                 username: 'admin',
-                email: 'daviex14@gmail.com',
-                password_hash: passwordHash,
+                email: adminEmail,
+                auth_user_id: createdAuth.user.id,
                 subscription_type: 'administrador',
                 subscription_start_date: new Date().toISOString(),
-                subscription_end_date: null
-            });
+                subscription_end_date: null,
+                is_active: true
+            }, { onConflict: 'auth_user_id' });
 
-        if (error && error.code !== '23505') { // Ignorar error de duplicado
-            console.error('Error creando usuario admin:', error);
+        if (upsertError) {
+            console.error('Error creando usuario admin (public):', upsertError);
         } else {
-            console.log('✅ Usuario admin creado');
+            console.log('✅ Usuario admin creado (auth + public)');
         }
-    } else {
-        // Actualizar admin si no tiene email o password
-        if (!existingAdmin.email || !existingAdmin.password_hash) {
-            const passwordHash = hashPassword('DxS000DxS*');
-            await supabase
-                .from('users')
-                .update({
-                    email: 'daviex14@gmail.com',
-                    password_hash: passwordHash
-                })
-                .eq('id', existingAdmin.id);
-            console.log('✅ Usuario admin actualizado');
+    } else if (!existingAdmin.auth_user_id && existingAdmin.email) {
+        // Migración ligera: si existe el admin en public pero no está vinculado a Auth
+        try {
+            const { data: list, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
+            if (!listError) {
+                const match = (list?.users || []).find(u => u.email === existingAdmin.email);
+                if (match) {
+                    await supabase.from('users').update({ auth_user_id: match.id }).eq('id', existingAdmin.id);
+                }
+            }
+        } catch (e) {
+            // ignore
         }
     }
 }
@@ -141,54 +152,21 @@ export const userService = {
             return await this.getUserById(userId);
         }
 
-        // Fallback to admin (for backward compatibility)
-        const hashPassword = (password) => {
-            return crypto.createHash('sha256').update(password).digest('hex');
-        };
-
-        const { data: user, error } = await supabase
+        // Fallback to admin (backward compatibility)
+        let { data: user, error } = await supabase
             .from('users')
             .select('*')
             .or('username.eq.admin,email.eq.daviex14@gmail.com')
-            .single();
+            .maybeSingle();
 
         if (error || !user) {
-            // Create default admin if doesn't exist
-            const passwordHash = hashPassword('DxS000DxS*');
-            const { data: newUser, error: insertError } = await supabase
+            await ensureAdminUser();
+            const retry = await supabase
                 .from('users')
-                .insert({
-                    username: 'admin',
-                    email: 'daviex14@gmail.com',
-                    password_hash: passwordHash,
-                    subscription_type: 'administrador',
-                    subscription_start_date: new Date().toISOString(),
-                    subscription_end_date: null
-                })
-                .select()
-                .single();
-
-            if (insertError) {
-                console.error('Error creando usuario admin:', insertError);
-                return null;
-            }
-            return newUser;
-        }
-
-        // Update admin user with email and password if not set
-        if ((!user.email || user.email !== 'daviex14@gmail.com') || !user.password_hash) {
-            const passwordHash = hashPassword('DxS000DxS*');
-            const { data: updatedUser } = await supabase
-                .from('users')
-                .update({
-                    email: 'daviex14@gmail.com',
-                    password_hash: passwordHash
-                })
-                .eq('id', user.id)
-                .select()
-                .single();
-
-            return updatedUser || user;
+                .select('*')
+                .or('username.eq.admin,email.eq.daviex14@gmail.com')
+                .maybeSingle();
+            user = retry.data || null;
         }
 
         return user;
@@ -224,9 +202,39 @@ export const userService = {
             .from('users')
             .select('*')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         if (error || !data) return null;
+        return data;
+    },
+
+    // Ensure a public.users profile exists for a given auth user id
+    async ensureProfileForAuthUser(authUserId, username, email) {
+        if (!authUserId) {
+            throw new Error('authUserId is required');
+        }
+        if (!email) {
+            throw new Error('email is required');
+        }
+
+        const { data, error } = await supabase
+            .from('users')
+            .upsert({
+                auth_user_id: authUserId,
+                username: username || email.split('@')[0],
+                email,
+                subscription_type: 'gratuito',
+                subscription_start_date: new Date().toISOString(),
+                subscription_end_date: null,
+                is_active: true
+            }, { onConflict: 'auth_user_id' })
+            .select()
+            .single();
+
+        if (error) {
+            throw error;
+        }
+
         return data;
     },
 
@@ -260,66 +268,50 @@ export const userService = {
             endDate = new Date(endDate + 'T00:00:00').toISOString();
         }
 
-        // Hash password if provided
-        let passwordHash = null;
-        if (password) {
-            passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+        if (!email) {
+            throw new Error('Email is required');
+        }
+        if (!password) {
+            throw new Error('Password is required');
         }
 
-        const userData = {
-            username,
+        // 1) Crear en Auth
+        const { data: createdAuth, error: createAuthError } = await supabase.auth.admin.createUser({
             email,
-            subscription_type: subscriptionType,
-            subscription_start_date: startDate,
-            subscription_end_date: endDate
-        };
-
-        if (passwordHash) {
-            userData.password_hash = passwordHash;
+            password,
+            email_confirm: true
+        });
+        if (createAuthError) {
+            throw new Error(createAuthError.message);
         }
 
-        const { data, error } = await supabase
+        // 2) Dejar que el trigger cree public.users y luego actualizar campos de negocio
+        const { data: updatedProfile, error: updateError } = await supabase
             .from('users')
-            .insert(userData)
+            .upsert({
+                auth_user_id: createdAuth.user.id,
+                username,
+                email,
+                subscription_type: subscriptionType,
+                subscription_start_date: startDate,
+                subscription_end_date: endDate,
+                is_active: true
+            }, { onConflict: 'auth_user_id' })
             .select()
             .single();
 
-        if (error) throw error;
-        return data;
+        if (updateError) {
+            throw updateError;
+        }
+
+        return updatedProfile;
     },
 
     // Create user with password
     async createUserWithPassword(username, email, passwordHash, subscriptionType = 'gratuito') {
-        const limits = await getSubscriptionLimitsFromDB();
-        const limit = limits[subscriptionType];
-        if (!limit) {
-            throw new Error(`Invalid subscription type: ${subscriptionType}`);
-        }
-
-        const startDate = new Date().toISOString();
-        let endDate = null;
-
-        if (limit.duration) {
-            const end = new Date();
-            end.setMonth(end.getMonth() + limit.duration);
-            endDate = end.toISOString();
-        }
-
-        const { data, error } = await supabase
-            .from('users')
-            .insert({
-                username,
-                email,
-                password_hash: passwordHash,
-                subscription_type: subscriptionType,
-                subscription_start_date: startDate,
-                subscription_end_date: endDate
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data;
+        // Backward compatibility: this previously accepted a password hash.
+        // Now we cannot recover a password from a hash; require the caller to use createUser(email,password)
+        throw new Error('createUserWithPassword is deprecated. Use createUser(username, email, subscriptionType, password, ...)');
     },
 
     // Update user subscription
@@ -365,7 +357,16 @@ export const userService = {
         if (email !== undefined) updateData.email = email;
 
         if (password !== undefined) {
-            updateData.password_hash = crypto.createHash('sha256').update(password).digest('hex');
+            // Password update must happen in Auth. We need auth_user_id.
+            const current = await this.getUserById(userId);
+            if (current?.auth_user_id) {
+                const { error: authError } = await supabase.auth.admin.updateUserById(current.auth_user_id, { password });
+                if (authError) {
+                    throw new Error(authError.message);
+                }
+            } else {
+                throw new Error('User has no auth_user_id; cannot update password in Auth');
+            }
         }
 
         // Si se proporciona explícitamente la fecha de inicio/fin (por ejemplo desde Excel),
@@ -439,6 +440,18 @@ export const userService = {
 
     // Delete user
     async deleteUser(userId) {
+        const current = await this.getUserById(userId);
+        if (!current) {
+            return { changes: 0 };
+        }
+
+        if (current.auth_user_id) {
+            const { error: authError } = await supabase.auth.admin.deleteUser(current.auth_user_id);
+            if (authError) {
+                throw new Error(authError.message);
+            }
+        }
+
         const { error } = await supabase
             .from('users')
             .delete()
@@ -600,10 +613,10 @@ export const messageLogService = {
 // Validation functions
 export const validationService = {
     // Check if user can send messages
-    async canSendMessages(userId, messageCount) {
+    async validateMessageLimit(userId, messageCount = 1) {
         const user = await userService.getUserById(userId);
-        if (!user || !user.is_active) {
-            return { allowed: false, reason: 'Usuario inactivo' };
+        if (!user) {
+            return { allowed: false, reason: 'Usuario no encontrado' };
         }
 
         // Check subscription expiration
@@ -617,9 +630,13 @@ export const validationService = {
 
         // Check message limits
         const limits = await getSubscriptionLimitsFromDB();
-        const limit = limits[user.subscription_type];
+        const subscriptionType = (user.subscription_type || '').toString().toLowerCase();
+        const limit = limits[subscriptionType] || limits[user.subscription_type];
         if (!limit) {
-            return { allowed: false, reason: 'Tipo de suscripción inválido' };
+            return {
+                allowed: false,
+                reason: `Tipo de suscripción inválido: ${user.subscription_type}`
+            };
         }
 
         // Administrador has unlimited messages
@@ -658,7 +675,20 @@ export const validationService = {
         if (!user) return null;
 
         const limits = await getSubscriptionLimitsFromDB();
-        const limit = limits[user.subscription_type];
+        const subscriptionType = (user.subscription_type || '').toString().toLowerCase();
+        const limit = limits[subscriptionType] || limits[user.subscription_type];
+        if (!limit) {
+            return {
+                type: user.subscription_type,
+                limit: 0,
+                used: await messageCountService.getCurrentMonthCount(userId),
+                remaining: 0,
+                price: 0,
+                startDate: user.subscription_start_date,
+                endDate: user.subscription_end_date,
+                isExpired: user.subscription_end_date ? new Date(user.subscription_end_date) < new Date() : false
+            };
+        }
         const currentCount = await messageCountService.getCurrentMonthCount(userId);
         const remaining = limit.messages === Infinity ? Infinity : Math.max(0, limit.messages - currentCount);
 

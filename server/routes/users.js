@@ -7,7 +7,8 @@ const router = express.Router();
 const requireAdmin = async (req, res, next) => {
     try {
         const currentUser = await userService.getCurrentUser();
-        if (!currentUser || currentUser.subscription_type !== 'administrador') {
+        const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
+        if (!currentUser || !isAdmin) {
             return res.status(403).json({ error: 'Acceso denegado. Solo administradores pueden acceder a esta funcionalidad.' });
         }
         next();

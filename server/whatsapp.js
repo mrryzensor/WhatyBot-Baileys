@@ -38,8 +38,55 @@ class WhatsAppClient {
   }
 
   // Method to set active user ID (called from server.js socket handler)
-  setActiveUserId(userId) {
+  async setActiveUserId(userId) {
     this.activeUserId = userId;
+    
+    // Si WhatsApp ya está conectado, registrar el número para este nuevo usuario
+    if (this.isReady && userId) {
+      try {
+        // Verificar si el usuario es administrador (no tiene restricciones)
+        const { userService, phoneNumberService } = await import('./database.js');
+        const user = await userService.getUserById(userId);
+        const isAdmin = (user?.subscription_type || '').toString().toLowerCase() === 'administrador';
+        
+        if (isAdmin) {
+          console.log(`[WhatsApp] User ${userId} is admin, skipping phone number registration`);
+          return;
+        }
+        
+        const jid = this.sock?.user?.id || this.sock?.user?.jid;
+        if (jid) {
+          const jidPart = jid.split('@')[0];
+          const numberPart = jidPart.split(':')[0];
+          const phoneNumber = numberPart.replace(/\D/g, '');
+          
+          if (phoneNumber) {
+            const otherUsersCount = await phoneNumberService.countOtherUsersForPhone(phoneNumber, userId);
+            
+            if (otherUsersCount >= 2) {
+              // Este número ya está asociado a 2 cuentas diferentes
+              await phoneNumberService.unlinkPhoneFromUser(userId, phoneNumber);
+              
+              if (this.io) {
+                this.io.emit('phone_limit_exceeded', {
+                  phone: phoneNumber,
+                  userId: userId,
+                  message: 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
+                });
+                this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
+              }
+              await this.destroy();
+              return;
+            }
+            
+            await phoneNumberService.linkPhoneToUser(userId, phoneNumber);
+            console.log(`[WhatsApp] Phone ${phoneNumber} linked to user ${userId} (session already active)`);
+          }
+        }
+      } catch (error) {
+        console.error('Error linking phone on user change:', error);
+      }
+    }
   }
 
   async checkAndAutoInitialize() {
@@ -267,26 +314,44 @@ class WhatsAppClient {
         try {
           const jid = this.sock?.user?.id || this.sock?.user?.jid;
           if (jid) {
-            phoneNumber = jid.split('@')[0].replace(/\D/g, '');
+            // JID format: "51987422887:77@s.whatsapp.net" - extraer solo el número antes de ':'
+            const jidPart = jid.split('@')[0]; // "51987422887:77"
+            const numberPart = jidPart.split(':')[0]; // "51987422887" (sin device ID)
+            phoneNumber = numberPart.replace(/\D/g, '');
           }
 
           if (phoneNumber && this.activeUserId) {
-            const { phoneNumberService } = await import('./database.js');
-            const usageCount = await phoneNumberService.countUsersForPhone(phoneNumber);
+            const { userService, phoneNumberService } = await import('./database.js');
+            
+            // Verificar si el usuario es administrador (no tiene restricciones)
+            const user = await userService.getUserById(this.activeUserId);
+            const isAdmin = (user?.subscription_type || '').toString().toLowerCase() === 'administrador';
+            
+            if (!isAdmin) {
+              // Contar cuántos OTROS usuarios tienen este número (excluyendo el usuario actual)
+              const otherUsersCount = await phoneNumberService.countOtherUsersForPhone(phoneNumber, this.activeUserId);
 
-            if (usageCount >= 2) {
-              if (this.io) {
-                this.io.emit('phone_limit_exceeded', {
-                  phone: phoneNumber,
-                  userId: this.activeUserId
-                });
-                this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
+              if (otherUsersCount >= 2) {
+                // Este número ya está asociado a 2 cuentas diferentes
+                // Eliminar cualquier registro previo de este número para este usuario
+                await phoneNumberService.unlinkPhoneFromUser(this.activeUserId, phoneNumber);
+                
+                if (this.io) {
+                  this.io.emit('phone_limit_exceeded', {
+                    phone: phoneNumber,
+                    userId: this.activeUserId,
+                    message: 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
+                  });
+                  this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
+                }
+                await this.destroy();
+                return;
               }
-              await this.destroy();
-              return;
-            }
 
-            await phoneNumberService.linkPhoneToUser(this.activeUserId, phoneNumber);
+              await phoneNumberService.linkPhoneToUser(this.activeUserId, phoneNumber);
+            } else {
+              console.log(`[WhatsApp] User ${this.activeUserId} is admin, skipping phone number registration`);
+            }
           }
         } catch (error) {
           console.error('Error validating phone number usage:', error);
@@ -742,7 +807,10 @@ class WhatsAppClient {
     try {
       const jid = this.sock?.user?.id || this.sock?.user?.jid;
       if (jid) {
-        phone = jid.split('@')[0].replace(/\D/g, '');
+        // JID format: "51987422887:77@s.whatsapp.net" - extraer solo el número antes de ':'
+        const jidPart = jid.split('@')[0];
+        const numberPart = jidPart.split(':')[0];
+        phone = numberPart.replace(/\D/g, '');
       }
     } catch {}
 

@@ -21,6 +21,7 @@ dotenv.config({ path: serverEnvPath });
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
     console.error('❌ Error: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY deben estar configurados en el archivo .env');
@@ -32,6 +33,15 @@ if (!supabaseUrl || !supabaseKey) {
 
 // Crear cliente de Supabase con service role key para acceso completo
 export const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false
+    }
+});
+
+// Cliente con anon key para flujos de auth de usuario (signInWithPassword)
+// Si no existe SUPABASE_ANON_KEY, hacemos fallback al service role (solo backend)
+export const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey || supabaseKey, {
     auth: {
         autoRefreshToken: false,
         persistSession: false
