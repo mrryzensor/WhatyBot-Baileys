@@ -50,5 +50,5 @@ server/data/
 # Build artifacts
 release/
 
-# Build artifacts
-release/
+# Separate project (do not commit from this repo)
+frontend-only-supabase/
