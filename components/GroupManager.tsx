@@ -36,8 +36,13 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
   const [message, setMessage] = useState('');
   const media = useMedia({ maxFiles: 50 });
   const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
+  const [showOnlyAllowedGroups, setShowOnlyAllowedGroups] = useState(true);
+  const [showOnlyAdminGroups, setShowOnlyAdminGroups] = useState(false);
+  const [sortBy, setSortBy] = useState<'name' | 'participants'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [showPreview, setShowPreview] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
@@ -232,7 +237,44 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
     }
   };
 
-  const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(filter.toLowerCase()));
+  const filteredGroups = groups.filter((g) => {
+    const matchesName = g.name.toLowerCase().includes(filter.toLowerCase());
+    const matchesPermission = !showOnlyAllowedGroups || g.canSend !== false;
+    const matchesAdmin = !showOnlyAdminGroups || g.isAdmin === true;
+    return matchesName && matchesPermission && matchesAdmin;
+  });
+
+  const sortedGroups = [...filteredGroups].sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'participants') {
+      cmp = (a.participants || 0) - (b.participants || 0);
+    } else {
+      cmp = (a.name || '').localeCompare((b.name || ''), 'es', { sensitivity: 'base' });
+    }
+    return sortDirection === 'asc' ? cmp : -cmp;
+  });
+
+  const allowedGroupsCount = groups.filter((g) => g.canSend !== false).length;
+  const visibleGroupIds = sortedGroups.map((g) => g.id);
+  const selectedVisibleCount = visibleGroupIds.filter((id) => selectedGroups.has(id)).length;
+  const allVisibleSelected = visibleGroupIds.length > 0 && selectedVisibleCount === visibleGroupIds.length;
+  const anyVisibleSelected = selectedVisibleCount > 0;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = anyVisibleSelected && !allVisibleSelected;
+    }
+  }, [anyVisibleSelected, allVisibleSelected, visibleGroupIds.length]);
+
+  const toggleSelectAllVisible = () => {
+    const next = new Set(selectedGroups);
+    if (allVisibleSelected) {
+      visibleGroupIds.forEach((id) => next.delete(id));
+    } else {
+      visibleGroupIds.forEach((id) => next.add(id));
+    }
+    setSelectedGroups(next);
+  };
 
   const handleViewMembers = (groupId: string, groupName: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent group selection when clicking the button
@@ -310,6 +352,61 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 onChange={e => setFilter(e.target.value)}
               />
             </div>
+
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600 select-none">Solo grupos permitidos para enviar</span>
+                <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full">{allowedGroupsCount}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOnlyAllowedGroups((v) => !v)}
+                className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${showOnlyAllowedGroups ? 'bg-green-600' : 'bg-slate-300'}`}
+                aria-pressed={showOnlyAllowedGroups}
+                aria-label="Solo grupos permitidos para enviar"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showOnlyAllowedGroups ? 'translate-x-5' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between gap-3 border border-slate-200 rounded-lg px-3 py-2">
+                <span className="text-xs text-slate-600 select-none">Solo donde soy admin</span>
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyAdminGroups((v) => !v)}
+                  className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${showOnlyAdminGroups ? 'bg-green-600' : 'bg-slate-300'}`}
+                  aria-pressed={showOnlyAdminGroups}
+                  aria-label="Solo donde soy admin"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showOnlyAdminGroups ? 'translate-x-5' : 'translate-x-1'}`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2">
+                <select
+                  className="flex-1 text-xs text-slate-700 bg-transparent focus:outline-none"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'name' | 'participants')}
+                  aria-label="Ordenar grupos"
+                >
+                  <option value="name">Ordenar: Nombre</option>
+                  <option value="participants">Ordenar: Participantes</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                  className="text-xs text-slate-600 hover:text-slate-900"
+                  aria-label="Cambiar dirección de orden"
+                >
+                  {sortDirection === 'asc' ? 'A→Z' : 'Z→A'}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-80">
@@ -319,7 +416,25 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 <p>No se encontraron grupos. Haz clic en "Escanear Grupos".</p>
               </div>
             ) : (
-              filteredGroups.map(group => (
+              <>
+                <div className="flex items-center justify-between px-3 py-2 border border-slate-200 rounded-lg bg-white sticky top-0 z-10">
+                  <label
+                    className="flex items-center gap-2 text-xs text-slate-700 select-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                    />
+                    {allVisibleSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                  </label>
+                  <span className="text-xs text-slate-500">{selectedVisibleCount}/{visibleGroupIds.length}</span>
+                </div>
+
+                {sortedGroups.map(group => (
                 <div
                   key={group.id}
                   onClick={() => toggleGroup(group.id)}
@@ -350,7 +465,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                     <UserCheck size={18} />
                   </button>
                 </div>
-              ))
+                ))}
+              </>
             )}
           </div>
         </div>

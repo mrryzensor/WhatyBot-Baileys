@@ -33,8 +33,35 @@ class WhatsAppClient {
       waitTimeBetweenBatches: 15
     };
     this.bulkControllers = new Map(); // Control por usuario para envíos masivos
+
+    this._initializePromise = null;
+    this._reconnectTimer = null;
+    this._reconnectAttempts = 0;
+    this._autoResetInProgress = false;
+    this._lastAutoResetAt = 0;
     this.loadAutoReplyRules();
     this.loadConfig();
+  }
+
+  scheduleReconnect(delayMs) {
+    try {
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      this._reconnectTimer = setTimeout(() => {
+        this.initialize().catch(() => {});
+      }, Math.max(0, delayMs || 0));
+    } catch {}
+  }
+
+  clearReconnectTimer() {
+    try {
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+    } catch {}
   }
 
   // Method to set active user ID (called from server.js socket handler)
@@ -282,7 +309,23 @@ class WhatsAppClient {
   }
 
   async initialize() {
-    console.log('Inicializando cliente WhatsApp (Baileys)...');
+    if (this._initializePromise) {
+      return this._initializePromise;
+    }
+
+    this._initializePromise = (async () => {
+      console.log('Inicializando cliente WhatsApp (Baileys)...');
+
+      this.clearReconnectTimer();
+
+      // Ensure any previous socket is closed before starting a new one
+      try {
+        if (this.sock) {
+          try { this.sock.ws?.close?.(); } catch {}
+          try { this.sock.end?.(); } catch {}
+        }
+      } catch {}
+
     const authDir = resolveSessionDir();
     if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -291,7 +334,14 @@ class WhatsAppClient {
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: ['WhatyBot', 'Chrome', '1.0.0']
+      browser: ['WhatyBot', 'Chrome', '1.0.0'],
+      markOnlineOnConnect: false,
+      shouldIgnoreJid: (jid) => {
+        if (!jid) return false;
+        if (jid === 'status@broadcast') return true;
+        if (jid.endsWith('@broadcast')) return true;
+        return false;
+      }
     });
     this.client = this.sock;
     this.sock.ev.on('creds.update', saveCreds);
@@ -309,6 +359,8 @@ class WhatsAppClient {
         this.isReady = true;
         this.qrCode = null;
         this.qrDataUrl = null;
+        this._reconnectAttempts = 0;
+        this.clearReconnectTimer();
 
         let phoneNumber = null;
         try {
@@ -364,17 +416,57 @@ class WhatsAppClient {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = statusCode === DisconnectReason.loggedOut;
         this.io.emit('disconnected', { reason: loggedOut ? 'logged_out' : 'connection_closed' });
-        setTimeout(() => this.initialize().catch(() => {}), loggedOut ? 1000 : 2000);
+
+        // If WhatsApp logged out (invalid/expired session), auto-reset once to force a new QR,
+        // same behavior as the manual "Limpiar sesión y generar nuevo QR" button.
+        if (loggedOut) {
+          const now = Date.now();
+          const cooldownMs = 60 * 1000;
+
+          // Guard against infinite reset loops (e.g. persistent login failure)
+          if (!this._autoResetInProgress && (now - (this._lastAutoResetAt || 0)) > cooldownMs) {
+            this._autoResetInProgress = true;
+            this._lastAutoResetAt = now;
+            try {
+              console.log('🔁 Sesión inválida (logged_out). Limpiando sesión y generando nuevo QR automáticamente...');
+              await this.resetSession();
+            } catch (e) {
+              console.error('❌ Error auto-reseteando sesión:', e?.message || e);
+              try {
+                await this.destroy();
+              } catch {}
+            } finally {
+              this._autoResetInProgress = false;
+            }
+          } else {
+            try {
+              await this.destroy();
+            } catch {}
+          }
+
+          this.clearReconnectTimer();
+          this._reconnectAttempts = 0;
+          return;
+        }
+
+        // Controlled reconnect with backoff, avoid parallel init storms
+        this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
+        const baseDelay = 2000;
+        const maxDelay = 60000;
+        const delay = Math.min(maxDelay, baseDelay * (2 ** Math.min(6, this._reconnectAttempts - 1)));
+        this.scheduleReconnect(delay);
       }
     });
     this.sock.ev.on('messages.upsert', async ({ messages }) => {
       try {
         const m = messages && messages[0];
         if (!m) return;
-        const isGroup = (m.key.remoteJid || '').endsWith('@g.us');
+        const remoteJid = m.key.remoteJid || '';
+        if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@broadcast')) return;
+        const isGroup = remoteJid.endsWith('@g.us');
         const fromMe = !!m.key.fromMe;
         if (isGroup || fromMe) return;
-        const from = m.key.remoteJid;
+        const from = remoteJid;
         const body = (this.getTextFromMessage(m) || '').toLowerCase();
         const activeUserInfo = this.activeUserId ? `[Usuario activo: ${this.activeUserId}]` : '[Usuario activo: NINGUNO]';
         console.log(`${activeUserInfo} Message received:`, {
@@ -500,6 +592,15 @@ class WhatsAppClient {
         });
       } catch {}
     });
+
+      return true;
+    })();
+
+    try {
+      return await this._initializePromise;
+    } finally {
+      this._initializePromise = null;
+    }
   }
 
   /**
@@ -752,14 +853,79 @@ class WhatsAppClient {
   async getGroups() {
     if (!this.sock || !this.isReady) throw new Error('WhatsApp client no está listo');
     try {
+      const rawSelfJid = this.sock?.user?.id || this.sock?.user?.jid || '';
+      const rawSelfLid = this.sock?.user?.lid || this.sock?.user?.lidJid || this.sock?.user?.userLid || '';
+      // rawSelfJid examples:
+      // - "51987422887:77@s.whatsapp.net"
+      // - "51987422887@s.whatsapp.net"
+      const selfNumber = rawSelfJid ? rawSelfJid.split('@')[0].split(':')[0] : '';
+      const selfJid = selfNumber ? `${selfNumber}@s.whatsapp.net` : '';
+
+      const normalizeNumber = (jid) => {
+        if (!jid || typeof jid !== 'string') return '';
+        // examples:
+        // - 51987422887@s.whatsapp.net
+        // - 51987422887:77@s.whatsapp.net
+        // - 227259772342457@lid
+        const left = jid.split('@')[0];
+        const numberPart = left.split(':')[0];
+        return numberPart.replace(/\D/g, '');
+      };
+
+      const normalizeLid = (jid) => {
+        if (!jid || typeof jid !== 'string') return '';
+        // examples:
+        // - 227259772342457@lid
+        // - 227259772342457:0@lid
+        const left = jid.split('@')[0];
+        const lidPart = left.split(':')[0];
+        return lidPart.replace(/\D/g, '');
+      };
+
+      const selfLid = rawSelfLid ? `${normalizeLid(rawSelfLid)}@lid` : '';
+
       const groupsObj = await this.sock.groupFetchAllParticipating();
       const groups = Object.values(groupsObj || {});
-      return groups.map(g => ({
-        id: g.id,
-        name: g.subject || g.id,
-        participants: g.participants ? g.participants.length : 0,
-        image: null
-      }));
+      return await Promise.all(
+        groups.map(async (g) => {
+          let image = null;
+          try {
+            // Baileys returns a temporary URL hosted by WhatsApp/CDN.
+            // It can fail if the group has no photo or due to privacy/permissions.
+            image = await this.sock.profilePictureUrl(g.id, 'image');
+          } catch {}
+
+          const announce = typeof g?.announce === 'boolean' ? g.announce : undefined;
+          const isAdmin = !!(g?.participants || []).find((p) => {
+            const participantId = p?.id || p?.jid || '';
+            const participantLid = p?.lid || p?.participant_lid || '';
+            const matchByJid = participantId && participantId === selfJid;
+            const matchByLid = !!(
+              selfLid &&
+              (
+                (participantLid && normalizeLid(participantLid) === normalizeLid(selfLid)) ||
+                (participantId && participantId.endsWith('@lid') && normalizeLid(participantId) === normalizeLid(selfLid))
+              )
+            );
+            const matchByNumber = selfNumber && (
+              normalizeNumber(participantId) === selfNumber ||
+              normalizeNumber(participantLid) === selfNumber
+            );
+            return (matchByJid || matchByLid || matchByNumber) && !!p?.admin;
+          });
+          const canSend = announce === true ? isAdmin : true;
+
+          return {
+            id: g.id,
+            name: g.subject || g.id,
+            participants: g.participants ? g.participants.length : 0,
+            image: image || null,
+            announce,
+            isAdmin,
+            canSend
+          };
+        })
+      );
     } catch (error) {
       throw error;
     }
@@ -834,6 +1000,8 @@ class WhatsAppClient {
     this.isReady = false;
     this.qrCode = null;
     this.qrDataUrl = null;
+    this.clearReconnectTimer();
+    this._reconnectAttempts = 0;
   }
 
   clearSessionFiles() {

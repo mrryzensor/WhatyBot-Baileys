@@ -10,6 +10,9 @@ export interface Group {
   name: string;
   participants: number;
   image?: string;
+  announce?: boolean;
+  isAdmin?: boolean;
+  canSend?: boolean;
 }
 
 export interface MessageLog {

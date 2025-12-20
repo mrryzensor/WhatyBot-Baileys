@@ -394,6 +394,23 @@ async function startBackendServer() {
       NODE_ENV: 'production',
       NODE_PATH: nodeModulesPath
     };
+
+    // Ensure runtime-writable directories for session & uploads in packaged builds.
+    // Never rely on __dirname/resources paths for mutable data.
+    try {
+      const baseDataDir = app.getPath('userData');
+      ensureDir(baseDataDir);
+      const sessionDir = profileContext?.sessionDir || path.join(baseDataDir, 'session');
+      const uploadsDir = profileContext?.uploadsDir || path.join(baseDataDir, 'uploads');
+      ensureDir(sessionDir);
+      ensureDir(uploadsDir);
+      envVars.SESSION_DIR = sessionDir;
+      envVars.UPLOAD_DIR = uploadsDir;
+      console.log(`[Instance ${instanceId}] SESSION_DIR: ${sessionDir}`);
+      console.log(`[Instance ${instanceId}] UPLOAD_DIR: ${uploadsDir}`);
+    } catch (e) {
+      console.warn(`[Instance ${instanceId}] Could not prepare SESSION_DIR/UPLOAD_DIR:`, e?.message || e);
+    }
     
     if (app.isPackaged) {
       // In packaged app, we need to use Electron's embedded Node.js
