@@ -73,7 +73,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
   const handleFileUpload = async (file: File) => {
     try {
       setIsProcessing(true);
-      
+
       // Si es Excel, usar el hook de comparación
       if (file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
         const users = await processExcelFile(file);
@@ -210,14 +210,14 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     setIsDragging(false);
 
     const files: File[] = Array.from(e.dataTransfer.files);
-    const file = files.find((f: File) => 
-      f.name.endsWith('.csv') || 
-      f.name.endsWith('.txt') || 
-      f.name.endsWith('.json') || 
-      f.name.endsWith('.xlsx') || 
+    const file = files.find((f: File) =>
+      f.name.endsWith('.csv') ||
+      f.name.endsWith('.txt') ||
+      f.name.endsWith('.json') ||
+      f.name.endsWith('.xlsx') ||
       f.name.endsWith('.xls')
     );
-    
+
     if (file) {
       handleFileUpload(file as File);
     } else {
@@ -250,99 +250,86 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     });
   };
 
-  // Actualizar usuarios masivamente
-  const handleBulkUpdate = async (selectedComparisons: any[]) => {
-    const results = { success: 0, failed: 0, errors: [] as string[] };
-
-    for (const comparison of selectedComparisons) {
-      if (!comparison.existingUser) continue;
-
-      try {
-        const updates: any = {};
-        
-        if (comparison.excelUser.subscriptionType) {
-          updates.subscriptionType = comparison.excelUser.subscriptionType;
-        }
-        if (comparison.excelUser.subscriptionStartDate) {
-          updates.subscriptionStartDate = comparison.excelUser.subscriptionStartDate;
-        }
-        if (comparison.excelUser.subscriptionEndDate) {
-          updates.subscriptionEndDate = comparison.excelUser.subscriptionEndDate;
-        }
-
-        await updateUser(comparison.existingUser.id, updates);
-        results.success++;
-      } catch (error: any) {
-        results.failed++;
-        results.errors.push(`${comparison.excelUser.email || comparison.excelUser.username}: ${error.response?.data?.error || error.message}`);
-      }
-    }
-
-    if (results.success > 0) {
-      await loadExistingUsers(); // Recargar usuarios
-    }
-    if (results.failed > 0) {
-      toast.error(`${results.failed} actualizaciones fallaron. Errores: ${results.errors.slice(0, 3).join(', ')}`);
-    }
-  };
-
-  // Crear usuarios nuevos (solo filas nuevas seleccionadas)
-  const handleCreateNewUsers = async () => {
-    // Tomar solo comparaciones que NO tienen existingUser y cuyo índice está seleccionado
-    const newUsersWithIndex = compareUsers
+  // Procesar usuarios (Crear o Actualizar según corresponda)
+  const handleProcessUsers = async () => {
+    // Obtener todas las comparaciones seleccionadas por índice
+    const selectedComparisonsWithIndex = compareUsers
       .map((c, index) => ({ comparison: c, index }))
-      .filter(({ comparison, index }) => !comparison.existingUser && selectedRowIndices.has(index));
+      .filter(({ index }) => selectedRowIndices.has(index));
 
-    if (newUsersWithIndex.length === 0) {
-      toast.error('Selecciona al menos un usuario nuevo para crear');
+    if (selectedComparisonsWithIndex.length === 0) {
+      toast.error('Selecciona al menos un usuario para procesar');
       return;
     }
 
     setIsProcessing(true);
-    setProgress({ current: 0, total: newUsersWithIndex.length });
-    const results = { success: 0, failed: 0, errors: [] as string[] };
+    setProgress({ current: 0, total: selectedComparisonsWithIndex.length });
+    const results = { success: 0, failed: 0, created: 0, updated: 0, errors: [] as string[] };
 
-    for (let i = 0; i < newUsersWithIndex.length; i++) {
-      const { comparison } = newUsersWithIndex[i];
+    for (let i = 0; i < selectedComparisonsWithIndex.length; i++) {
+      const { comparison } = selectedComparisonsWithIndex[i];
       try {
-        const username = comparison.excelUser.username || 
-                         comparison.excelUser.email?.split('@')[0] || 
-                         `user_${Date.now()}`;
-        const email = comparison.excelUser.email || '';
-        const subscriptionType = comparison.excelUser.subscriptionType || defaultSubscriptionType;
+        if (comparison.existingUser) {
+          // ACTUALIZAR USUARIO EXISTENTE
+          const updates: any = {};
+          if (comparison.excelUser.subscriptionType) updates.subscriptionType = comparison.excelUser.subscriptionType;
+          if (comparison.excelUser.subscriptionStartDate) updates.subscriptionStartDate = comparison.excelUser.subscriptionStartDate;
+          if (comparison.excelUser.subscriptionEndDate) updates.subscriptionEndDate = comparison.excelUser.subscriptionEndDate;
 
-        // Determinar fechas a enviar directamente al backend
-        const startDateForCreate = comparison.excelUser.subscriptionStartDate || null;
-        const endDateForCreate = comparison.excelUser.subscriptionEndDate || null;
+          await updateUser(comparison.existingUser.id, updates);
+          results.updated++;
+        } else {
+          // CREAR USUARIO NUEVO
+          const username = comparison.excelUser.username ||
+            comparison.excelUser.email?.split('@')[0] ||
+            `user_${Date.now()}`;
+          const email = comparison.excelUser.email || '';
+          const subscriptionType = comparison.excelUser.subscriptionType || defaultSubscriptionType;
+          const startDate = comparison.excelUser.subscriptionStartDate || null;
+          const endDate = comparison.excelUser.subscriptionEndDate || null;
 
-        // Una sola llamada: el backend respetará estas fechas gracias a la nueva lógica de createUser
-        await createUser(
-          username,
-          email,
-          subscriptionType,
-          undefined,
-          startDateForCreate || undefined,
-          endDateForCreate || undefined
-        );
-
+          await createUser(
+            username,
+            email,
+            subscriptionType,
+            undefined,
+            startDate || undefined,
+            endDate || undefined
+          );
+          results.created++;
+        }
         results.success++;
       } catch (error: any) {
         results.failed++;
-        results.errors.push(`${comparison.excelUser.email || comparison.excelUser.username}: ${error.response?.data?.error || error.message}`);
+        const errorMsg = error.response?.data?.error || error.message;
+        results.errors.push(`${comparison.excelUser.email || comparison.excelUser.username}: ${errorMsg}`);
       }
-      setProgress({ current: i + 1, total: newUsersWithIndex.length });
+      setProgress({ current: i + 1, total: selectedComparisonsWithIndex.length });
     }
 
     setIsProcessing(false);
     setProgress({ current: 0, total: 0 });
 
     if (results.success > 0) {
-      toast.success(`${results.success} usuarios creados exitosamente`);
+      let successMsg = '';
+      if (results.created > 0 && results.updated > 0) {
+        successMsg = `${results.created} creados y ${results.updated} actualizados exitosamente`;
+      } else if (results.created > 0) {
+        successMsg = `${results.created} usuarios creados exitosamente`;
+      } else {
+        successMsg = `${results.updated} usuarios actualizados exitosamente`;
+      }
+      toast.success(successMsg);
       await loadExistingUsers(); // Recargar usuarios
     }
+
     if (results.failed > 0) {
-      toast.error(`${results.failed} usuarios fallaron. Errores: ${results.errors.slice(0, 3).join(', ')}`);
+      toast.error(`${results.failed} fallaron. Errores: ${results.errors.slice(0, 3).join(', ')}`);
     }
+
+    // Limpiar selección después de procesar
+    setSelectedRowIndices(new Set());
+    setSelectedIds(new Set());
   };
 
   const handleDownloadExample = () => {
@@ -359,7 +346,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Usuarios');
     XLSX.writeFile(wb, 'ejemplo-usuarios.xlsx');
-    
+
     toast.success('Archivo Excel de ejemplo descargado');
   };
 
@@ -409,19 +396,19 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                   {subscriptionLimits
                     .filter(limit => limit.type !== 'administrador')
                     .map(limit => {
-                      const messagesText = limit.messages === Infinity || limit.messages === null || limit.messages === undefined 
-                        ? 'Ilimitados' 
+                      const messagesText = limit.messages === Infinity || limit.messages === null || limit.messages === undefined
+                        ? 'Ilimitados'
                         : `${limit.messages.toLocaleString()} mensajes`;
-                      const durationText = limit.duration 
-                        ? `${limit.duration} día(s)` 
+                      const durationText = limit.duration
+                        ? `${limit.duration} día(s)`
                         : 'Permanente';
-                      const priceText = limit.price > 0 
-                        ? `$${limit.price}/mes` 
+                      const priceText = limit.price > 0
+                        ? `$${limit.price}/mes`
                         : 'Gratis';
                       const displayText = limit.price > 0
                         ? `${limit.type.charAt(0).toUpperCase() + limit.type.slice(1)} (${priceText}, ${messagesText})`
                         : `${limit.type.charAt(0).toUpperCase() + limit.type.slice(1)} (${messagesText}, ${durationText})`;
-                      
+
                       return (
                         <option key={limit.type} value={limit.type}>
                           {displayText}
@@ -450,9 +437,8 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                      isDragging ? 'border-green-500 bg-green-50' : 'border-slate-300'
-                    }`}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragging ? 'border-green-500 bg-green-50' : 'border-slate-300'
+                      }`}
                   >
                     <Upload size={32} className="mx-auto mb-2 text-slate-400" />
                     <p className="text-sm text-slate-600 mb-2">
@@ -515,7 +501,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                 comparisons={compareUsers}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
-                onBulkUpdate={handleBulkUpdate}
+                onBulkUpdate={async () => { }} // Ya no se usa desde la tabla
                 onBulkAssign={handleBulkAssign}
                 selectedRowIndices={selectedRowIndices}
                 onRowSelectionChange={setSelectedRowIndices}
@@ -536,35 +522,33 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                 >
                   Cargar Otro Archivo
                 </button>
-                {newUsersCount > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={handleCreateNewUsers}
-                      disabled={isProcessing || selectedNewUsersCount === 0}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {isProcessing ? (
-                        <>
-                          <RefreshCw size={16} className="animate-spin" />
-                          Creando {progress.current}/{progress.total}...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle size={16} />
-                          Crear {selectedNewUsersCount || newUsersCount} Usuario(s) Nuevo(s)
-                        </>
-                      )}
-                    </button>
-                    {isProcessing && progress.total > 0 && (
-                      <div className="w-full bg-slate-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                        />
-                      </div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={handleProcessUsers}
+                    disabled={isProcessing || selectedRowIndices.size === 0}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Procesando {progress.current}/{progress.total}...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        Aplicar Cambios a {selectedRowIndices.size} Usuarios
+                      </>
                     )}
-                  </div>
-                )}
+                  </button>
+                  {isProcessing && progress.total > 0 && (
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => {
                     onSuccess();

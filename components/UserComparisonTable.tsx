@@ -82,11 +82,11 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
     setIsUpdating(true);
     try {
       await onBulkUpdate(selectedUpdateComparisons);
-      
+
       // Limpiar selección después de actualizar
       onSelectionChange(new Set());
       onRowSelectionChange(new Set());
-      
+
       toast?.success(`${selectedUpdateComparisons.length} usuario(s) actualizado(s) exitosamente`);
     } catch (error: any) {
       toast?.error(`Error al actualizar usuarios: ${error.message}`);
@@ -95,13 +95,13 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
     }
   };
 
-  const allSelected = needsUpdateComparisons.length > 0 && 
+  const allSelected = needsUpdateComparisons.length > 0 &&
     needsUpdateComparisons.every(c => c.existingUser && selectedIds.has(c.existingUser.id));
   const someSelected = needsUpdateComparisons.some(c => c.existingUser && selectedIds.has(c.existingUser.id));
 
   // Detectar si hay usuarios sin plan o vigencia
   const usersWithoutPlanOrDate = useMemo(() => {
-    return comparisons.filter(c => 
+    return comparisons.filter(c =>
       !c.excelUser.subscriptionType || !c.excelUser.subscriptionEndDate
     );
   }, [comparisons]);
@@ -170,7 +170,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
               )}
             </span>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Selector de Plan */}
             <div>
@@ -227,34 +227,14 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
         </div>
       )}
 
-      {/* Header con acciones */}
+      {/* Header con resumen de cambios (opcional, ahora unificado en footer) */}
       {needsUpdateComparisons.length > 0 && (
-        <div className="flex items-center justify-between bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="text-blue-600" size={20} />
-            <span className="text-sm font-medium text-blue-900">
-              {needsUpdateComparisons.length} usuario(s) necesitan actualización
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBulkUpdate}
-              disabled={selectedUpdateComparisons.length === 0 || isUpdating || isLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isUpdating ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Actualizando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  Aplicar Cambios ({selectedUpdateComparisons.length})
-                </>
-              )}
-            </button>
-          </div>
+        <div className="flex items-center gap-2 bg-blue-50 p-3 rounded-lg border border-blue-200 mb-2">
+          <AlertCircle className="text-blue-600" size={18} />
+          <span className="text-xs font-medium text-blue-900">
+            {needsUpdateComparisons.length} usuario(s) existentes detectados con cambios en el archivo.
+            Selecciónalos para actualizar sus datos automáticamente.
+          </span>
         </div>
       )}
 
@@ -287,13 +267,12 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
             <tbody className="divide-y divide-slate-200">
               {comparisons.map((comparison, index) => {
                 const isRowSelected = selectedRowIndices.has(index);
-                
+
                 return (
                   <tr
                     key={index}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      isRowSelected ? 'bg-green-50' : ''
-                    } ${!comparison.existingUser ? 'bg-blue-50' : ''}`}
+                    className={`hover:bg-slate-50 transition-colors ${isRowSelected ? 'bg-green-50' : ''
+                      } ${!comparison.existingUser ? 'bg-blue-50' : ''}`}
                   >
                     <td className="px-4 py-3">
                       <input
