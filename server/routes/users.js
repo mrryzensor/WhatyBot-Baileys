@@ -45,13 +45,13 @@ router.get('/current', async (req, res) => {
 router.delete('/bulk', requireAdmin, async (req, res) => {
     try {
         const { userIds } = req.body;
-        
+
         if (!Array.isArray(userIds) || userIds.length === 0) {
             return res.status(400).json({ error: 'userIds must be a non-empty array' });
         }
 
         const results = { success: 0, failed: 0, errors: [] };
-        
+
         for (const userId of userIds) {
             try {
                 const parsedId = parseInt(userId);
@@ -68,10 +68,10 @@ router.delete('/bulk', requireAdmin, async (req, res) => {
             }
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: `Deleted ${results.success} user(s)`,
-            results 
+            results
         });
     } catch (error) {
         console.error('Error deleting users:', error);
@@ -98,7 +98,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', requireAdmin, async (req, res) => {
     try {
         const { username, email, subscriptionType, password, subscriptionStartDate, subscriptionEndDate } = req.body;
-        
+
         if (!username) {
             return res.status(400).json({ error: 'Username is required' });
         }
@@ -110,17 +110,43 @@ router.post('/', requireAdmin, async (req, res) => {
 
         // Use default password if not provided
         const userPassword = password || '2748curso';
-        const user = await userService.createUser(
-            username,
-            email,
-            subscriptionType || 'gratuito',
-            userPassword,
-            subscriptionStartDate || null,
-            subscriptionEndDate || null
-        );
-        res.json({ success: true, user });
+        try {
+            const user = await userService.createUser(
+                username,
+                email,
+                subscriptionType || 'gratuito',
+                userPassword,
+                subscriptionStartDate || null,
+                subscriptionEndDate || null
+            );
+            res.json({ success: true, user });
+        } catch (error) {
+            // Si el usuario ya existe, intentamos actualizarlo
+            if (error.message.includes('already been registered') || error.message.includes('unique constraint') || error.message.includes('already exists')) {
+                console.log(`[Users] User with email ${email} already exists, fallback to update.`);
+
+                // Buscar el usuario por email
+                const existingUser = await userService.getUserByEmail(email);
+                if (existingUser) {
+                    const updates = {
+                        username,
+                        subscriptionType: subscriptionType || 'gratuito',
+                        subscriptionStartDate: subscriptionStartDate || null,
+                        subscriptionEndDate: subscriptionEndDate || null
+                    };
+
+                    const updatedUser = await userService.updateUser(existingUser.id, updates);
+                    return res.json({
+                        success: true,
+                        user: updatedUser,
+                        message: 'Usuario ya existía, actualizado correctamente'
+                    });
+                }
+            }
+            throw error;
+        }
     } catch (error) {
-        console.error('Error creating user:', error);
+        console.error('Error in user creation/upsert:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -129,7 +155,7 @@ router.post('/', requireAdmin, async (req, res) => {
 router.put('/:id/subscription', requireAdmin, async (req, res) => {
     try {
         const { subscriptionType, durationDays } = req.body;
-        
+
         const limits = await getSubscriptionLimitsFromDB();
         if (!limits[subscriptionType]) {
             return res.status(400).json({ error: 'Invalid subscription type' });
@@ -149,12 +175,12 @@ router.put('/:id', requireAdmin, async (req, res) => {
     try {
         const { username, email, password, subscriptionType, durationDays, subscriptionStartDate, subscriptionEndDate } = req.body;
         const userId = parseInt(req.params.id);
-        
+
         const user = await userService.getUserById(userId);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
-        
+
         const updates = {};
         if (username !== undefined) updates.username = username;
         if (email !== undefined) updates.email = email;
@@ -163,7 +189,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
         if (durationDays !== undefined) updates.durationDays = durationDays;
         if (subscriptionStartDate !== undefined) updates.subscriptionStartDate = subscriptionStartDate;
         if (subscriptionEndDate !== undefined) updates.subscriptionEndDate = subscriptionEndDate;
-        
+
         const updatedUser = await userService.updateUser(userId, updates);
         const subscriptionInfo = await validationService.getSubscriptionInfo(updatedUser.id);
         res.json({ success: true, user: updatedUser, subscriptionInfo });
@@ -178,7 +204,7 @@ router.get('/:id/stats', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
         const user = await userService.getUserById(userId);
-        
+
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -237,24 +263,24 @@ router.put('/subscription/limits/:type', requireAdmin, async (req, res) => {
     try {
         const { type } = req.params;
         const { messages, duration, price } = req.body;
-        
+
         if (messages === undefined && duration === undefined && price === undefined) {
             return res.status(400).json({ error: 'At least one field (messages, duration, price) must be provided' });
         }
-        
+
         // Get current limits
         const currentLimit = await subscriptionLimitsService.getByType(type);
         if (!currentLimit) {
             return res.status(404).json({ error: `Subscription type ${type} not found` });
         }
-        
+
         // Update with provided values or keep current ones
         const updatedLimit = await subscriptionLimitsService.update(type, {
             messages: messages !== undefined ? messages : currentLimit.messages,
             duration: duration !== undefined ? duration : currentLimit.duration,
             price: price !== undefined ? price : currentLimit.price
         });
-        
+
         res.json({ success: true, limit: updatedLimit });
     } catch (error) {
         console.error('Error updating subscription limit:', error);
@@ -280,8 +306,8 @@ router.get('/subscription/contact-links/:type', async (req, res) => {
         const link = await subscriptionContactLinksService.getByType(type);
         if (!link) {
             // Return default if not configured
-            return res.json({ 
-                success: true, 
+            return res.json({
+                success: true,
                 link: {
                     subscriptionType: type,
                     contactType: 'whatsapp_number',

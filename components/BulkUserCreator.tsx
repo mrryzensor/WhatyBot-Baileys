@@ -288,7 +288,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
           const startDate = comparison.excelUser.subscriptionStartDate || null;
           const endDate = comparison.excelUser.subscriptionEndDate || null;
 
-          await createUser(
+          const response = await createUser(
             username,
             email,
             subscriptionType,
@@ -296,7 +296,12 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
             startDate || undefined,
             endDate || undefined
           );
-          results.created++;
+
+          if (response.message && response.message.includes('existía')) {
+            results.updated++;
+          } else {
+            results.created++;
+          }
         }
         results.success++;
       } catch (error: any) {
@@ -313,11 +318,11 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
     if (results.success > 0) {
       let successMsg = '';
       if (results.created > 0 && results.updated > 0) {
-        successMsg = `${results.created} creados y ${results.updated} actualizados exitosamente`;
+        successMsg = `Procesado: ${results.created} nuevos y ${results.updated} actualizados`;
       } else if (results.created > 0) {
         successMsg = `${results.created} usuarios creados exitosamente`;
       } else {
-        successMsg = `${results.updated} usuarios actualizados exitosamente`;
+        successMsg = `${results.updated} usuarios actualizados correctamente`;
       }
       toast.success(successMsg);
       await loadExistingUsers(); // Recargar usuarios
