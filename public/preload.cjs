@@ -24,10 +24,15 @@ const updatesAPI = {
   }
 };
 
+const emergencyAPI = {
+  restart: () => ipcRenderer.invoke('emergency:restart')
+};
+
 // Expose protected methods to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
   profiles: profilesAPI,
   updates: updatesAPI,
+  emergency: emergencyAPI,
   platform: process.platform,
   version: process.version
 });

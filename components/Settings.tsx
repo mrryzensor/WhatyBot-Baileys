@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Monitor, Clock, Users, Timer } from 'lucide-react';
+import { Save, Clock, Users, Timer } from 'lucide-react';
 import { AppConfig } from '../types';
 import { updateConfig as updateConfigApi } from '../services/api';
 import { changePassword, getCurrentUser } from '../services/authApi';
@@ -40,7 +40,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   };
 
   const handleSave = async () => {
-    const { messageDelay, maxContactsPerBatch, waitTimeBetweenBatches, headless, defaultCountryCode } = localConfig;
+    const { messageDelay, maxContactsPerBatch, waitTimeBetweenBatches, defaultCountryCode, autoReplyInGroups } = localConfig;
 
     if (!messageDelay || messageDelay <= 0) {
       toast?.error('El retraso entre mensajes debe ser un número mayor a 0.');
@@ -61,11 +61,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
     }
 
     const normalizedConfig: AppConfig = {
-      headless,
       messageDelay,
       maxContactsPerBatch,
       waitTimeBetweenBatches,
-      defaultCountryCode: (defaultCountryCode || '').trim()
+      defaultCountryCode: (defaultCountryCode || '').trim(),
+      autoReplyInGroups: autoReplyInGroups || false
     };
 
     try {
@@ -137,29 +137,29 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Configuración del Navegador */}
+        {/* Auto-Reply Configuration */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <Monitor size={20} className="text-blue-500" /> Configuración del Navegador
+            <Users size={20} className="text-blue-500" /> Configuración de Auto-Respuestas
           </h3>
 
           <div className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
               <div className="flex items-center gap-3">
-                <Monitor size={20} className="text-slate-400" />
+                <Users size={20} className="text-slate-400" />
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Modo Headless (Sin ventana)</p>
-                  <p className="text-xs text-slate-500">Ejecutar navegador en segundo plano</p>
+                  <p className="text-sm font-medium text-slate-700">Auto Responder en Grupos</p>
+                  <p className="text-xs text-slate-500">Permitir respuestas automáticas en chats grupales</p>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={localConfig.headless}
-                  onChange={(e) => setLocalConfig({ ...localConfig, headless: e.target.checked })}
+                  checked={localConfig.autoReplyInGroups || false}
+                  onChange={(e) => setLocalConfig({ ...localConfig, autoReplyInGroups: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
           </div>
@@ -345,4 +345,4 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
     </div>
   );
 }
-;
+  ;

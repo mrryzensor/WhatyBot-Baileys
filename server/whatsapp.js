@@ -25,6 +25,9 @@ class WhatsAppClient {
     this.qrCode = null;
     this.qrDataUrl = null;
     this.autoReplyRules = [];
+    this.interactiveMenus = []; // Interactive menu system
+    this.userSessions = new Map(); // Active user sessions
+    this.sessionTimeout = 15 * 60 * 1000; // 15 minutes
     this.activeUserId = null;
     this.config = {
       headless: true,
@@ -40,6 +43,8 @@ class WhatsAppClient {
     this._autoResetInProgress = false;
     this._lastAutoResetAt = 0;
     this.loadAutoReplyRules();
+    this.loadInteractiveMenus();
+    this.loadUserSessions();
     this.loadConfig();
   }
 
@@ -50,9 +55,9 @@ class WhatsAppClient {
         this._reconnectTimer = null;
       }
       this._reconnectTimer = setTimeout(() => {
-        this.initialize().catch(() => {});
+        this.initialize().catch(() => { });
       }, Math.max(0, delayMs || 0));
-    } catch {}
+    } catch { }
   }
 
   clearReconnectTimer() {
@@ -61,13 +66,13 @@ class WhatsAppClient {
         clearTimeout(this._reconnectTimer);
         this._reconnectTimer = null;
       }
-    } catch {}
+    } catch { }
   }
 
   // Method to set active user ID (called from server.js socket handler)
   async setActiveUserId(userId) {
     this.activeUserId = userId;
-    
+
     // Si WhatsApp ya está conectado, registrar el número para este nuevo usuario
     if (this.isReady && userId) {
       try {
@@ -75,25 +80,25 @@ class WhatsAppClient {
         const { userService, phoneNumberService } = await import('./database.js');
         const user = await userService.getUserById(userId);
         const isAdmin = (user?.subscription_type || '').toString().toLowerCase() === 'administrador';
-        
+
         if (isAdmin) {
           console.log(`[WhatsApp] User ${userId} is admin, skipping phone number registration`);
           return;
         }
-        
+
         const jid = this.sock?.user?.id || this.sock?.user?.jid;
         if (jid) {
           const jidPart = jid.split('@')[0];
           const numberPart = jidPart.split(':')[0];
           const phoneNumber = numberPart.replace(/\D/g, '');
-          
+
           if (phoneNumber) {
             const otherUsersCount = await phoneNumberService.countOtherUsersForPhone(phoneNumber, userId);
-            
+
             if (otherUsersCount >= 2) {
               // Este número ya está asociado a 2 cuentas diferentes
               await phoneNumberService.unlinkPhoneFromUser(userId, phoneNumber);
-              
+
               if (this.io) {
                 this.io.emit('phone_limit_exceeded', {
                   phone: phoneNumber,
@@ -105,7 +110,7 @@ class WhatsAppClient {
               await this.destroy();
               return;
             }
-            
+
             await phoneNumberService.linkPhoneToUser(userId, phoneNumber);
             console.log(`[WhatsApp] Phone ${phoneNumber} linked to user ${userId} (session already active)`);
           }
@@ -190,6 +195,275 @@ class WhatsAppClient {
       fs.writeFileSync(rulesPath, JSON.stringify(this.autoReplyRules, null, 2));
     } catch (error) {
       console.error('Error saving auto-reply rules:', error);
+    }
+  }
+
+  // Interactive Menus Management
+  loadInteractiveMenus() {
+    try {
+      const menusPath = path.join(__dirname, 'data', 'interactiveMenus.json');
+      if (fs.existsSync(menusPath)) {
+        this.interactiveMenus = JSON.parse(fs.readFileSync(menusPath, 'utf8'));
+        console.log(`[WhatsApp] Loaded ${this.interactiveMenus.length} interactive menus`);
+      } else {
+        // Create example menu
+        this.interactiveMenus = [];
+        this.saveInteractiveMenus();
+      }
+    } catch (error) {
+      console.error('Error loading interactive menus:', error);
+      this.interactiveMenus = [];
+    }
+  }
+
+  saveInteractiveMenus() {
+    try {
+      const dataDir = path.join(__dirname, 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const menusPath = path.join(dataDir, 'interactiveMenus.json');
+      fs.writeFileSync(menusPath, JSON.stringify(this.interactiveMenus, null, 2));
+      console.log(`[WhatsApp] Saved ${this.interactiveMenus.length} interactive menus`);
+    } catch (error) {
+      console.error('Error saving interactive menus:', error);
+    }
+  }
+
+  // User Sessions Management
+  loadUserSessions() {
+    try {
+      const sessionsPath = path.join(__dirname, 'data', 'userSessions.json');
+      if (fs.existsSync(sessionsPath)) {
+        const sessionsArray = JSON.parse(fs.readFileSync(sessionsPath, 'utf8'));
+        this.userSessions = new Map(sessionsArray.map(s => [s.userId, s]));
+        console.log(`[WhatsApp] Loaded ${this.userSessions.size} user sessions`);
+
+        // Clean expired sessions
+        this.cleanExpiredSessions();
+      } else {
+        this.userSessions = new Map();
+      }
+    } catch (error) {
+      console.error('Error loading user sessions:', error);
+      this.userSessions = new Map();
+    }
+  }
+
+  saveUserSessions() {
+    try {
+      const dataDir = path.join(__dirname, 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const sessionsPath = path.join(dataDir, 'userSessions.json');
+      const sessionsArray = Array.from(this.userSessions.values());
+      fs.writeFileSync(sessionsPath, JSON.stringify(sessionsArray, null, 2));
+    } catch (error) {
+      console.error('Error saving user sessions:', error);
+    }
+  }
+
+  cleanExpiredSessions() {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [userId, session] of this.userSessions.entries()) {
+      const lastInteraction = new Date(session.lastInteraction).getTime();
+      if (now - lastInteraction > this.sessionTimeout) {
+        this.userSessions.delete(userId);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`[WhatsApp] Cleaned ${cleaned} expired sessions`);
+      this.saveUserSessions();
+    }
+  }
+
+  getSession(userId) {
+    const session = this.userSessions.get(userId);
+    if (!session) return null;
+
+    const lastInteraction = new Date(session.lastInteraction).getTime();
+    const now = Date.now();
+
+    if (now - lastInteraction > this.sessionTimeout) {
+      this.userSessions.delete(userId);
+      this.saveUserSessions();
+      return null;
+    }
+
+    return session;
+  }
+
+  setSession(userId, menuId, conversationData = {}) {
+    const session = {
+      userId,
+      currentMenuId: menuId,
+      history: [],
+      conversationData,
+      startTime: new Date().toISOString(),
+      lastInteraction: new Date().toISOString()
+    };
+    this.userSessions.set(userId, session);
+    this.saveUserSessions();
+    return session;
+  }
+
+  updateSession(userId, menuId, conversationData = null) {
+    const session = this.userSessions.get(userId);
+    if (session) {
+      if (session.currentMenuId !== menuId) {
+        session.history = session.history || [];
+        session.history.push(session.currentMenuId);
+        if (session.history.length > 20) session.history.shift();
+      }
+      session.currentMenuId = menuId;
+      session.lastInteraction = new Date().toISOString();
+      if (conversationData !== null) {
+        session.conversationData = { ...session.conversationData, ...conversationData };
+      }
+      this.userSessions.set(userId, session);
+      this.saveUserSessions();
+    }
+  }
+
+  clearSession(userId) {
+    this.userSessions.delete(userId);
+    this.saveUserSessions();
+  }
+
+  async handleMenuInteraction(userId, messageText, session, currentUser, messageCountService, messageLogService) {
+    try {
+      const currentMenu = this.interactiveMenus.find(m => m.id === session.currentMenuId);
+      if (!currentMenu || !currentMenu.isActive) {
+        console.log('[WhatsApp] Current menu not found or inactive, clearing session');
+        this.clearSession(userId);
+        return false;
+      }
+
+      // Find matching option
+      const matchedOption = currentMenu.options.find(option =>
+        option.triggers.some(trigger =>
+          messageText.toLowerCase().trim() === trigger.toLowerCase().trim() ||
+          messageText.toLowerCase().includes(trigger.toLowerCase())
+        )
+      );
+
+      if (!matchedOption) {
+        // No matching option - send error message
+        // Generate ONLY the list of options for the error message
+        const optionsList = currentMenu.options && currentMenu.options.length > 0
+          ? currentMenu.options.map((opt, idx) => {
+            const triggerDisplay = opt.triggers && opt.triggers.length > 0 ? opt.triggers[0] : (idx + 1).toString();
+            if (/^\d+$/.test(triggerDisplay)) {
+              return `${triggerDisplay}️⃣ ${opt.label}`;
+            }
+            return opt.label;
+          }).join('\n')
+          : '';
+
+        await this.sendMessage(
+          userId,
+          `❌ Opción no válida. Por favor, elige una opción del menú:\n\n${optionsList}`
+        );
+        return true; // Handled (error response sent)
+      }
+
+      console.log('[WhatsApp] Menu option matched:', {
+        userId,
+        menuId: currentMenu.id,
+        optionId: matchedOption.id,
+        optionLabel: matchedOption.label,
+        nextMenuId: matchedOption.nextMenuId,
+        goBack: !!matchedOption.goBack,
+        endConversation: !!matchedOption.endConversation,
+        hasResponse: !!matchedOption.response,
+        mediaCount: (matchedOption.mediaPaths || []).length
+      });
+
+      // Send option response if exists
+      if (matchedOption.response || (matchedOption.mediaPaths && matchedOption.mediaPaths.length > 0)) {
+        const mediaPaths = matchedOption.mediaPaths || [];
+        const captions = matchedOption.captions || [];
+        await this.sendMessage(userId, matchedOption.response || '', mediaPaths, captions);
+
+        if (currentUser && currentUser.id) {
+          await messageCountService.incrementCount(currentUser.id, 1);
+          await messageLogService.logMessage(
+            currentUser.id,
+            'menu-response',
+            userId,
+            'sent',
+            `Menu response: ${matchedOption.label}`,
+            null
+          );
+        }
+      }
+
+      // Handle navigation
+      console.log('[WhatsApp] Starting navigation check for option:', matchedOption.label);
+
+      if (matchedOption.endConversation) {
+        // End conversation
+        this.clearSession(userId);
+        console.log('[WhatsApp] Conversation ended for user:', userId);
+      } else if (matchedOption.goBack) {
+        // Go back to previous menu
+        const history = session.history || [];
+        const prevMenuId = history.length > 0 ? history.pop() : null;
+
+        if (prevMenuId) {
+          const prevMenu = this.interactiveMenus.find(m => String(m.id) === String(prevMenuId) && m.isActive);
+          if (prevMenu) {
+            await this.sendMenu(userId, prevMenu);
+
+            // Update session without adding current to history (since we are going back)
+            session.currentMenuId = prevMenuId;
+            session.history = history; // Already popped
+            session.lastInteraction = new Date().toISOString();
+            this.userSessions.set(userId, session);
+            this.saveUserSessions();
+
+            console.log('[WhatsApp] Go back to menu:', { userId, toMenu: prevMenuId });
+          } else {
+            await this.sendMessage(userId, "❌ El menú anterior ya no está disponible.");
+          }
+        } else {
+          await this.sendMessage(userId, "❌ No hay un menú anterior al que volver.");
+        }
+      } else if (matchedOption.nextMenuId) {
+        // Navigate to next menu
+        const nextMenu = this.interactiveMenus.find(m => String(m.id) === String(matchedOption.nextMenuId) && m.isActive);
+        if (nextMenu) {
+          await this.sendMenu(userId, nextMenu);
+
+          this.updateSession(userId, nextMenu.id);
+
+          if (currentUser && currentUser.id) {
+            await messageCountService.incrementCount(currentUser.id, 1);
+          }
+
+          console.log('[WhatsApp] Navigated to menu:', {
+            userId,
+            fromMenu: currentMenu.id,
+            toMenu: nextMenu.id
+          });
+        } else {
+          // Next menu not found, end conversation
+          this.clearSession(userId);
+          console.log('[WhatsApp] Next menu not found, ending conversation');
+        }
+      } else {
+        // No navigation specified, stay in current menu
+        this.updateSession(userId, currentMenu.id);
+      }
+
+      return true; // Handled
+    } catch (error) {
+      console.error('[WhatsApp] Error handling menu interaction:', error);
+      this.clearSession(userId);
+      return false;
     }
   }
 
@@ -321,277 +595,362 @@ class WhatsAppClient {
       // Ensure any previous socket is closed before starting a new one
       try {
         if (this.sock) {
-          try { this.sock.ws?.close?.(); } catch {}
-          try { this.sock.end?.(); } catch {}
+          try { this.sock.ws?.close?.(); } catch { }
+          try { this.sock.end?.(); } catch { }
         }
-      } catch {}
+      } catch { }
 
-    const authDir = resolveSessionDir();
-    if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    const { version } = await fetchLatestBaileysVersion();
-    this.sock = makeWASocket({
-      version,
-      auth: state,
-      printQRInTerminal: false,
-      browser: ['WhatyBot', 'Chrome', '1.0.0'],
-      markOnlineOnConnect: false,
-      shouldIgnoreJid: (jid) => {
-        if (!jid) return false;
-        if (jid === 'status@broadcast') return true;
-        if (jid.endsWith('@broadcast')) return true;
-        return false;
-      }
-    });
-    this.client = this.sock;
-    this.sock.ev.on('creds.update', saveCreds);
-    this.sock.ev.on('connection.update', async (update) => {
-      const { connection, qr, lastDisconnect } = update;
-      if (qr) {
-        try {
-          this.qrCode = qr;
-          const qrDataUrl = await qrcode.toDataURL(qr);
-          this.qrDataUrl = qrDataUrl;
-          this.io.emit('qr', { qr: qrDataUrl });
-        } catch (e) {}
-      }
-      if (connection === 'open') {
-        this.isReady = true;
-        this.qrCode = null;
-        this.qrDataUrl = null;
-        this._reconnectAttempts = 0;
-        this.clearReconnectTimer();
+      const authDir = resolveSessionDir();
+      if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
+      const { state, saveCreds } = await useMultiFileAuthState(authDir);
+      const { version } = await fetchLatestBaileysVersion();
+      this.sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: false,
+        browser: ['WhatyBot', 'Chrome', '1.0.0'],
+        markOnlineOnConnect: false,
+        shouldIgnoreJid: (jid) => {
+          if (!jid) return false;
+          if (jid === 'status@broadcast') return true;
+          if (jid.endsWith('@broadcast')) return true;
+          return false;
+        }
+      });
+      this.client = this.sock;
+      this.sock.ev.on('creds.update', saveCreds);
+      this.sock.ev.on('connection.update', async (update) => {
+        const { connection, qr, lastDisconnect } = update;
+        if (qr) {
+          try {
+            this.qrCode = qr;
+            const qrDataUrl = await qrcode.toDataURL(qr);
+            this.qrDataUrl = qrDataUrl;
+            this.io.emit('qr', { qr: qrDataUrl });
+          } catch (e) { }
+        }
+        if (connection === 'open') {
+          this.isReady = true;
+          this.qrCode = null;
+          this.qrDataUrl = null;
+          this._reconnectAttempts = 0;
+          this.clearReconnectTimer();
 
-        let phoneNumber = null;
-        try {
-          const jid = this.sock?.user?.id || this.sock?.user?.jid;
-          if (jid) {
-            // JID format: "51987422887:77@s.whatsapp.net" - extraer solo el número antes de ':'
-            const jidPart = jid.split('@')[0]; // "51987422887:77"
-            const numberPart = jidPart.split(':')[0]; // "51987422887" (sin device ID)
-            phoneNumber = numberPart.replace(/\D/g, '');
-          }
-
-          if (phoneNumber && this.activeUserId) {
-            const { userService, phoneNumberService } = await import('./database.js');
-            
-            // Verificar si el usuario es administrador (no tiene restricciones)
-            const user = await userService.getUserById(this.activeUserId);
-            const isAdmin = (user?.subscription_type || '').toString().toLowerCase() === 'administrador';
-            
-            if (!isAdmin) {
-              // Contar cuántos OTROS usuarios tienen este número (excluyendo el usuario actual)
-              const otherUsersCount = await phoneNumberService.countOtherUsersForPhone(phoneNumber, this.activeUserId);
-
-              if (otherUsersCount >= 2) {
-                // Este número ya está asociado a 2 cuentas diferentes
-                // Eliminar cualquier registro previo de este número para este usuario
-                await phoneNumberService.unlinkPhoneFromUser(this.activeUserId, phoneNumber);
-                
-                if (this.io) {
-                  this.io.emit('phone_limit_exceeded', {
-                    phone: phoneNumber,
-                    userId: this.activeUserId,
-                    message: 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
-                  });
-                  this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
-                }
-                await this.destroy();
-                return;
-              }
-
-              await phoneNumberService.linkPhoneToUser(this.activeUserId, phoneNumber);
-            } else {
-              console.log(`[WhatsApp] User ${this.activeUserId} is admin, skipping phone number registration`);
+          let phoneNumber = null;
+          try {
+            const jid = this.sock?.user?.id || this.sock?.user?.jid;
+            if (jid) {
+              // JID format: "51987422887:77@s.whatsapp.net" - extraer solo el número antes de ':'
+              const jidPart = jid.split('@')[0]; // "51987422887:77"
+              const numberPart = jidPart.split(':')[0]; // "51987422887" (sin device ID)
+              phoneNumber = numberPart.replace(/\D/g, '');
             }
+
+            if (phoneNumber && this.activeUserId) {
+              const { userService, phoneNumberService } = await import('./database.js');
+
+              // Verificar si el usuario es administrador (no tiene restricciones)
+              const user = await userService.getUserById(this.activeUserId);
+              const isAdmin = (user?.subscription_type || '').toString().toLowerCase() === 'administrador';
+
+              if (!isAdmin) {
+                // Contar cuántos OTROS usuarios tienen este número (excluyendo el usuario actual)
+                const otherUsersCount = await phoneNumberService.countOtherUsersForPhone(phoneNumber, this.activeUserId);
+
+                if (otherUsersCount >= 2) {
+                  // Este número ya está asociado a 2 cuentas diferentes
+                  // Eliminar cualquier registro previo de este número para este usuario
+                  await phoneNumberService.unlinkPhoneFromUser(this.activeUserId, phoneNumber);
+
+                  if (this.io) {
+                    this.io.emit('phone_limit_exceeded', {
+                      phone: phoneNumber,
+                      userId: this.activeUserId,
+                      message: 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
+                    });
+                    this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });
+                  }
+                  await this.destroy();
+                  return;
+                }
+
+                await phoneNumberService.linkPhoneToUser(this.activeUserId, phoneNumber);
+              } else {
+                console.log(`[WhatsApp] User ${this.activeUserId} is admin, skipping phone number registration`);
+              }
+            }
+          } catch (error) {
+            console.error('Error validating phone number usage:', error);
           }
-        } catch (error) {
-          console.error('Error validating phone number usage:', error);
-        }
 
-        this.io?.emit('authenticated', { phone: phoneNumber });
-        this.io?.emit('ready', { status: 'connected', phone: phoneNumber });
-      } else if (connection === 'close') {
-        this.isReady = false;
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const loggedOut = statusCode === DisconnectReason.loggedOut;
-        this.io.emit('disconnected', { reason: loggedOut ? 'logged_out' : 'connection_closed' });
+          this.io?.emit('authenticated', { phone: phoneNumber });
+          this.io?.emit('ready', { status: 'connected', phone: phoneNumber });
+        } else if (connection === 'close') {
+          this.isReady = false;
+          const statusCode = lastDisconnect?.error?.output?.statusCode;
+          const loggedOut = statusCode === DisconnectReason.loggedOut;
+          this.io.emit('disconnected', { reason: loggedOut ? 'logged_out' : 'connection_closed' });
 
-        // If WhatsApp logged out (invalid/expired session), auto-reset once to force a new QR,
-        // same behavior as the manual "Limpiar sesión y generar nuevo QR" button.
-        if (loggedOut) {
-          const now = Date.now();
-          const cooldownMs = 60 * 1000;
+          // If WhatsApp logged out (invalid/expired session), auto-reset once to force a new QR,
+          // same behavior as the manual "Limpiar sesión y generar nuevo QR" button.
+          if (loggedOut) {
+            const now = Date.now();
+            const cooldownMs = 60 * 1000;
 
-          // Guard against infinite reset loops (e.g. persistent login failure)
-          if (!this._autoResetInProgress && (now - (this._lastAutoResetAt || 0)) > cooldownMs) {
-            this._autoResetInProgress = true;
-            this._lastAutoResetAt = now;
-            try {
-              console.log('🔁 Sesión inválida (logged_out). Limpiando sesión y generando nuevo QR automáticamente...');
-              await this.resetSession();
-            } catch (e) {
-              console.error('❌ Error auto-reseteando sesión:', e?.message || e);
+            // Guard against infinite reset loops (e.g. persistent login failure)
+            if (!this._autoResetInProgress && (now - (this._lastAutoResetAt || 0)) > cooldownMs) {
+              this._autoResetInProgress = true;
+              this._lastAutoResetAt = now;
+              try {
+                console.log('🔁 Sesión inválida (logged_out). Limpiando sesión y generando nuevo QR automáticamente...');
+                await this.resetSession();
+              } catch (e) {
+                console.error('❌ Error auto-reseteando sesión:', e?.message || e);
+                try {
+                  await this.destroy();
+                } catch { }
+              } finally {
+                this._autoResetInProgress = false;
+              }
+            } else {
               try {
                 await this.destroy();
-              } catch {}
-            } finally {
-              this._autoResetInProgress = false;
+              } catch { }
             }
-          } else {
-            try {
-              await this.destroy();
-            } catch {}
-          }
 
-          this.clearReconnectTimer();
-          this._reconnectAttempts = 0;
-          return;
-        }
-
-        // Controlled reconnect with backoff, avoid parallel init storms
-        this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
-        const baseDelay = 2000;
-        const maxDelay = 60000;
-        const delay = Math.min(maxDelay, baseDelay * (2 ** Math.min(6, this._reconnectAttempts - 1)));
-        this.scheduleReconnect(delay);
-      }
-    });
-    this.sock.ev.on('messages.upsert', async ({ messages }) => {
-      try {
-        const m = messages && messages[0];
-        if (!m) return;
-        const remoteJid = m.key.remoteJid || '';
-        if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@broadcast')) return;
-        const isGroup = remoteJid.endsWith('@g.us');
-        const fromMe = !!m.key.fromMe;
-        if (isGroup || fromMe) return;
-        const from = remoteJid;
-        const body = (this.getTextFromMessage(m) || '').toLowerCase();
-        const activeUserInfo = this.activeUserId ? `[Usuario activo: ${this.activeUserId}]` : '[Usuario activo: NINGUNO]';
-        console.log(`${activeUserInfo} Message received:`, {
-          from,
-          body: body.substring(0, 100) || '(sin texto)',
-          isGroup,
-          fromMe
-        });
-        const { userService, validationService, messageCountService, messageLogService } = await import('./database.js');
-        let currentUser = null;
-        try {
-          if (this.activeUserId) {
-            currentUser = await userService.getUserById(this.activeUserId);
-            if (!(currentUser && currentUser.is_active)) {
-              currentUser = null;
-            }
-          }
-        } catch {}
-        if (currentUser && currentUser.id) {
-          const userInfo = `[Usuario: ${currentUser.id} - ${currentUser.username || currentUser.email || 'N/A'}]`;
-          const validation = await validationService.canSendMessages(currentUser.id, 1);
-          if (!validation.allowed) {
-            if (this.io) {
-              this.io.emit('limit_exceeded', {
-                userId: currentUser.id,
-                limitExceeded: validation.limitExceeded,
-                currentCount: validation.currentCount,
-                limit: validation.limit,
-                subscriptionType: validation.subscriptionType
-              });
-            }
+            this.clearReconnectTimer();
+            this._reconnectAttempts = 0;
             return;
           }
+
+          // Controlled reconnect with backoff, avoid parallel init storms
+          this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
+          const baseDelay = 2000;
+          const maxDelay = 60000;
+          const delay = Math.min(maxDelay, baseDelay * (2 ** Math.min(6, this._reconnectAttempts - 1)));
+          this.scheduleReconnect(delay);
         }
-        for (const rule of this.autoReplyRules) {
-          if (!rule.isActive) continue;
-          const messageText = body;
-          let shouldReply = false;
-          if (rule.matchType === 'exact') {
-            shouldReply = rule.keywords.some(keyword => messageText === keyword.toLowerCase());
-          } else if (rule.matchType === 'contains') {
-            shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase()));
+      });
+      this.sock.ev.on('messages.upsert', async ({ messages }) => {
+        try {
+          const m = messages && messages[0];
+          if (!m) return;
+          const remoteJid = m.key.remoteJid || '';
+          if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@broadcast')) return;
+          const isGroup = remoteJid.endsWith('@g.us');
+          const fromMe = !!m.key.fromMe;
+
+          // Skip if message is from me
+          if (fromMe) return;
+
+          // Skip groups unless autoReplyInGroups is enabled
+          const autoReplyInGroups = this.config?.autoReplyInGroups || false;
+          if (isGroup && !autoReplyInGroups) {
+            console.log('[WhatsAppClient] Skipping group message (autoReplyInGroups disabled)');
+            return;
           }
-          if (shouldReply) {
-            const textMessage = rule.response || '';
 
-            // Soporte para múltiples archivos por regla
-            const mediaPaths = Array.isArray(rule.mediaPaths)
-              ? rule.mediaPaths.filter(Boolean)
-              : (rule.mediaPath ? [rule.mediaPath] : []);
+          const from = remoteJid;
+          const body = (this.getTextFromMessage(m) || '').toLowerCase();
+          const activeUserInfo = this.activeUserId ? `[Usuario activo: ${this.activeUserId}]` : '[Usuario activo: NINGUNO]';
+          console.log(`${activeUserInfo} Message received:`, {
+            from,
+            body: body.substring(0, 100) || '(sin texto)',
+            isGroup,
+            fromMe
+          });
+          const { userService, validationService, messageCountService, messageLogService } = await import('./database.js');
+          let currentUser = null;
+          try {
+            if (this.activeUserId) {
+              currentUser = await userService.getUserById(this.activeUserId);
+              if (!(currentUser && currentUser.is_active)) {
+                currentUser = null;
+              }
+            }
+          } catch { }
+          if (currentUser && currentUser.id) {
+            const userInfo = `[Usuario: ${currentUser.id} - ${currentUser.username || currentUser.email || 'N/A'}]`;
+            const validation = await validationService.canSendMessages(currentUser.id, 1);
+            if (!validation.allowed) {
+              if (this.io) {
+                this.io.emit('limit_exceeded', {
+                  userId: currentUser.id,
+                  limitExceeded: validation.limitExceeded,
+                  currentCount: validation.currentCount,
+                  limit: validation.limit,
+                  subscriptionType: validation.subscriptionType
+                });
+              }
+              return;
+            }
+          }
 
-            let captions = Array.isArray(rule.captions)
-              ? rule.captions
-              : mediaPaths.map(() => (rule.caption || ''));
-
-            console.log('[WhatsAppClient] Auto-reply matched rule:', {
-              id: rule.id,
-              name: rule.name,
-              mediaPaths,
-              captions
-            });
-
-            await new Promise(r => setTimeout(r, rule.delay * 1000));
-            await this.sendMessage(from, textMessage, mediaPaths, captions);
-            if (currentUser && currentUser.id) {
-              await messageCountService.incrementCount(currentUser.id, 1);
-              await messageLogService.logMessage(
-                currentUser.id,
-                'auto-reply',
-                from,
-                'sent',
-                `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
-                null
+          // Check for active menu session FIRST
+          const session = this.getSession(from);
+          if (session) {
+            // Verify that the menu is still active
+            const currentMenu = this.interactiveMenus.find(m => String(m.id) === String(session.currentMenuId));
+            if (!currentMenu || !currentMenu.isActive) {
+              console.log('[WhatsApp] Menu session exists but menu is inactive/deleted, clearing session');
+              this.clearSession(from);
+            } else {
+              // Check if there's an auto-reply rule that triggers this menu and if it's still active
+              const menuTriggerRule = this.autoReplyRules.find(r =>
+                r.type === 'menu' && String(r.menuId) === String(session.currentMenuId)
               );
-            }
-            if (this.io) {
-              this.io.emit('message_log', {
-                id: Date.now().toString(),
-                userId: currentUser?.id || null,
-                target: from,
-                status: 'sent',
-                timestamp: new Date(),
-                content: `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
-                messageType: 'auto-reply'
-              });
-            }
-            break;
-          }
-        }
-      } catch (error) {}
-    });
 
-    // Cache contacts from Baileys events
-    this.sock.ev.on('contacts.upsert', (contacts = []) => {
-      try {
-        contacts.forEach(c => {
-          if (c && c.id) {
-            this.contactsCache[c.id] = { id: c.id, name: c.name || c.notify, status: c.status };
+              if (menuTriggerRule && !menuTriggerRule.isActive) {
+                console.log('[WhatsApp] Menu session exists but auto-reply trigger is inactive, clearing session');
+                this.clearSession(from);
+              } else {
+                // Menu and trigger (if exists) are active, process menu interaction
+                const handled = await this.handleMenuInteraction(from, body, session, currentUser, messageCountService, messageLogService);
+                if (handled) {
+                  return; // Menu interaction handled, don't process auto-reply rules
+                }
+              }
+            }
           }
-        });
-      } catch {}
-    });
-    this.sock.ev.on('contacts.update', (updates = []) => {
-      try {
-        updates.forEach(u => {
-          const id = u?.id;
-          if (!id) return;
-          const prev = this.contactsCache[id] || { id };
-          this.contactsCache[id] = { ...prev, name: u.name || prev.name, status: u.status || prev.status };
-        });
-      } catch {}
-    });
-    // Also collect JIDs from chats
-    this.sock.ev.on('chats.upsert', (chats = []) => {
-      try {
-        chats.forEach(ch => {
-          const id = ch?.id;
-          if (!id) return;
-          if (id.endsWith('@s.whatsapp.net')) {
-            const name = ch.name || ch.subject || ch.notify || (id.split('@')[0]);
-            this.contactsCache[id] = { id, name };
+
+          // Process auto-reply rules (only if no menu session or menu didn't handle it)
+          for (const rule of this.autoReplyRules) {
+            if (!rule.isActive) continue;
+            const messageText = body;
+            let shouldReply = false;
+            if (rule.matchType === 'exact') {
+              shouldReply = rule.keywords.some(keyword => messageText === keyword.toLowerCase());
+            } else if (rule.matchType === 'contains') {
+              shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase()));
+            }
+            if (shouldReply) {
+              // Check if this is a menu-type rule
+              if (rule.type === 'menu' && rule.menuId) {
+                // Start menu session
+                const menu = this.interactiveMenus.find(m => String(m.id) === String(rule.menuId) && m.isActive);
+                if (menu) {
+                  console.log('[WhatsAppClient] Starting menu session:', {
+                    userId: from,
+                    menuId: menu.id,
+                    menuName: menu.name
+                  });
+
+                  await new Promise(r => setTimeout(r, rule.delay * 1000));
+
+                  await this.sendMenu(from, menu);
+
+                  this.setSession(from, menu.id);
+
+                  if (currentUser && currentUser.id) {
+                    await messageCountService.incrementCount(currentUser.id, 1);
+                    await messageLogService.logMessage(
+                      currentUser.id,
+                      'menu-start',
+                      from,
+                      'sent',
+                      `Menu started: ${menu.name}`,
+                      null
+                    );
+                  }
+
+                  if (this.io) {
+                    this.io.emit('message_log', {
+                      id: Date.now().toString(),
+                      userId: currentUser?.id || null,
+                      target: from,
+                      status: 'sent',
+                      timestamp: new Date(),
+                      content: `Menu started: ${menu.name}`,
+                      messageType: 'menu-start'
+                    });
+                  }
+
+                  break;
+                }
+              } else {
+                // Regular auto-reply (simple type)
+                const textMessage = rule.response || '';
+
+                // Soporte para múltiples archivos por regla
+                const mediaPaths = Array.isArray(rule.mediaPaths)
+                  ? rule.mediaPaths.filter(Boolean)
+                  : (rule.mediaPath ? [rule.mediaPath] : []);
+
+                let captions = Array.isArray(rule.captions)
+                  ? rule.captions
+                  : mediaPaths.map(() => (rule.caption || ''));
+
+                console.log('[WhatsAppClient] Auto-reply matched rule:', {
+                  id: rule.id,
+                  name: rule.name,
+                  mediaPaths,
+                  captions
+                });
+
+                await new Promise(r => setTimeout(r, rule.delay * 1000));
+                await this.sendMessage(from, textMessage, mediaPaths, captions);
+                if (currentUser && currentUser.id) {
+                  await messageCountService.incrementCount(currentUser.id, 1);
+                  await messageLogService.logMessage(
+                    currentUser.id,
+                    'auto-reply',
+                    from,
+                    'sent',
+                    `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
+                    null
+                  );
+                }
+                if (this.io) {
+                  this.io.emit('message_log', {
+                    id: Date.now().toString(),
+                    userId: currentUser?.id || null,
+                    target: from,
+                    status: 'sent',
+                    timestamp: new Date(),
+                    content: `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
+                    messageType: 'auto-reply'
+                  });
+                }
+                break;
+              }
+            }
           }
-        });
-      } catch {}
-    });
+        } catch (error) { }
+      });
+
+      // Cache contacts from Baileys events
+      this.sock.ev.on('contacts.upsert', (contacts = []) => {
+        try {
+          contacts.forEach(c => {
+            if (c && c.id) {
+              this.contactsCache[c.id] = { id: c.id, name: c.name || c.notify, status: c.status };
+            }
+          });
+        } catch { }
+      });
+      this.sock.ev.on('contacts.update', (updates = []) => {
+        try {
+          updates.forEach(u => {
+            const id = u?.id;
+            if (!id) return;
+            const prev = this.contactsCache[id] || { id };
+            this.contactsCache[id] = { ...prev, name: u.name || prev.name, status: u.status || prev.status };
+          });
+        } catch { }
+      });
+      // Also collect JIDs from chats
+      this.sock.ev.on('chats.upsert', (chats = []) => {
+        try {
+          chats.forEach(ch => {
+            const id = ch?.id;
+            if (!id) return;
+            if (id.endsWith('@s.whatsapp.net')) {
+              const name = ch.name || ch.subject || ch.notify || (id.split('@')[0]);
+              this.contactsCache[id] = { id, name };
+            }
+          });
+        } catch { }
+      });
 
       return true;
     })();
@@ -601,6 +960,51 @@ class WhatsAppClient {
     } finally {
       this._initializePromise = null;
     }
+  }
+  /**
+   * Genera y envía un menú interactivo a un usuario
+   * @param {string} jid - JID del destinatario
+   * @param {Object} menu - El objeto menú a enviar
+   */
+  async sendMenu(jid, menu) {
+    if (!menu) return;
+
+    // Generate option list
+    const optionsList = menu.options && menu.options.length > 0
+      ? '\n\n' + menu.options.map((opt, idx) => {
+        const triggerDisplay = opt.triggers && opt.triggers.length > 0 ? opt.triggers[0] : (idx + 1).toString();
+        // ONLY prepend and format if it's a number.
+        if (/^\d+$/.test(triggerDisplay)) {
+          return `${triggerDisplay}️⃣ ${opt.label}`;
+        }
+        return opt.label;
+      }).join('\n')
+      : '';
+
+    const mediaPaths = menu.mediaPaths || [];
+    const captions = (menu.captions || []).slice(); // Clone array
+    let message = menu.message || '';
+
+    // If there's no message but there are captions, append options to first caption
+    if (!message && captions.length > 0) {
+      captions[0] = (captions[0] || '') + optionsList;
+    } else {
+      // Append options to message
+      message = (message || '') + optionsList;
+    }
+
+    console.log('[WhatsApp] Sending menu:', {
+      jid,
+      menuName: menu.name,
+      optionsCount: (menu.options || []).length,
+      mediaCount: mediaPaths.length,
+      finalMessageSnippet: message.substring(0, 50) + '...',
+      firstCaptionSnippet: captions.length > 0 ? (captions[0] || '').substring(0, 50) + '...' : 'N/A'
+    });
+
+    console.log('[WhatsApp] Generated options list:', optionsList);
+
+    return this.sendMessage(jid, message, mediaPaths, captions);
   }
 
   /**
@@ -628,6 +1032,12 @@ class WhatsAppClient {
         ? caption
         : mediaPaths.map(() => (caption || ''));
 
+      // Send text message FIRST (if exists)
+      if (message && message.trim()) {
+        await this.sock.sendMessage(jid, { text: message });
+      }
+
+      // Then send media files
       for (let i = 0; i < mediaPaths.length; i++) {
         const currentPath = mediaPaths[i];
         if (!currentPath) continue;
@@ -658,12 +1068,9 @@ class WhatsAppClient {
               totalBatches: 1
             });
           }
-        } catch {}
+        } catch { }
       }
 
-      if (message && message.trim()) {
-        await this.sock.sendMessage(jid, { text: message });
-      }
       return { success: true };
     } catch (error) {
       throw error;
@@ -813,7 +1220,7 @@ class WhatsAppClient {
       if (batchIndex < batches.length - 1) {
         const waitTimeMs = waitMinutes * 60 * 1000;
         console.log(`⏳ Esperando ${waitMinutes} minutos antes del siguiente lote...`);
-        
+
         // Emit waiting status
         this.io.emit('bulk_progress', {
           userId: userId || null,
@@ -893,7 +1300,7 @@ class WhatsAppClient {
             // Baileys returns a temporary URL hosted by WhatsApp/CDN.
             // It can fail if the group has no photo or due to privacy/permissions.
             image = await this.sock.profilePictureUrl(g.id, 'image');
-          } catch {}
+          } catch { }
 
           const announce = typeof g?.announce === 'boolean' ? g.announce : undefined;
           const isAdmin = !!(g?.participants || []).find((p) => {
@@ -931,20 +1338,188 @@ class WhatsAppClient {
     }
   }
 
-  async getContacts() {
+  async getContacts(groupIds = null) {
     if (!this.sock || !this.isReady) throw new Error('WhatsApp client no está listo');
     try {
-      const contacts = Object.values(this.contactsCache || {});
-      return contacts
-        .filter(c => c.id && c.id.endsWith('@s.whatsapp.net'))
-        .map(c => ({
-          id: c.id,
-          phone: (c.id || '').split('@')[0],
-          name: c.name || c.status || (c.id || '').split('@')[0]
-        }));
+      console.log('[getContacts] Starting contact extraction...');
+      if (groupIds && groupIds.length > 0) {
+        console.log(`[getContacts] Filtering by ${groupIds.length} selected groups`);
+      }
+
+      const contactsMap = new Map();
+
+      // 1. Get contacts from cache (from events) - only if no group filter
+      if (!groupIds || groupIds.length === 0) {
+        const cachedContacts = Object.values(this.contactsCache || {});
+        console.log(`[getContacts] Found ${cachedContacts.length} contacts in cache`);
+
+        cachedContacts.forEach(c => {
+          if (c.id && c.id.endsWith('@s.whatsapp.net')) {
+            const phone = c.id.split('@')[0];
+            contactsMap.set(phone, {
+              id: c.id,
+              phone: phone,
+              name: c.name || c.status || phone,
+              groups: []
+            });
+          }
+        });
+
+        // 2. Get contacts from active chats using store - only if no group filter
+        try {
+          const chats = await this.sock.store?.chats?.all() || [];
+          console.log(`[getContacts] Found ${chats.length} chats in store`);
+
+          chats.forEach(chat => {
+            if (chat.id && chat.id.endsWith('@s.whatsapp.net')) {
+              const phone = chat.id.split('@')[0];
+              if (!contactsMap.has(phone)) {
+                contactsMap.set(phone, {
+                  id: chat.id,
+                  phone: phone,
+                  name: chat.name || chat.notify || phone,
+                  groups: []
+                });
+              }
+            }
+          });
+        } catch (error) {
+          console.log('[getContacts] Could not access chats from store:', error.message);
+        }
+      }
+
+      // 3. Extract contacts from groups (all or filtered)
+      try {
+        const allGroups = await this.getGroups();
+        const groupsToProcess = groupIds && groupIds.length > 0
+          ? allGroups.filter(g => groupIds.includes(g.id))
+          : allGroups;
+
+        console.log(`[getContacts] Extracting contacts from ${groupsToProcess.length} groups`);
+
+        // Process groups with rate-limit handling and progress tracking
+        for (let i = 0; i < groupsToProcess.length; i++) {
+          const group = groupsToProcess[i];
+          const progress = {
+            current: i + 1,
+            total: groupsToProcess.length,
+            groupName: group.name,
+            percentage: Math.round(((i + 1) / groupsToProcess.length) * 100)
+          };
+
+          try {
+            // Emit progress event
+            this.io?.emit('contacts:extraction:progress', progress);
+
+            // Get members with retry logic for rate-limits
+            const members = await this.getGroupMembersWithRetry(group.id, group.name);
+            console.log(`[getContacts] Group "${group.name}": ${members.length} members`);
+
+            members.forEach(member => {
+              const phone = member.phone;
+              if (phone) {
+                if (contactsMap.has(phone)) {
+                  // Add group to existing contact
+                  const contact = contactsMap.get(phone);
+                  contact.groups.push({
+                    id: group.id,
+                    name: group.name,
+                    image: group.image || null
+                  });
+                } else {
+                  // Create new contact with group info
+                  contactsMap.set(phone, {
+                    id: member.id,
+                    phone: phone,
+                    name: member.name || phone,
+                    groups: [{
+                      id: group.id,
+                      name: group.name,
+                      image: group.image || null
+                    }]
+                  });
+                }
+              }
+            });
+          } catch (error) {
+            console.log(`[getContacts] Error getting members from group ${group.name}:`, error.message);
+            // Emit error but continue with other groups
+            this.io?.emit('contacts:extraction:error', {
+              groupName: group.name,
+              error: error.message,
+              ...progress
+            });
+          }
+        }
+      } catch (error) {
+        console.log('[getContacts] Error getting groups:', error.message);
+      }
+
+      // 4. Convert map to array, fetch profile pictures, and filter out invalid entries
+      const contactsArray = Array.from(contactsMap.values())
+        .filter(c => c.phone && c.phone.length >= 8); // Valid phone numbers
+
+      // Fetch profile pictures for all contacts
+      const contactsWithImages = await Promise.all(
+        contactsArray.map(async (c) => {
+          let profilePicUrl = null;
+          try {
+            // Try to get profile picture
+            profilePicUrl = await this.sock.profilePictureUrl(c.id, 'image');
+          } catch (error) {
+            // If no profile picture, use null (will show default avatar)
+          }
+
+          return {
+            ...c,
+            // Clean phone: remove @s.whatsapp.net if present
+            phone: `+${c.phone.split('@')[0]}`,
+            // Add profile picture URL
+            profilePicUrl: profilePicUrl,
+            // Add group names as comma-separated string for display
+            groupNames: c.groups.map(g => g.name).join(', ') || 'Sin grupo'
+          };
+        })
+      );
+
+      const contacts = contactsWithImages.sort((a, b) => a.phone.localeCompare(b.phone)); // Sort by phone
+
+      console.log(`[getContacts] Returning ${contacts.length} unique contacts`);
+      return contacts;
     } catch (error) {
+      console.error('[getContacts] Error:', error);
       throw error;
     }
+  }
+
+  // Helper function to get group members with retry logic for rate-limits
+  async getGroupMembersWithRetry(groupId, groupName, maxRetries = 3) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const members = await this.getGroupMembers(groupId);
+        return members;
+      } catch (error) {
+        lastError = error;
+        const isRateLimit = error.message && error.message.toLowerCase().includes('rate');
+
+        if (isRateLimit && attempt < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s
+          const delayMs = Math.pow(2, attempt) * 1000;
+          console.log(`[getGroupMembersWithRetry] Rate limit for "${groupName}", retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})`);
+
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        } else if (!isRateLimit) {
+          // If it's not a rate limit error, don't retry
+          throw error;
+        }
+      }
+    }
+
+    // If all retries failed, throw the last error
+    console.error(`[getGroupMembersWithRetry] Failed to get members for "${groupName}" after ${maxRetries} attempts`);
+    throw lastError;
   }
 
   async getGroupMembers(groupId) {
@@ -978,7 +1553,7 @@ class WhatsAppClient {
         const numberPart = jidPart.split(':')[0];
         phone = numberPart.replace(/\D/g, '');
       }
-    } catch {}
+    } catch { }
 
     return {
       isReady: this.isReady,
@@ -991,10 +1566,10 @@ class WhatsAppClient {
   async destroy() {
     try {
       if (this.sock) {
-        try { this.sock.ws?.close?.(); } catch {}
-        try { this.sock.end?.(); } catch {}
+        try { this.sock.ws?.close?.(); } catch { }
+        try { this.sock.end?.(); } catch { }
       }
-    } catch {}
+    } catch { }
     this.client = null;
     this.sock = null;
     this.isReady = false;

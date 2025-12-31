@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, MessageSquare, Users, Settings, LogOut, Bot, Send, Clock, UserCog } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Users, Settings, LogOut, Bot, Send, Clock, UserCog, UserCircle, Menu } from 'lucide-react';
 import { Tab } from '../types';
 
 interface SidebarProps {
@@ -11,14 +11,16 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser }) => {
   const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
-  
+
   const navItems = [
     { id: Tab.DASHBOARD, label: 'Panel Principal', icon: LayoutDashboard },
     { id: Tab.SINGLE_SENDER, label: 'Envío Individual', icon: Send },
     { id: Tab.MASS_SENDER, label: 'Envíos Masivos', icon: MessageSquare },
+    { id: Tab.CONTACTS, label: 'Contactos', icon: UserCircle },
     { id: Tab.GROUPS, label: 'Gestor de Grupos', icon: Users },
     { id: Tab.SCHEDULED, label: 'Mensajes Programados', icon: Clock },
     { id: Tab.AUTO_REPLY, label: 'Bot Auto-Respuestas', icon: Bot },
+    { id: Tab.MENUS, label: 'Menús Interactivos', icon: Menu },
     ...(isAdmin ? [{ id: Tab.USERS, label: 'Gestión de Usuarios', icon: UserCog }] : []),
     { id: Tab.SETTINGS, label: 'Configuración', icon: Settings },
   ];
@@ -41,8 +43,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${isActive
-                  ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
             >
               <Icon size={20} />
@@ -53,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       </nav>
 
       <div className="p-4 border-t border-slate-800">
-        <button 
+        <button
           onClick={() => {
             if (onLogout) {
               onLogout();

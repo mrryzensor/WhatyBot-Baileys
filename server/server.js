@@ -14,6 +14,7 @@ import messagesRouter from './routes/messages.js';
 import groupsRouter from './routes/groups.js';
 import contactsRouter from './routes/contacts.js';
 import autoReplyRouter from './routes/autoReply.js';
+import menusRouter from './routes/menus.js';
 import configRouter from './routes/config.js';
 import usersRouter from './routes/users.js';
 import authRouter from './routes/auth.js';
@@ -41,7 +42,7 @@ const persistPortInfo = (info) => {
 (async () => {
   const app = express();
   const httpServer = createServer(app);
-  
+
   // Backend and frontend base ports (can be overridden by env vars)
   const envBackendPort = process.env.BACKEND_PORT ? parseInt(process.env.BACKEND_PORT, 10) : null;
   const envFrontendPort = process.env.FRONTEND_PORT ? parseInt(process.env.FRONTEND_PORT, 10) : null;
@@ -50,7 +51,7 @@ const persistPortInfo = (info) => {
 
   let backendPort = defaultBackendPort;
   let io;
-  
+
   try {
     // Resolve backend port: if explicitly provided, ensure availability, otherwise find one
     if (envBackendPort) {
@@ -69,14 +70,14 @@ const persistPortInfo = (info) => {
 
     // Resolve frontend port (if env provided, respect it)
     const frontendPort = envFrontendPort || defaultFrontendPort;
-    
+
     // Update CORS origins with dynamic ports
     const allowedOrigins = [
       `http://localhost:${frontendPort}`,
       `http://localhost:12345`,
       process.env.FRONTEND_URL
     ].filter(Boolean);
-    
+
     io = new Server(httpServer, {
       cors: {
         origin: allowedOrigins,
@@ -84,18 +85,18 @@ const persistPortInfo = (info) => {
         credentials: true
       }
     });
-    
+
     persistPortInfo({ backendPort, frontendPort });
 
     console.log(`🔌 Backend will run on port ${backendPort}`);
     console.log(`🌐 Frontend expected on port ${frontendPort}`);
-    
+
     // Setup middleware
     app.use(cors({
       origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-        
+
         if (allowedOrigins.indexOf(origin) !== -1) {
           callback(null, true);
         } else {
@@ -107,7 +108,7 @@ const persistPortInfo = (info) => {
     }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
-    
+
     // Middleware to extract user from request (must be after express.json())
     app.use((req, res, next) => {
       // Try to get user from Authorization header or body
@@ -117,18 +118,18 @@ const persistPortInfo = (info) => {
       }
       next();
     });
-    
+
     // Create uploads directory
     const uploadsDir = process.env.UPLOAD_DIR || './uploads';
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
     app.use('/uploads', express.static(uploadsDir));
-    
+
     // Initialize WhatsApp client
     const whatsappClient = new WhatsAppClient(io);
     const messageScheduler = new MessageScheduler(whatsappClient);
-    
+
     // Make services available to routes
     app.set('whatsappClient', whatsappClient);
     app.set('messageScheduler', messageScheduler);
@@ -139,41 +140,42 @@ const persistPortInfo = (info) => {
     app.set('subscriptionContactLinksService', subscriptionContactLinksService);
     app.set('groupSelectionService', groupSelectionService);
     app.set('io', io);
-    
+
     // Routes
     app.use('/api/messages', messagesRouter);
     app.use('/api/groups', groupsRouter);
     app.use('/api/contacts', contactsRouter);
     app.use('/api/auto-reply', autoReplyRouter);
+    app.use('/api/menus', menusRouter);
     app.use('/api/users', usersRouter);
     app.use('/api/auth', authRouter);
     app.use('/api', configRouter);
-    
+
     // Health check
     app.get('/api/health', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date() });
     });
-    
+
     // Status endpoint
     app.get('/api/status', (req, res) => {
       res.json({ status: 'ok', timestamp: new Date() });
     });
-    
+
     // Socket.io connection
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
-      
+
       // Send current status
       const status = whatsappClient.getStatus();
       socket.emit('status', status);
-      
+
       // Send QR if available
       const qrDataUrl = whatsappClient.getQrCode();
       if (qrDataUrl) {
         console.log('Sending cached QR code to new client');
         socket.emit('qr', { qr: qrDataUrl });
       }
-      
+
       // Listen for user login/logout events
       socket.on('user_logged_in', async (data) => {
         if (data && data.userId) {
@@ -181,17 +183,17 @@ const persistPortInfo = (info) => {
           console.log(`[Server] Active user set to: ${data.userId}`);
         }
       });
-      
+
       socket.on('user_logged_out', async () => {
         await whatsappClient.setActiveUserId(null);
         console.log('[Server] Active user cleared');
       });
-      
+
       socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
       });
     });
-    
+
     // Error handling middleware
     app.use((err, req, res, next) => {
       console.error('Error:', err);
@@ -200,7 +202,7 @@ const persistPortInfo = (info) => {
         message: err.message
       });
     });
-    
+
     // Start server
     httpServer.listen(backendPort, () => {
       console.log('=================================');
@@ -210,7 +212,7 @@ const persistPortInfo = (info) => {
       console.log('👉 Waiting for manual initialization via frontend button...');
       console.log('=================================');
     });
-    
+
     // Graceful shutdown handler
     const gracefulShutdown = async (signal) => {
       console.log(`\nReceived ${signal}, shutting down gracefully...`);
@@ -220,29 +222,29 @@ const persistPortInfo = (info) => {
       } catch (error) {
         console.error('Error disconnecting WhatsApp client:', error);
       }
-      
+
       httpServer.close(() => {
         console.log('Server closed');
         process.exit(0);
       });
-      
+
       // Force exit after 10 seconds if server doesn't close
       setTimeout(() => {
         console.error('Forced shutdown after timeout');
         process.exit(1);
       }, 10000);
     };
-    
+
     // Handle shutdown signals
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    
+
     // Store in global for export (temporary workaround for async init)
     if (typeof global !== 'undefined') {
       global.serverIo = io;
       global.serverWhatsappClient = whatsappClient;
     }
-    
+
   } catch (error) {
     console.error('Error initializing server:', error);
 
@@ -275,7 +277,7 @@ const persistPortInfo = (info) => {
       console.log(`🚀 Server running on port ${backendPort} (fallback)`);
       console.log('=================================');
     });
-    
+
     if (typeof global !== 'undefined') {
       global.serverIo = io;
       global.serverWhatsappClient = whatsappClient;

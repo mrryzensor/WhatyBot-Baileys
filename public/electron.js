@@ -91,6 +91,55 @@ ipcMain.handle('autoUpdater:check', async () => {
   }
 });
 
+// Emergency restart handler - kills all Node.js processes and restarts the app
+ipcMain.handle('emergency:restart', async () => {
+  try {
+    console.log('[Emergency] Initiating emergency restart...');
+
+    // Kill all Node.js processes (including backend server)
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    let killCommand;
+    if (process.platform === 'win32') {
+      // Windows: Kill all node.exe processes except the current Electron process
+      killCommand = 'taskkill /F /IM node.exe /T';
+    } else {
+      // Unix-like: Kill all node processes
+      killCommand = 'pkill -9 node';
+    }
+
+    console.log('[Emergency] Killing all Node.js processes...');
+    try {
+      await execAsync(killCommand);
+      console.log('[Emergency] Node.js processes killed');
+    } catch (error) {
+      // Ignore errors (process might not exist)
+      console.log('[Emergency] Kill command completed (some processes may not exist)');
+    }
+
+    // Stop our backend server if it's still running
+    stopBackendServer();
+
+    // Wait a moment for processes to die
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    console.log('[Emergency] Restarting application...');
+
+    // Relaunch the app
+    app.relaunch();
+
+    // Quit current instance
+    app.exit(0);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Emergency] Restart failed:', error);
+    throw error;
+  }
+});
+
 function getProfileArgument() {
   const cliArg = process.argv.find(arg => arg.startsWith('--profile='));
   if (cliArg) {
@@ -314,10 +363,10 @@ async function startBackendServer() {
   try {
     const instancePorts = getInstanceDefaultPorts();
     backendPort = instancePorts.backendPort;
-    
+
     // Set environment variable for the backend port
     process.env.PORT = backendPort.toString();
-    
+
     // Get the path to server.js
     // In production, paths are different - use app.getAppPath() for packaged apps
     let serverPath, serverDir;
@@ -326,10 +375,10 @@ async function startBackendServer() {
       // extraResources puts files in resources/ directory
       // process.resourcesPath points to the resources/ directory
       const resourcesPath = process.resourcesPath || path.dirname(app.getAppPath());
-      
+
       console.log(`[Instance ${instanceId}] Resources path: ${resourcesPath}`);
       console.log(`[Instance ${instanceId}] App path: ${app.getAppPath()}`);
-      
+
       // Try multiple possible locations (extraResources should be in resources/server/)
       const possiblePaths = [
         path.join(resourcesPath, 'server', 'server.js'), // resources/server (extraResources - preferred)
@@ -337,10 +386,10 @@ async function startBackendServer() {
         path.join(app.getAppPath(), 'server', 'server.js'), // resources/app.asar/server (inside asar - won't work, but check anyway)
         path.join(__dirname, '..', 'server', 'server.js') // Fallback
       ];
-      
+
       console.log(`[Instance ${instanceId}] Searching for server in:`);
       possiblePaths.forEach(p => console.log(`  - ${p}`));
-      
+
       // Find the first existing path
       for (const possiblePath of possiblePaths) {
         if (existsSync(possiblePath)) {
@@ -352,7 +401,7 @@ async function startBackendServer() {
           console.log(`[Instance ${instanceId}] ❌ Not found: ${possiblePath}`);
         }
       }
-      
+
       if (!serverPath) {
         throw new Error(`Server file not found. Tried: ${possiblePaths.join(', ')}\nResources path: ${resourcesPath}\nApp path: ${app.getAppPath()}`);
       }
@@ -361,20 +410,20 @@ async function startBackendServer() {
       serverPath = path.join(__dirname, '..', 'server', 'server.js');
       serverDir = path.join(__dirname, '..', 'server');
     }
-    
+
     console.log(`[Instance ${instanceId}] Starting backend server on port ${backendPort}...`);
     console.log(`[Instance ${instanceId}] Server path: ${serverPath}`);
     console.log(`[Instance ${instanceId}] Server dir: ${serverDir}`);
-    
+
     // Check if server file exists
     if (!existsSync(serverPath)) {
       throw new Error(`Server file not found at: ${serverPath}`);
     }
-    
+
     // Use Electron's embedded Node.js to run the server
     // Electron includes Node.js, and we can use it by setting ELECTRON_RUN_AS_NODE=1
     // This tells Electron to run as a Node.js process instead of Electron
-    
+
     let nodeExecutable;
 
     // Configurar entorno para que el backend pueda resolver sus dependencias
@@ -411,30 +460,30 @@ async function startBackendServer() {
     } catch (e) {
       console.warn(`[Instance ${instanceId}] Could not prepare SESSION_DIR/UPLOAD_DIR:`, e?.message || e);
     }
-    
+
     if (app.isPackaged) {
       // In packaged app, we need to use Electron's embedded Node.js
       // The issue is that process.execPath points to whatybot.exe which may have issues
       // We'll use a different approach: find the actual Electron executable or use fork
-      
+
       // Try to use fork() which works better with Electron's Node.js
       // But fork requires CommonJS, so we'll use spawn with proper path handling
-      
+
       // Use process.execPath but ensure the path is properly quoted for Windows
       nodeExecutable = process.execPath;
       envVars.ELECTRON_RUN_AS_NODE = '1';
-      
+
       // En la app empaquetada, usamos spawn directo sin shell. process.execPath
       // puede contener espacios (por ejemplo C:\Users\Ing. David\...), pero
       // spawn los maneja correctamente cuando shell:false.
       const useShell = false;
-      
+
       console.log(`[Instance ${instanceId}] Using Electron's embedded Node.js`);
       console.log(`[Instance ${instanceId}] Executable: ${nodeExecutable}`);
       console.log(`[Instance ${instanceId}] Server path: ${serverPath}`);
       console.log(`[Instance ${instanceId}] NODE_PATH: ${envVars.NODE_PATH}`);
       console.log(`[Instance ${instanceId}] Using shell: ${useShell}`);
-      
+
       // Start the server as a child process
       // On Windows, we need to handle paths with spaces properly
       console.log(`[Instance ${instanceId}] Spawning server process...`);
@@ -442,17 +491,17 @@ async function startBackendServer() {
       console.log(`[Instance ${instanceId}] Server path: ${serverPath}`);
       console.log(`[Instance ${instanceId}] Server dir: ${serverDir}`);
       console.log(`[Instance ${instanceId}] Using shell: ${useShell}`);
-      
+
       // Verify executable exists
       if (!existsSync(nodeExecutable)) {
         throw new Error(`Electron executable not found at: ${nodeExecutable}`);
       }
-      
+
       // Verify server file exists
       if (!existsSync(serverPath)) {
         throw new Error(`Server file not found at: ${serverPath}`);
       }
-      
+
       // On Windows with shell, we can pass paths directly
       // On Windows without shell, we need to handle paths carefully
       serverProcess = spawn(nodeExecutable, [serverPath], {
@@ -465,7 +514,7 @@ async function startBackendServer() {
       // In development, use system Node.js
       nodeExecutable = process.platform === 'win32' ? 'node.exe' : 'node';
       console.log(`[Instance ${instanceId}] Using system Node.js`);
-      
+
       serverProcess = spawn(nodeExecutable, [serverPath], {
         cwd: serverDir,
         env: envVars,
@@ -473,25 +522,25 @@ async function startBackendServer() {
         shell: process.platform === 'win32'
       });
     }
-    
+
     // Log server output
     serverProcess.stdout.on('data', (data) => {
       console.log(`[Backend ${instanceId}] ${data.toString().trim()}`);
     });
-    
+
     serverProcess.stderr.on('data', (data) => {
       console.error(`[Backend ${instanceId}] ${data.toString().trim()}`);
     });
-    
+
     serverProcess.on('error', (error) => {
       console.error(`[Instance ${instanceId}] Failed to start backend server:`, error);
     });
-    
+
     serverProcess.on('exit', (code, signal) => {
       console.log(`[Instance ${instanceId}] Backend server exited with code ${code}, signal ${signal}`);
       serverProcess = null;
     });
-    
+
     // Wait for server to be ready (check health endpoint)
     // Use a shorter timeout and don't throw if it fails
     try {
@@ -501,14 +550,14 @@ async function startBackendServer() {
       console.warn(`[Instance ${instanceId}] Backend server not ready yet, continuing anyway:`, error.message);
       // Continue anyway - server might start later
     }
-    
+
     // Save port info for this instance
     const portInfoPath = getPortInfoPath();
     writeFileSync(portInfoPath, JSON.stringify({
       frontendPort: frontendPort || instancePorts.frontendPort,
       backendPort: backendPort
     }, null, 2), 'utf8');
-    
+
   } catch (error) {
     console.error(`[Instance ${instanceId}] Error starting backend server:`, error);
     throw error;
@@ -529,15 +578,15 @@ function waitForServerReady(port, timeout = 30000) {
       } catch (error) {
         // Server not ready yet
       }
-      
+
       if (Date.now() - startTime > timeout) {
         reject(new Error(`Server did not become ready within ${timeout}ms`));
         return;
       }
-      
+
       setTimeout(checkServer, 500);
     };
-    
+
     checkServer();
   });
 }
@@ -547,7 +596,7 @@ function stopBackendServer() {
   if (serverProcess) {
     console.log(`[Instance ${instanceId}] Stopping backend server...`);
     serverProcess.kill('SIGTERM');
-    
+
     // Force kill after 5 seconds if it doesn't exit gracefully
     setTimeout(() => {
       if (serverProcess) {
@@ -624,7 +673,7 @@ function createWindow() {
         path.join(appPath, 'dist', 'index.html'), // resources/app/dist/index.html (if dist folder is preserved)
         path.join(__dirname, '../index.html') // Fallback
       ];
-      
+
       // Find the first existing path
       for (const possiblePath of possibleHtmlPaths) {
         if (existsSync(possiblePath)) {
@@ -637,10 +686,10 @@ function createWindow() {
       // In development, electron.js is in public/, index.html is in root
       htmlPath = path.join(__dirname, '../index.html');
     }
-    
+
     console.log(`[Instance ${instanceId}] Loading from file: ${htmlPath || 'not found'}`);
     console.log(`[Instance ${instanceId}] Backend will be on port: ${backendPort || 'not set yet'}`);
-    
+
     // Check if file exists
     if (!htmlPath || !existsSync(htmlPath)) {
       console.error(`[Instance ${instanceId}] HTML file not found. Tried multiple locations.`);
@@ -664,7 +713,7 @@ function createWindow() {
           }
         }, 1000);
       });
-      
+
       mainWindow.loadFile(htmlPath).catch(err => {
         console.error('Failed to load file:', err);
         // Show error page
@@ -676,12 +725,12 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    
+
     if (isDev) {
       mainWindow.webContents.openDevTools();
     }
   });
-  
+
   // Also show window after a timeout to ensure it appears even if ready-to-show doesn't fire
   setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
@@ -694,7 +743,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  
+
   // Handle window close attempt (before it actually closes)
   mainWindow.on('close', async (event) => {
     // Only disconnect if this is the last window
@@ -780,11 +829,11 @@ console.log(`[Instance ${instanceId}] process.execPath: ${process.execPath}`);
 app.whenReady().then(async () => {
   try {
     console.log(`[Instance ${instanceId}] App is ready, starting initialization...`);
-    
+
     // Create window first so user sees something
     console.log(`[Instance ${instanceId}] Creating window...`);
     createWindow();
-    
+
     // In production, start the backend server (but don't block window creation)
     if (!isDev) {
       console.log(`[Instance ${instanceId}] Starting backend server in production mode...`);
@@ -796,7 +845,7 @@ app.whenReady().then(async () => {
           mainWindow.webContents.executeJavaScript(`
             console.error('Backend server failed to start:', ${JSON.stringify(error.message)});
             alert('Warning: Backend server failed to start. Some features may not work.\\n\\nError: ' + ${JSON.stringify(error.message)});
-          `).catch(() => {});
+          `).catch(() => { });
         }
       });
     } else {
@@ -809,7 +858,7 @@ app.whenReady().then(async () => {
         createWindow();
       }
     });
-    
+
     console.log(`[Instance ${instanceId}] Application initialized successfully`);
 
     // Start auto-updater once app is initialized
@@ -817,7 +866,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error(`[Instance ${instanceId}] Failed to start application:`, error);
     console.error(`[Instance ${instanceId}] Error stack:`, error.stack);
-    
+
     // Try to show error dialog
     try {
       const electron = await import('electron');
@@ -828,7 +877,7 @@ app.whenReady().then(async () => {
     } catch (dialogError) {
       console.error('Failed to show error dialog:', dialogError);
     }
-    
+
     // Still try to show window with error message
     if (!mainWindow) {
       try {
@@ -844,7 +893,7 @@ app.whenReady().then(async () => {
         console.error('Failed to create error window:', windowError);
       }
     }
-    
+
     // Don't quit immediately, let user see the error
     // app.quit();
   }

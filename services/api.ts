@@ -103,36 +103,36 @@ const getApiBaseUrl = (): string => {
 let socket: Socket | null = null;
 
 export const initializeSocket = () => {
-    if (!socket) {
-        console.log('Connecting to Socket.io server at:', API_BASE_URL);
-        socket = io(API_BASE_URL, {
-            transports: ['polling', 'websocket'], // Try polling first
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionAttempts: 10,
-            withCredentials: true
-        });
+  if (!socket) {
+    console.log('Connecting to Socket.io server at:', API_BASE_URL);
+    socket = io(API_BASE_URL, {
+      transports: ['polling', 'websocket'], // Try polling first
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      withCredentials: true
+    });
 
-        socket.on('connect', () => {
-            console.log('Socket.io connected successfully!');
-        });
+    socket.on('connect', () => {
+      console.log('Socket.io connected successfully!');
+    });
 
-        socket.on('connect_error', (error) => {
-            console.error('Socket.io connection error:', error);
-            // En producción no intentamos descubrir otros puertos; el backend es fijo
-            if (!IS_PRODUCTION) {
-              discoverBackendPort({ force: true }).catch(() => {});
-            }
-        });
+    socket.on('connect_error', (error) => {
+      console.error('Socket.io connection error:', error);
+      // En producción no intentamos descubrir otros puertos; el backend es fijo
+      if (!IS_PRODUCTION) {
+        discoverBackendPort({ force: true }).catch(() => { });
+      }
+    });
 
-        socket.on('disconnect', (reason) => {
-            console.log('Socket.io disconnected:', reason);
-            if (!IS_PRODUCTION && (reason === 'transport close' || reason === 'ping timeout')) {
-                discoverBackendPort({ force: true }).catch(() => {});
-            }
-        });
-    }
-    return socket;
+    socket.on('disconnect', (reason) => {
+      console.log('Socket.io disconnected:', reason);
+      if (!IS_PRODUCTION && (reason === 'transport close' || reason === 'ping timeout')) {
+        discoverBackendPort({ force: true }).catch(() => { });
+      }
+    });
+  }
+  return socket;
 };
 
 export const getSocket = () => socket;
@@ -142,10 +142,10 @@ let API_BASE_URL = getApiBaseUrl();
 
 // Create axios instance (must be defined before updateApiBaseUrl uses it)
 const api = axios.create({
-    baseURL: `${API_BASE_URL}/api`,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  baseURL: `${API_BASE_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 // Function to update API base URL when port info is available
@@ -248,7 +248,7 @@ if (typeof window !== 'undefined') {
   // In production (Electron), the port is set in localStorage by Electron
   // In development, try to fetch from .port-info.json
   const isProduction = !import.meta.env.DEV;
-  
+
   if (isProduction) {
     const initializePortFromLocalStorage = async () => {
       const maxAttempts = 20; // up to ~10s if delayMs=500
@@ -304,19 +304,19 @@ if (typeof window === 'undefined' || import.meta.env.VITE_API_URL) {
 
 // Add interceptor to include userId in headers
 api.interceptors.request.use((config) => {
-    // Get current user from localStorage (stored as 'user')
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-        try {
-            const user = JSON.parse(userStr);
-            if (user && user.id) {
-                config.headers['x-user-id'] = user.id.toString();
-            }
-        } catch (e) {
-            console.warn('Error parsing user from localStorage:', e);
-        }
+  // Get current user from localStorage (stored as 'user')
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user && user.id) {
+        config.headers['x-user-id'] = user.id.toString();
+      }
+    } catch (e) {
+      console.warn('Error parsing user from localStorage:', e);
     }
-    return config;
+  }
+  return config;
 });
 
 api.interceptors.response.use(
@@ -348,372 +348,485 @@ export const resetWhatsAppSession = async () => {
 
 // Status
 export const getStatus = async () => {
-    const response = await api.get('/status');
-    return response.data;
+  const response = await api.get('/status');
+  return response.data;
 };
 
 // Configuration
 export const getConfig = async () => {
-    const response = await api.get('/config');
-    return response.data;
+  const response = await api.get('/config');
+  return response.data;
 };
 
 export const updateConfig = async (config: any) => {
-    const response = await api.post('/config', config);
-    return response.data;
+  const response = await api.post('/config', config);
+  return response.data;
 };
 
 export const logout = async () => {
-    const response = await api.post('/logout');
-    return response.data;
+  const response = await api.post('/logout');
+  return response.data;
 };
 
 export const initialize = async () => {
-    const response = await api.post('/initialize');
-    return response.data;
+  const response = await api.post('/initialize');
+  return response.data;
 };
 
 // Get current QR code (DataURL)
 export const getQr = async () => {
-    const response = await api.get('/qr');
-    return response.data;
+  const response = await api.get('/qr');
+  return response.data;
 };
 
 // Get message logs
 export const getMessageLogs = async (limit: number = 100) => {
-    const response = await api.get(`/messages/logs?limit=${limit}`);
-    return response.data;
+  const response = await api.get(`/messages/logs?limit=${limit}`);
+  return response.data;
 };
 
 // Messages
 export const sendMessage = async (to: string, message: string, scheduledAt?: Date) => {
-    const response = await api.post('/messages/send', { to, message, scheduledAt });
-    return response.data;
+  const response = await api.post('/messages/send', { to, message, scheduledAt });
+  return response.data;
 };
 
 export const sendMediaMessage = async (
-    to: string,
-    message: string,
-    files: File[],
-    captions?: string[],
-    scheduledAt?: Date
+  to: string,
+  message: string,
+  files: File[],
+  captions?: string[],
+  scheduledAt?: Date
 ) => {
-    const formData = new FormData();
-    formData.append('to', to);
-    formData.append('message', message); // Text message sent separately
+  const formData = new FormData();
+  formData.append('to', to);
+  formData.append('message', message); // Text message sent separately
 
-    // Enviar todos los archivos
-    files.forEach((file) => {
-        formData.append('media', file);
-    });
+  // Enviar todos los archivos
+  files.forEach((file) => {
+    formData.append('media', file);
+  });
 
-    // Enviar captions como array JSON (opcional)
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions));
-    }
+  // Enviar captions como array JSON (opcional)
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
 
-    if (scheduledAt) {
-        formData.append('scheduledAt', scheduledAt.toISOString());
-    }
+  if (scheduledAt) {
+    formData.append('scheduledAt', scheduledAt.toISOString());
+  }
 
-    const response = await api.post('/messages/send-media', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
-    });
-    return response.data;
+  const response = await api.post('/messages/send-media', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 export const sendBulkMessages = async (
-    contacts: any[],
-    message: string,
-    files?: File[],
-    captions?: string[],
-    scheduledAt?: Date
+  contacts: any[],
+  message: string,
+  files?: File[],
+  captions?: string[],
+  scheduledAt?: Date
 ) => {
-    const formData = new FormData();
-    formData.append('contacts', JSON.stringify(contacts));
-    formData.append('message', message); // Text message sent separately
-    // Delay is now handled by server configuration (in seconds, random between 1 and configured value)
+  const formData = new FormData();
+  formData.append('contacts', JSON.stringify(contacts));
+  formData.append('message', message); // Text message sent separately
+  // Delay is now handled by server configuration (in seconds, random between 1 and configured value)
 
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions));
-    }
-    if (scheduledAt) {
-        formData.append('scheduledAt', scheduledAt.toISOString());
-    }
-
-    const response = await api.post('/messages/send-bulk', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
+  if (scheduledAt) {
+    formData.append('scheduledAt', scheduledAt.toISOString());
+  }
+
+  const response = await api.post('/messages/send-bulk', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 // Bulk control (pause/resume/cancel)
 export const pauseBulk = async () => {
-    const response = await api.post('/messages/bulk/pause');
-    return response.data;
+  const response = await api.post('/messages/bulk/pause');
+  return response.data;
 };
 
 export const resumeBulk = async () => {
-    const response = await api.post('/messages/bulk/resume');
-    return response.data;
+  const response = await api.post('/messages/bulk/resume');
+  return response.data;
 };
 
 export const cancelBulk = async () => {
-    const response = await api.post('/messages/bulk/cancel');
-    return response.data;
+  const response = await api.post('/messages/bulk/cancel');
+  return response.data;
 };
 
 // Scheduled jobs (single/bulk/groups)
 export const getScheduledJobs = async () => {
-    const response = await api.get('/messages/scheduled');
-    return response.data;
+  const response = await api.get('/messages/scheduled');
+  return response.data;
 };
 
 export const cancelScheduledJob = async (jobId: string) => {
-    const response = await api.delete(`/messages/scheduled/${jobId}`);
-    return response.data;
+  const response = await api.delete(`/messages/scheduled/${jobId}`);
+  return response.data;
 };
 
 export const updateScheduledJob = async (jobId: string, scheduledAt: Date) => {
-    const response = await api.put(`/messages/scheduled/${jobId}`, {
-        scheduledAt: scheduledAt.toISOString(),
-    });
-    return response.data;
+  const response = await api.put(`/messages/scheduled/${jobId}`, {
+    scheduledAt: scheduledAt.toISOString(),
+  });
+  return response.data;
 };
 
 // Groups
 export const getGroups = async () => {
-    const response = await api.get('/groups');
-    return response.data;
+  const response = await api.get('/groups');
+  return response.data;
 };
 
 export const getGroupMembers = async (groupId: string) => {
-    const response = await api.get(`/groups/${groupId}/members`);
-    return response.data;
+  const response = await api.get(`/groups/${groupId}/members`);
+  return response.data;
 };
 
 export const sendGroupMessages = async (
-    groupIds: string[], 
-    message: string, 
-    files?: File[],
-    captions?: string[]
+  groupIds: string[],
+  message: string,
+  files?: File[],
+  captions?: string[]
 ) => {
-    const formData = new FormData();
-    formData.append('groupIds', JSON.stringify(groupIds));
-    formData.append('message', message);
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions));
-    }
-
-    const response = await api.post('/groups/send', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  const formData = new FormData();
+  formData.append('groupIds', JSON.stringify(groupIds));
+  formData.append('message', message);
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
+
+  const response = await api.post('/groups/send', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 export const scheduleGroupMessages = async (
-    groupIds: string[],
-    message: string,
-    scheduleType: ScheduleType,
-    delayMinutes?: number,
-    scheduledAt?: Date,
-    files?: File[],
-    captions?: string[]
+  groupIds: string[],
+  message: string,
+  scheduleType: ScheduleType,
+  delayMinutes?: number,
+  scheduledAt?: Date,
+  files?: File[],
+  captions?: string[]
 ) => {
-    const formData = new FormData();
-    formData.append('groupIds', JSON.stringify(groupIds));
-    formData.append('message', message);
-    formData.append('scheduleType', scheduleType);
-    if (delayMinutes !== undefined) {
-        formData.append('delayMinutes', delayMinutes.toString());
-    }
-    if (scheduledAt) {
-        formData.append('scheduledAt', scheduledAt.toISOString());
-    }
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions));
-    }
-
-    const response = await api.post('/groups/schedule', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  const formData = new FormData();
+  formData.append('groupIds', JSON.stringify(groupIds));
+  formData.append('message', message);
+  formData.append('scheduleType', scheduleType);
+  if (delayMinutes !== undefined) {
+    formData.append('delayMinutes', delayMinutes.toString());
+  }
+  if (scheduledAt) {
+    formData.append('scheduledAt', scheduledAt.toISOString());
+  }
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
+
+  const response = await api.post('/groups/schedule', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 export const scheduleBulkMessages = async (
-    contacts: any[],
-    message: string,
-    scheduleType: ScheduleType,
-    delayMinutes?: number,
-    scheduledAt?: Date,
-    files?: File[],
-    captions?: string[]
+  contacts: any[],
+  message: string,
+  scheduleType: ScheduleType,
+  delayMinutes?: number,
+  scheduledAt?: Date,
+  files?: File[],
+  captions?: string[]
 ) => {
-    const formData = new FormData();
-    formData.append('contacts', JSON.stringify(contacts));
-    formData.append('message', message); // Text message sent separately
-    
-    // Delay is now handled by server configuration (in seconds, random between 1 and configured value)
-    // No need to send delay parameter, server will use its configured value
-    
-    // Calculate scheduledAt based on scheduleType
-    let finalScheduledAt: Date | undefined;
-    if (scheduleType === 'datetime' && scheduledAt) {
-        // For datetime type, use the provided scheduledAt
-        finalScheduledAt = scheduledAt;
-    } else if (scheduleType === 'delay' && delayMinutes) {
-        // For delay type, schedule to start after delayMinutes from now
-        finalScheduledAt = new Date(Date.now() + (delayMinutes * 60 * 1000));
-    }
-    // For 'now' type, don't set scheduledAt (will send immediately)
-    
-    if (finalScheduledAt) {
-        formData.append('scheduledAt', finalScheduledAt.toISOString());
-    }
-    
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-    
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions)); // Captions for media
-    }
+  const formData = new FormData();
+  formData.append('contacts', JSON.stringify(contacts));
+  formData.append('message', message); // Text message sent separately
 
-    // Use /send-bulk endpoint which handles both immediate and scheduled messages
-    const response = await api.post('/messages/send-bulk', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  // Delay is now handled by server configuration (in seconds, random between 1 and configured value)
+  // No need to send delay parameter, server will use its configured value
+
+  // Calculate scheduledAt based on scheduleType
+  let finalScheduledAt: Date | undefined;
+  if (scheduleType === 'datetime' && scheduledAt) {
+    // For datetime type, use the provided scheduledAt
+    finalScheduledAt = scheduledAt;
+  } else if (scheduleType === 'delay' && delayMinutes) {
+    // For delay type, schedule to start after delayMinutes from now
+    finalScheduledAt = new Date(Date.now() + (delayMinutes * 60 * 1000));
+  }
+  // For 'now' type, don't set scheduledAt (will send immediately)
+
+  if (finalScheduledAt) {
+    formData.append('scheduledAt', finalScheduledAt.toISOString());
+  }
+
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions)); // Captions for media
+  }
+
+  // Use /send-bulk endpoint which handles both immediate and scheduled messages
+  const response = await api.post('/messages/send-bulk', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 // Contacts
-export const getContacts = async () => {
-    const response = await api.get('/contacts');
-    return response.data;
+export const getContacts = async (groupIds?: string[]) => {
+  const params = groupIds && groupIds.length > 0
+    ? `?groupIds=${groupIds.join(',')}`
+    : '';
+  const response = await api.get(`/contacts${params}`);
+  return response.data;
 };
 
 // Auto-reply rules
 export const getAutoReplyRules = async () => {
-    const response = await api.get('/auto-reply/rules');
-    return response.data;
+  const response = await api.get('/auto-reply/rules');
+  return response.data;
 };
 
 export const createAutoReplyRule = async (rule: any, files?: File[], captions?: string[]) => {
-    const formData = new FormData();
-    formData.append('name', rule.name);
-    formData.append('keywords', JSON.stringify(rule.keywords));
-    formData.append('response', rule.response || '');
-    formData.append('matchType', rule.matchType);
-    formData.append('delay', rule.delay?.toString() || '0');
-    formData.append('isActive', rule.isActive?.toString() || 'true');
-    if (captions && captions.length > 0) {
-        formData.append('captions', JSON.stringify(captions));
-    }
-    if (rule.caption) {
-        formData.append('caption', rule.caption);
-    }
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-
-    const response = await api.post('/auto-reply/rules', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  const formData = new FormData();
+  formData.append('name', rule.name);
+  formData.append('keywords', JSON.stringify(rule.keywords));
+  formData.append('response', rule.response || '');
+  formData.append('matchType', rule.matchType);
+  formData.append('delay', rule.delay?.toString() || '0');
+  formData.append('isActive', rule.isActive?.toString() || 'true');
+  formData.append('type', rule.type || 'simple');
+  if (rule.menuId) {
+    formData.append('menuId', rule.menuId);
+  }
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
+  if (rule.caption) {
+    formData.append('caption', rule.caption);
+  }
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+
+  const response = await api.post('/auto-reply/rules', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 export const updateAutoReplyRule = async (id: string, rule: any, files?: File[], existingMediaPaths?: string[]) => {
-    const formData = new FormData();
-    formData.append('name', rule.name);
-    formData.append('keywords', JSON.stringify(rule.keywords));
-    formData.append('response', rule.response || '');
-    formData.append('matchType', rule.matchType);
-    formData.append('delay', rule.delay?.toString() || '0');
-    formData.append('isActive', rule.isActive?.toString() || 'true');
-    if (rule.caption) {
-        formData.append('caption', rule.caption);
-    }
-    if (files && files.length > 0) {
-        files.forEach((file) => {
-            formData.append('media', file);
-        });
-    }
-    if (rule.captions && Array.isArray(rule.captions) && rule.captions.length > 0) {
-        formData.append('captions', JSON.stringify(rule.captions));
-    }
-    // If no new files but we have existing mediaPaths, preserve them (como JSON)
-    if ((!files || files.length === 0) && existingMediaPaths && existingMediaPaths.length > 0) {
-        formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
-    }
-
-    const response = await api.put(`/auto-reply/rules/${id}`, formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
+  const formData = new FormData();
+  formData.append('name', rule.name);
+  formData.append('keywords', JSON.stringify(rule.keywords));
+  formData.append('response', rule.response || '');
+  formData.append('matchType', rule.matchType);
+  formData.append('delay', rule.delay?.toString() || '0');
+  formData.append('isActive', rule.isActive?.toString() || 'true');
+  formData.append('type', rule.type || 'simple');
+  if (rule.menuId) {
+    formData.append('menuId', rule.menuId);
+  }
+  if (rule.caption) {
+    formData.append('caption', rule.caption);
+  }
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
     });
-    return response.data;
+  }
+  if (rule.captions && Array.isArray(rule.captions) && rule.captions.length > 0) {
+    formData.append('captions', JSON.stringify(rule.captions));
+  }
+  // If no new files but we have existing mediaPaths, preserve them (como JSON)
+  if ((!files || files.length === 0) && existingMediaPaths && existingMediaPaths.length > 0) {
+    formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
+  }
+
+  const response = await api.put(`/auto-reply/rules/${id}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
 };
 
 export const deleteAutoReplyRule = async (id: string) => {
-    const response = await api.delete(`/auto-reply/rules/${id}`);
-    return response.data;
+  const response = await api.delete(`/auto-reply/rules/${id}`);
+  return response.data;
 };
 
 export const importAutoReplyRules = async (rules: any[]) => {
-    const response = await api.post('/auto-reply/rules/import', { rules });
-    return response.data;
+  const response = await api.post('/auto-reply/rules/import', { rules });
+  return response.data;
 };
 
 // Group Selections
 export const getGroupSelections = async () => {
-    const response = await api.get('/groups/selections');
-    return response.data;
+  const response = await api.get('/groups/selections');
+  return response.data;
 };
 
 export const createGroupSelection = async (name: string, description: string, groupIds: string[]) => {
-    const response = await api.post('/groups/selections', { name, description, groupIds });
-    return response.data;
+  const response = await api.post('/groups/selections', { name, description, groupIds });
+  return response.data;
 };
 
 export const updateGroupSelection = async (id: string, name: string, description: string, groupIds: string[]) => {
-    const response = await api.put(`/groups/selections/${id}`, { name, description, groupIds });
-    return response.data;
+  const response = await api.put(`/groups/selections/${id}`, { name, description, groupIds });
+  return response.data;
 };
 
 export const deleteGroupSelection = async (id: string) => {
-    const response = await api.delete(`/groups/selections/${id}`);
-    return response.data;
+  const response = await api.delete(`/groups/selections/${id}`);
+  return response.data;
+};
+
+// Interactive Menus
+export const getInteractiveMenus = async () => {
+  const response = await api.get('/menus');
+  return response.data;
+};
+
+export const createInteractiveMenu = async (menu: any, files?: File[]) => {
+  const formData = new FormData();
+  formData.append('name', menu.name);
+  formData.append('message', menu.message);
+  formData.append('isActive', menu.isActive?.toString() || 'true');
+  formData.append('options', JSON.stringify(menu.options || []));
+
+  if (menu.mediaPaths && menu.mediaPaths.length > 0) {
+    formData.append('menuMediaPaths', JSON.stringify(menu.mediaPaths));
+  }
+  if (menu.captions && menu.captions.length > 0) {
+    formData.append('menuCaptions', JSON.stringify(menu.captions));
+  }
+
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
+    });
+  }
+
+  const response = await api.post('/menus', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const updateInteractiveMenu = async (id: string, menu: any, files?: File[]) => {
+  const formData = new FormData();
+  formData.append('name', menu.name);
+  formData.append('message', menu.message);
+  formData.append('isActive', menu.isActive?.toString() || 'true');
+  formData.append('options', JSON.stringify(menu.options || []));
+
+  if (menu.mediaPaths && menu.mediaPaths.length > 0) {
+    formData.append('menuMediaPaths', JSON.stringify(menu.mediaPaths));
+  }
+  if (menu.captions && menu.captions.length > 0) {
+    formData.append('menuCaptions', JSON.stringify(menu.captions));
+  }
+
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
+    });
+  }
+
+  const response = await api.put(`/menus/${id}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const uploadOptionMedia = async (files: File[]) => {
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('media', file);
+  });
+
+  const response = await api.post('/menus/upload-option-media', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const deleteInteractiveMenu = async (id: string) => {
+  const response = await api.delete(`/menus/${id}`);
+  return response.data;
+};
+
+// User Sessions
+export const getUserSessions = async () => {
+  const response = await api.get('/menus/sessions');
+  return response.data;
+};
+
+export const clearUserSession = async (userId: string) => {
+  const response = await api.delete(`/menus/sessions/${userId}`);
+  return response.data;
+};
+
+export const exportMenus = async () => {
+  const response = await api.get('/menus/export');
+  return response.data;
+};
+
+export const importMenus = async (menus: any[]) => {
+  const response = await api.post('/menus/import', { menus });
+  return response.data;
 };
 
 export default api;

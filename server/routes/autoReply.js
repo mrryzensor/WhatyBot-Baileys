@@ -90,8 +90,15 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
         console.log('[autoReply] PUT /rules/:id - files:', files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, path: f.path })));
         console.log('[autoReply] POST /rules - files:', files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, path: f.path })));
 
-        if (!rule.response && (!files || files.length === 0)) {
-            return res.status(400).json({ error: 'Missing required field: response or media' });
+        // Validation: menu-type rules need menuId, simple-type rules need response or media
+        if (rule.type === 'menu') {
+            if (!rule.menuId) {
+                return res.status(400).json({ error: 'Menu-type rules require menuId' });
+            }
+        } else {
+            if (!rule.response && (!files || files.length === 0)) {
+                return res.status(400).json({ error: 'Missing required field: response or media' });
+            }
         }
 
         // Normalize keywords to array
@@ -137,7 +144,7 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
         // Compatibilidad con campos antiguos de un solo archivo
         rule.mediaPath = mediaPaths.length > 0 ? mediaPaths[0] : null;
         rule.caption = mediaCaptions.length > 0 ? mediaCaptions[0] : (rule.caption || '');
-        
+
         // Normalize isActive to boolean
         if (rule.isActive !== undefined) {
             if (typeof rule.isActive === 'string') {
@@ -147,6 +154,12 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
             }
         } else {
             rule.isActive = true; // Default to true if not set
+        }
+
+        // Handle type and menuId for menu-type rules
+        rule.type = rule.type || 'simple';
+        if (rule.type === 'menu' && rule.menuId) {
+            rule.menuId = rule.menuId;
         }
 
         whatsappClient.autoReplyRules.push(rule);
@@ -212,11 +225,11 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             if (Array.isArray(oldRule.mediaPaths) && oldRule.mediaPaths.length > 0) {
                 for (const p of oldRule.mediaPaths) {
                     if (p && fs.existsSync(p)) {
-                        try { fs.unlinkSync(p); } catch {}
+                        try { fs.unlinkSync(p); } catch { }
                     }
                 }
             } else if (oldRule.mediaPath && fs.existsSync(oldRule.mediaPath)) {
-                try { fs.unlinkSync(oldRule.mediaPath); } catch {}
+                try { fs.unlinkSync(oldRule.mediaPath); } catch { }
             }
 
             const mediaPaths = files.map(f => f.path);
@@ -257,9 +270,37 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
                     updatedRule.mediaPaths = parsed;
                     // Compatibilidad: mediaPath simple = primer elemento
                     updatedRule.mediaPath = parsed.length > 0 ? parsed[0] : null;
+
+                    // Parse and update captions array
+                    let mediaCaptions = [];
+                    if (updatedRule.captions) {
+                        try {
+                            const parsedCaptions = typeof updatedRule.captions === 'string'
+                                ? JSON.parse(updatedRule.captions)
+                                : updatedRule.captions;
+                            if (Array.isArray(parsedCaptions)) {
+                                mediaCaptions = parsedCaptions.map(c => (typeof c === 'string' ? c : ''));
+                            }
+                        } catch (e) {
+                            console.warn('[autoReply] Error parsing captions:', e);
+                        }
+                    }
+
+                    // Ensure captions array matches mediaPaths length
+                    while (mediaCaptions.length < parsed.length) {
+                        mediaCaptions.push('');
+                    }
+
+                    updatedRule.captions = mediaCaptions;
+                    updatedRule.caption = mediaCaptions.length > 0 ? mediaCaptions[0] : '';
+
+                    console.log('[autoReply] PUT /rules/:id - preserving existing media with updated captions:', {
+                        mediaPaths: updatedRule.mediaPaths,
+                        captions: updatedRule.captions
+                    });
                 }
             } catch (e) {
-                // si falla, simplemente no tocamos mediaPaths
+                console.warn('[autoReply] Error parsing existingMediaPaths:', e);
             }
             delete updatedRule.existingMediaPaths;
         } else if (updatedRule.existingMediaPath) {
@@ -284,9 +325,11 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             id: existingRule.id, // Preserve ID
             mediaPath: updatedRule.mediaPath !== undefined ? updatedRule.mediaPath : existingRule.mediaPath,
             mediaPaths: updatedRule.mediaPaths !== undefined ? updatedRule.mediaPaths : existingRule.mediaPaths,
-            captions: updatedRule.captions !== undefined ? updatedRule.captions : existingRule.captions
+            captions: updatedRule.captions !== undefined ? updatedRule.captions : existingRule.captions,
+            type: updatedRule.type !== undefined ? updatedRule.type : (existingRule.type || 'simple'),
+            menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId
         };
-        
+
         whatsappClient.autoReplyRules[index] = mergedRule;
         whatsappClient.saveAutoReplyRules();
 
@@ -395,7 +438,7 @@ router.post('/rules/import', express.json(), (req, res) => {
                 if (rule.mediaPath) {
                     const originalPath = rule.mediaPath;
                     let sourcePath = null;
-                    
+
                     // Try multiple path resolutions
                     // 1. Try absolute path as-is
                     if (fs.existsSync(originalPath)) {
@@ -413,7 +456,7 @@ router.post('/rules/import', express.json(), (req, res) => {
                             sourcePath = relativePath;
                         }
                     }
-                    
+
                     // If we found the source file, copy it
                     if (sourcePath) {
                         try {
@@ -421,7 +464,7 @@ router.post('/rules/import', express.json(), (req, res) => {
                             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
                             const newFileName = uniqueSuffix + ext;
                             const newPath = path.join(uploadDir, newFileName);
-                            
+
                             // Copy file to uploads directory
                             fs.copyFileSync(sourcePath, newPath);
                             mediaPath = newPath;

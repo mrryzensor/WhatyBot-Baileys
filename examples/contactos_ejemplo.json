@@ -1,0 +1,32 @@
+[
+    {
+        "phone": "+5491123456789",
+        "name": "Juan Pérez",
+        "empresa": "Tech Solutions",
+        "producto": "Software CRM"
+    },
+    {
+        "phone": "+5491134567890",
+        "name": "María García",
+        "empresa": "Marketing Pro",
+        "producto": "Servicios SEO"
+    },
+    {
+        "phone": "+5491145678901",
+        "name": "Carlos López",
+        "empresa": "Store Online",
+        "producto": "Tienda E-commerce"
+    },
+    {
+        "phone": "+5491156789012",
+        "name": "Ana Martínez",
+        "empresa": "Consultoría Plus",
+        "producto": "Asesoría Legal"
+    },
+    {
+        "phone": "+5491167890123",
+        "name": "Pedro Sánchez",
+        "empresa": "Digital Agency",
+        "producto": "Marketing Digital"
+    }
+]
