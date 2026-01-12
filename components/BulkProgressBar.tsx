@@ -17,6 +17,8 @@ interface BulkProgressBarProps {
   onPause?: () => void;
   onResume?: () => void;
   onCancel?: () => void;
+  successCount?: number;
+  failedCount?: number;
 }
 
 export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
@@ -34,9 +36,10 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
   queueStatus,
   onPause,
   onResume,
-  onCancel
+  onCancel,
+  successCount = 0,
+  failedCount = 0
 }) => {
-  console.log('Rendering BulkProgressBar', { current, total, isActive, title, subtitle, status, batch, totalBatches, waitSecondsRemaining, waitTotalSeconds, queueStatus });
   if (!isActive) return null;
 
   const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
@@ -45,8 +48,8 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
 
   const effectiveWaitTotalSeconds = isWaiting
     ? (typeof waitTotalSeconds === 'number' && waitTotalSeconds > 0
-        ? waitTotalSeconds
-        : (typeof waitSecondsRemaining === 'number' ? waitSecondsRemaining : 0))
+      ? waitTotalSeconds
+      : (typeof waitSecondsRemaining === 'number' ? waitSecondsRemaining : 0))
     : 0;
 
   const waitRemainingSeconds = isWaiting
@@ -97,7 +100,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
   const queueBadge = isWaiting ? 'En espera' : isComplete ? 'Cola finalizada' : 'Cola en ejecución';
 
   return (
-    <div className="fixed top-4 right-4 z-[60] w-full max-w-sm px-2">
+    <div className="fixed top-4 right-4 z-[9999] w-full max-w-sm px-2">
       <div className="bg-white/95 backdrop-blur rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-start gap-3">
           <div className={`p-2 rounded-lg ${isComplete ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -166,19 +169,21 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
 
         <div className="px-4 py-3">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <div className="flex items-center gap-1.5">
-              <Send size={14} className="text-green-500" />
-              <span>
-                {isWaiting
-                  ? 'Esperando siguiente lote'
-                  : isComplete
-                  ? 'Procesos completados'
-                  : 'Procesando...'}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle size={14} className="text-green-500" />
+                <span className="text-slate-700 font-medium">{successCount}</span>
+                <span className="text-[10px] text-slate-400">Éxito</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <XCircle size={14} className="text-red-500" />
+                <span className="text-slate-700 font-medium">{failedCount}</span>
+                <span className="text-[10px] text-slate-400">Fallidos</span>
+              </div>
             </div>
             {!isComplete && (
               <span className="text-slate-400">
-                {isWaiting ? 'Esperando para continuar con el siguiente lote' : 'Puedes seguir usando la aplicación'}
+                {isWaiting ? 'Esperando...' : 'En progreso...'}
               </span>
             )}
           </div>
@@ -216,9 +221,8 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
           ) : (
             <div className="relative w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 via-green-500 to-green-600 transition-all duration-500 ease-out ${
-                  isComplete ? 'animate-pulse' : ''
-                }`}
+                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 via-green-500 to-green-600 transition-all duration-500 ease-out ${isComplete ? 'animate-pulse' : ''
+                  }`}
                 style={{ width: `${percentage}%` }}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
@@ -250,7 +254,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
           animation: slideUpSoft 0.25s ease-out;
         }
       `}</style>
-    </div>
+    </div >
   );
 };
 

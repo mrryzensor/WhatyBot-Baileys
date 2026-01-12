@@ -1,45 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon } from 'lucide-react';
 import { AutoReplyRule, InteractiveMenu } from '../types';
-import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus } from '../services/api';
+import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus, getApiUrl } from '../services/api';
 import { MediaUpload } from './MediaUpload';
 import { MessageEditorToolbar } from './MessageEditorToolbar';
 import { MessagePreview } from './MessagePreview';
 import { BulkProgressBar } from './BulkProgressBar';
 import { ConfirmModal } from './ConfirmModal';
 import { useMedia, MediaItem as UseMediaItem } from '../hooks/useMedia';
-
-// Component for media thumbnail with error handling
-const MediaThumbnail: React.FC<{ src: string; type: 'image' | 'video' | 'document'; caption?: string }> = ({ src, type, caption }) => {
-    const [imageError, setImageError] = useState(false);
-
-    if (imageError || type !== 'image') {
-        return (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-                <div className="text-center">
-                    <Image className="w-8 h-8 text-blue-500 mx-auto mb-1" />
-                    <p className="text-xs text-slate-600 font-medium">Imagen</p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <>
-            <img
-                src={src}
-                alt={caption || "Media preview"}
-                className="w-full h-full object-cover"
-                onError={() => setImageError(true)}
-            />
-            {caption && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                    <p className="text-xs text-white line-clamp-1">{caption}</p>
-                </div>
-            )}
-        </>
-    );
-};
+import { MediaThumbnail } from './MediaThumbnail';
+import { GlobalSessionIndicator } from './GlobalSessionToggle';
+import { useGlobalSessions } from '../hooks/useGlobalSessions';
+import { ImportModal } from './ImportModal';
 
 interface AutoReplyManagerProps {
     rules: AutoReplyRule[];
@@ -58,7 +30,10 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
     const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
     const [menus, setMenus] = useState<InteractiveMenu[]>([]);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const { globalSessionsEnabled } = useGlobalSessions();
 
     // Load interactive menus
     useEffect(() => {
@@ -82,7 +57,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             return mediaPath;
         }
         const fileName = mediaPath.split(/[/\\]/).pop() || '';
-        return `${window.location.protocol}//${window.location.host}/uploads/${fileName}`;
+        return `${getApiUrl()}/uploads/${fileName}`;
     };
 
     // Helper function to get media type from path
@@ -165,7 +140,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 const fileName = mp.split(/[/\\]/).pop() || 'archivo';
                 const previewUrl = mp.startsWith('http')
                     ? mp
-                    : `${window.location.protocol}//${window.location.host}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
+                    : `${getApiUrl()}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
 
                 return {
                     preview: previewUrl,
@@ -183,7 +158,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             const fileName = mp.split(/[/\\]/).pop() || 'archivo';
             const previewUrl = mp.startsWith('http')
                 ? mp
-                : `${window.location.protocol}//${window.location.host}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
+                : `${getApiUrl()}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
 
             const mediaItem: UseMediaItem = {
                 preview: previewUrl,
@@ -344,48 +319,60 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         }
     };
 
-    // Export rules to JSON file
-    const handleExportRules = () => {
+    // Export rules to JSON or ZIP (with media files)
+    const handleExportRules = async () => {
+        setIsExporting(true);
         try {
-            // Prepare rules for export (include media filename for reference)
-            const rulesToExport = rules.map(rule => {
-                const exportRule: any = {
-                    name: rule.name,
-                    keywords: rule.keywords,
-                    response: rule.response,
-                    matchType: rule.matchType,
-                    delay: rule.delay,
-                    isActive: rule.isActive,
-                    caption: rule.caption || ''
-                };
-
-                // Include full media path for automatic import
-                if (rule.mediaPath) {
-                    exportRule.mediaPath = rule.mediaPath; // Path completo para importación automática
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/auto-reply/export`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
                 }
-
-                return exportRule;
             });
 
-            const dataStr = JSON.stringify(rulesToExport, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `auto-reply-rules-${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            if (!response.ok) {
+                throw new Error('Error al exportar reglas');
+            }
 
-            if (toast) {
-                toast.success(`Se exportaron ${rules.length} regla(s) exitosamente`);
+            const contentType = response.headers.get('content-type');
+
+            if (contentType && contentType.includes('application/zip')) {
+                // Download ZIP file
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `auto-reply-rules-${new Date().toISOString().split('T')[0]}.zip`;
+                link.click();
+                URL.revokeObjectURL(url);
+
+                if (toast) {
+                    toast.success('Reglas exportadas exitosamente');
+                }
+            } else {
+                // Download JSON file (legacy, no media files)
+                const data = await response.json();
+                const dataStr = JSON.stringify(data.rules, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `auto-reply-rules-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+
+                if (toast) {
+                    toast.success(`Se exportaron ${data.count} regla(s) exitosamente`);
+                }
             }
         } catch (error: any) {
             console.error('Error exporting rules:', error);
             if (toast) {
                 toast.error('Error al exportar reglas: ' + error.message);
             }
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -458,21 +445,137 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         }
     };
 
-    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (!file.name.endsWith('.json')) {
+    const handleImportFromModal = async (file: File, applyToAllSessions: boolean) => {
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext !== 'json' && ext !== 'zip') {
             if (toast) {
-                toast.error('Por favor selecciona un archivo JSON válido');
+                toast.error('Por favor selecciona un archivo JSON o ZIP válido');
             }
             return;
         }
 
-        handleImportRules(file);
-        // Reset input
-        if (importInputRef.current) {
-            importInputRef.current.value = '';
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('applyToAllSessions', String(applyToAllSessions));
+
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/auto-reply/rules/import`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al importar');
+            }
+
+            const result = await response.json();
+
+            if (result.success && result.success > 0) {
+                // Reload rules
+                const rulesResponse = await getAutoReplyRules();
+                if (rulesResponse.success) {
+                    setRules(rulesResponse.rules);
+                }
+
+                const parts = [];
+                if (result.success > 0) parts.push(`${result.success} nueva(s)`);
+                if (result.replaced > 0) parts.push(`${result.replaced} reemplazada(s)`);
+                if (result.failed > 0) parts.push(`${result.failed} fallida(s)`);
+
+                const sessionScope = applyToAllSessions ? ' (todas las sesiones)' : ' (sesión activa)';
+                const message = parts.length > 0
+                    ? `Reglas importadas: ${parts.join(', ')}${sessionScope}`
+                    : `Importación completada${sessionScope}`;
+
+                if (toast) {
+                    toast.success(message);
+                }
+
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('Import errors:', result.errors);
+                }
+            } else {
+                if (toast) {
+                    toast.error('No se pudieron importar las reglas');
+                }
+            }
+        } catch (error: any) {
+            console.error('Error importing rules:', error);
+            if (toast) {
+                toast.error('Error al importar reglas: ' + error.message);
+            }
+        }
+    };
+
+    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext !== 'json' && ext !== 'zip') {
+            if (toast) {
+                toast.error('Por favor selecciona un archivo JSON o ZIP válido');
+            }
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/auto-reply/rules/import`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al importar');
+            }
+
+            const result = await response.json();
+
+            if (result.success && result.success > 0) {
+                // Reload rules
+                const rulesResponse = await getAutoReplyRules();
+                if (rulesResponse.success) {
+                    setRules(rulesResponse.rules);
+                }
+
+                const parts = [];
+                if (result.success > 0) parts.push(`${result.success} nueva(s)`);
+                if (result.replaced > 0) parts.push(`${result.replaced} reemplazada(s)`);
+                if (result.failed > 0) parts.push(`${result.failed} fallida(s)`);
+
+                const message = parts.length > 0
+                    ? `Reglas importadas: ${parts.join(', ')}`
+                    : 'Importación completada';
+
+                if (toast) {
+                    toast.success(message);
+                }
+
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('Import errors:', result.errors);
+                }
+            } else {
+                if (toast) {
+                    toast.error('No se pudieron importar las reglas');
+                }
+            }
+        } catch (error: any) {
+            console.error('Error importing rules:', error);
+            if (toast) {
+                toast.error('Error al importar reglas: ' + error.message);
+            }
+        } finally {
+            // Reset input
+            if (importInputRef.current) {
+                importInputRef.current.value = '';
+            }
         }
     };
 
@@ -495,9 +598,12 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 <div className="lg:col-span-1 flex flex-col gap-4">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <div className="mb-4">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                                <Bot size={20} className="text-green-600" /> Reglas Activas
-                            </h3>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                    <Bot size={20} className="text-green-600" /> Reglas Activas
+                                </h3>
+                                <GlobalSessionIndicator enabled={globalSessionsEnabled} />
+                            </div>
                             <p className="text-xs text-slate-500 mt-2">
                                 El bot responderá automáticamente cuando detecte estas palabras clave.
                             </p>
@@ -507,15 +613,24 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                         <div className="flex gap-2">
                             <button
                                 onClick={handleExportRules}
-                                disabled={rules.length === 0}
+                                disabled={rules.length === 0 || isExporting}
                                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                                 title="Exportar reglas a archivo JSON"
                             >
-                                <Download size={16} />
-                                Exportar
+                                {isExporting ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                        Exportando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download size={16} />
+                                        Exportar
+                                    </>
+                                )}
                             </button>
                             <button
-                                onClick={() => importInputRef.current?.click()}
+                                onClick={() => setShowImportModal(true)}
                                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                                 title="Importar reglas desde archivo JSON"
                             >
@@ -525,7 +640,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             <input
                                 ref={importInputRef}
                                 type="file"
-                                accept=".json"
+                                accept=".json,.zip"
                                 onChange={handleImportFile}
                                 className="hidden"
                             />
@@ -610,45 +725,15 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                                         {/* Media Thumbnail */}
                                         {rule.mediaPath && (() => {
-                                            const mediaType = getMediaTypeFromPath(rule.mediaPath);
-                                            const previewUrl = getMediaPreviewUrl(rule.mediaPath);
-
                                             return (
                                                 <div className="mb-2">
-                                                    <div className="relative w-full h-20 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 group hover:border-blue-300 transition-colors cursor-pointer">
-                                                        {mediaType === 'image' ? (
-                                                            <MediaThumbnail
-                                                                src={previewUrl}
-                                                                type="image"
-                                                                caption={rule.caption}
-                                                            />
-                                                        ) : mediaType === 'video' ? (
-                                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
-                                                                <div className="text-center">
-                                                                    <Video className="w-8 h-8 text-purple-500 mx-auto mb-1" />
-                                                                    <p className="text-xs text-slate-600 font-medium">Video</p>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-                                                                <div className="text-center">
-                                                                    <FileText className="w-8 h-8 text-slate-500 mx-auto mb-1" />
-                                                                    <p className="text-xs text-slate-600 font-medium">Documento</p>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <div className="bg-black bg-opacity-50 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                                <Paperclip size={10} />
-                                                                <span>Multimedia</span>
-                                                            </div>
-                                                        </div>
-                                                        {rule.caption && mediaType !== 'image' && (
-                                                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                                                                <p className="text-xs text-white line-clamp-1">{rule.caption}</p>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                    <MediaThumbnail
+                                                        src={getMediaPreviewUrl(rule.mediaPath)}
+                                                        mediaPath={rule.mediaPath}
+                                                        type={getMediaTypeFromPath(rule.mediaPath)}
+                                                        caption={rule.caption}
+                                                        className="h-20"
+                                                    />
                                                 </div>
                                             );
                                         })()}
@@ -910,6 +995,15 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 confirmText="Eliminar"
                 cancelText="Cancelar"
                 type="danger"
+            />
+
+            <ImportModal
+                isOpen={showImportModal}
+                onClose={() => setShowImportModal(false)}
+                onImport={handleImportFromModal}
+                title="Importar Reglas de Auto-Respuesta"
+                description="Selecciona un archivo ZIP o JSON con reglas"
+                acceptedFormats=".json,.zip"
             />
         </>
     );

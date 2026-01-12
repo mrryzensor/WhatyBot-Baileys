@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Paperclip, X, Image, File, Video, FileText as FileTextIcon, Bold, Italic, Type, Eye, Code, List, Hash, Quote } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Paperclip, X, Image, File, Video, FileText as FileTextIcon, Bold, Italic, Type, Eye, Code, List, Hash, Quote, Smile } from 'lucide-react';
+import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import { MediaItem } from '../hooks/useMedia';
 import { MessagePreview } from './MessagePreview';
+import { MediaThumbnail } from './MediaThumbnail';
 
 interface MediaUploadProps {
   mediaItems: MediaItem[];
@@ -17,9 +19,9 @@ interface MediaUploadProps {
   sampleVariables?: Record<string, string>; // Sample values for preview
 }
 
-export const MediaUpload: React.FC<MediaUploadProps> = ({ 
-  mediaItems, 
-  onMediaChange, 
+export const MediaUpload: React.FC<MediaUploadProps> = ({
+  mediaItems,
+  onMediaChange,
   maxFiles = 50,
   fileInputRef,
   onFileSelect,
@@ -34,11 +36,46 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [expandedCaptionIndex, setExpandedCaptionIndex] = useState<number | null>(null);
   const captionTextareaRefs = React.useRef<{ [key: number]: HTMLTextAreaElement | null }>({});
-  
+
+  // Emoji picker states
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPickerIndex, setEmojiPickerIndex] = useState<number | null>(null);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ top: number; left: number } | null>(null);
+  const emojiButtonRefs = useRef<{ [key: number]: HTMLButtonElement | null }>({});
+  const emojiContainerRef = useRef<HTMLDivElement>(null);
+
   const inputRef = fileInputRef || internalFileInputRef;
   const handleFileSelect = onFileSelect || (async (e: React.ChangeEvent<HTMLInputElement>) => {
     // Default behavior if no handler provided
   });
+
+  // Handle emoji picker click outside and position calculation
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiContainerRef.current && !emojiContainerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+        setEmojiPickerIndex(null);
+      }
+    };
+
+    if (showEmojiPicker && emojiPickerIndex !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+
+      // Calculate position for fixed emoji picker (show above button)
+      const button = emojiButtonRefs.current[emojiPickerIndex];
+      if (button) {
+        const rect = button.getBoundingClientRect();
+        setEmojiPickerPosition({
+          top: rect.top,
+          left: rect.left
+        });
+      }
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker, emojiPickerIndex]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -89,6 +126,36 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     }
   };
 
+  // Emoji picker handlers
+  const toggleEmojiPicker = (index: number) => {
+    if (showEmojiPicker && emojiPickerIndex === index) {
+      setShowEmojiPicker(false);
+      setEmojiPickerIndex(null);
+    } else {
+      setShowEmojiPicker(true);
+      setEmojiPickerIndex(index);
+    }
+  };
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    if (emojiPickerIndex !== null) {
+      const textarea = captionTextareaRefs.current[emojiPickerIndex];
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentValue = mediaItems[emojiPickerIndex].caption;
+        const newValue = currentValue.substring(0, start) + emojiData.emoji + currentValue.substring(end);
+        updateCaption(emojiPickerIndex, newValue);
+
+        // Set cursor position after emoji
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + emojiData.emoji.length, start + emojiData.emoji.length);
+        }, 0);
+      }
+    }
+  };
+
   const removeMedia = (index: number) => {
     if (onRemoveMedia) {
       onRemoveMedia(index);
@@ -102,7 +169,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     if (onUpdateCaption) {
       onUpdateCaption(index, caption);
     } else {
-      const updated = mediaItems.map((item, i) => 
+      const updated = mediaItems.map((item, i) =>
         i === index ? { ...item, caption } : item
       );
       onMediaChange(updated);
@@ -118,9 +185,9 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     const end = textarea.selectionEnd;
     const currentValue = textarea.value;
     const newValue = currentValue.substring(0, start) + text + currentValue.substring(end);
-    
+
     updateCaption(index, newValue);
-    
+
     // Restore cursor position after text insertion
     setTimeout(() => {
       const updatedTextarea = captionTextareaRefs.current[index];
@@ -149,7 +216,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selectedText = textarea.value.substring(start, end);
-    
+
     if (selectedText) {
       // Wrap selected text
       insertTextAtCursor(index, `${symbol}${selectedText}${symbol}`);
@@ -172,7 +239,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     const start = textarea.selectionStart;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     if (currentLine.trim() === '') {
       insertTextAtCursor(index, '* ');
     } else {
@@ -187,7 +254,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     const start = textarea.selectionStart;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     // Find the last numbered item to continue numbering
     let nextNumber = 1;
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -197,7 +264,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
         break;
       }
     }
-    
+
     if (currentLine.trim() === '') {
       insertTextAtCursor(index, `${nextNumber}. `);
     } else {
@@ -212,7 +279,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     const start = textarea.selectionStart;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     if (currentLine.trim() === '') {
       insertTextAtCursor(index, '> ');
     } else {
@@ -228,40 +295,6 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     }
   };
 
-  const renderMediaPreview = (item: MediaItem, index: number) => {
-    if (item.type === 'image') {
-      return (
-        <div className="relative w-full h-32 bg-slate-100 rounded-lg overflow-hidden">
-          <img 
-            src={item.preview} 
-            alt={`Media ${index + 1}`}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      );
-    }
-
-    if (item.type === 'video') {
-      return (
-        <div className="w-full h-32 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-          <video className="w-full h-full object-cover">
-            <source src={item.preview} />
-            Tu navegador no soporta video
-          </video>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full h-32 bg-slate-100 rounded-lg flex flex-col items-center justify-center">
-        <File size={32} className="text-slate-400 mb-2" />
-        <span className="text-xs text-slate-500 text-center px-2 truncate max-w-full">
-          {item.file?.name || item.fileName || 'Archivo'}
-        </span>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4">
       {/* Upload Button */}
@@ -269,11 +302,10 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
         <button
           onClick={handleClick}
           disabled={mediaItems.length >= maxFiles}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-            mediaItems.length >= maxFiles
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${mediaItems.length >= maxFiles
+            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
         >
           <Paperclip size={18} />
           Adjuntar Multimedia
@@ -281,7 +313,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
             ({mediaItems.length}/{maxFiles})
           </span>
         </button>
-        
+
         <input
           ref={inputRef}
           type="file"
@@ -300,11 +332,10 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-lg transition-colors ${
-            isDragging
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-slate-200 hover:border-blue-300'
-          } cursor-pointer`}
+          className={`border-2 border-dashed rounded-lg transition-colors ${isDragging
+            ? 'border-blue-500 bg-blue-50'
+            : 'border-slate-200 hover:border-blue-300'
+            } cursor-pointer`}
         >
           {mediaItems.length === 0 ? (
             <div className="text-center py-8 text-slate-400">
@@ -330,7 +361,14 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
             <div key={index} className="bg-white border border-slate-200 rounded-lg p-3 space-y-3 relative">
               {/* Preview with delete button in top-right corner */}
               <div className="relative">
-                {renderMediaPreview(item, index)}
+                <MediaThumbnail
+                  src={item.preview}
+                  mediaPath={item.mediaPath}
+                  type={item.type}
+                  fileName={item.file?.name || item.fileName || 'Archivo'}
+                  caption={item.caption}
+                />
+
                 {/* Delete button in top-right corner of preview */}
                 <button
                   onClick={(e) => {
@@ -367,9 +405,22 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                     {expandedCaptionIndex === index ? 'Ocultar' : 'Vista Previa'}
                   </button>
                 </div>
-                
+
                 {/* Formatting Toolbar - Similar to MessageEditorToolbar */}
                 <div className="flex flex-wrap gap-1 mb-1 p-1 bg-slate-50 rounded border border-slate-200">
+                  {/* Emoji Picker Button */}
+                  <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+                    <button
+                      ref={(el) => { if (el) emojiButtonRefs.current[index] = el; }}
+                      onClick={() => toggleEmojiPicker(index)}
+                      className={`p-1.5 rounded transition-colors ${showEmojiPicker && emojiPickerIndex === index ? 'bg-slate-200 text-yellow-600' : 'hover:bg-slate-200 text-slate-600'}`}
+                      title="Insertar Emoji"
+                      type="button"
+                    >
+                      <Smile size={18} />
+                    </button>
+                  </div>
+
                   {/* Formatting Buttons */}
                   <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
                     <button
@@ -433,7 +484,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                       <Quote size={16} className="text-slate-600" />
                     </button>
                   </div>
-                  
+
                   {/* Variables */}
                   {variables.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
@@ -480,6 +531,52 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Emoji Picker - Rendered with fixed position above the button */}
+      {showEmojiPicker && emojiPickerIndex !== null && emojiPickerPosition && (
+        <div
+          ref={emojiContainerRef}
+          className="fixed z-[9999] shadow-xl border border-slate-200 rounded-lg"
+          style={{
+            bottom: `${window.innerHeight - emojiPickerPosition.top + 4}px`,
+            left: `${emojiPickerPosition.left}px`
+          }}
+        >
+          <style>{`
+            /* Hacer el emoji picker más compacto */
+            .EmojiPickerReact {
+              --epr-emoji-size: 28px !important;
+              --epr-category-label-height: 28px !important;
+            }
+            .EmojiPickerReact .epr-emoji-category-label {
+              font-size: 11px !important;
+              padding: 4px 8px !important;
+            }
+            .EmojiPickerReact button.epr-emoji {
+              padding: 2px !important;
+            }
+            .EmojiPickerReact .epr-search-container input {
+              font-size: 12px !important;
+              padding: 6px 8px 6px 32px !important;
+            }
+            .EmojiPickerReact .epr-category-nav {
+              padding: 4px !important;
+            }
+            .EmojiPickerReact .epr-category-nav button {
+              padding: 4px !important;
+            }
+          `}</style>
+          <EmojiPicker
+            onEmojiClick={handleEmojiClick}
+            theme={Theme.LIGHT}
+            searchPlaceholder="Buscar emoji..."
+            width={300}
+            height={300}
+            lazyLoadEmojis={true}
+            previewConfig={{ showPreview: false }}
+          />
         </div>
       )}
 

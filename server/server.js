@@ -18,6 +18,8 @@ import menusRouter from './routes/menus.js';
 import configRouter from './routes/config.js';
 import usersRouter from './routes/users.js';
 import authRouter from './routes/auth.js';
+import SessionManager from './sessionManager.js';
+import sessionsRouter from './routes/sessions.js';
 import { userService, messageCountService, validationService, messageLogService, subscriptionContactLinksService, groupSelectionService } from './database.js';
 
 dotenv.config();
@@ -109,12 +111,17 @@ const persistPortInfo = (info) => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Middleware to extract user from request (must be after express.json())
+    // Middleware to extract user and session from request (must be after express.json())
     app.use((req, res, next) => {
       // Try to get user from Authorization header or body
       const userId = req.headers['x-user-id'] || (req.body && req.body.userId);
       if (userId) {
         req.userId = parseInt(userId);
+      }
+
+      const sessionId = req.headers['x-session-id'] || (req.body && req.body.sessionId);
+      if (sessionId) {
+        req.sessionId = sessionId;
       }
       next();
     });
@@ -126,12 +133,16 @@ const persistPortInfo = (info) => {
     }
     app.use('/uploads', express.static(uploadsDir));
 
-    // Initialize WhatsApp client
-    const whatsappClient = new WhatsAppClient(io);
-    const messageScheduler = new MessageScheduler(whatsappClient);
+    // Initialize Session Manager
+    const sessionManager = new SessionManager(io);
+    await sessionManager.restoreSessions(); // Restores saved sessions from disk
+
+    const whatsappClient = sessionManager; // Temporary fallback for code using whatsappClient directly
+    const messageScheduler = new MessageScheduler(sessionManager);
 
     // Make services available to routes
-    app.set('whatsappClient', whatsappClient);
+    app.set('sessionManager', sessionManager);
+    app.set('whatsappClient', sessionManager); // Keep for compatibility
     app.set('messageScheduler', messageScheduler);
     app.set('userService', userService);
     app.set('messageCountService', messageCountService);
@@ -142,6 +153,7 @@ const persistPortInfo = (info) => {
     app.set('io', io);
 
     // Routes
+    app.use('/api/sessions', sessionsRouter);
     app.use('/api/messages', messagesRouter);
     app.use('/api/groups', groupsRouter);
     app.use('/api/contacts', contactsRouter);
@@ -165,28 +177,23 @@ const persistPortInfo = (info) => {
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
 
-      // Send current status
-      const status = whatsappClient.getStatus();
-      socket.emit('status', status);
+      // Listen for session selection to join specific room
+      socket.on('select_session', (sessionId) => {
+        socket.join(`session_${sessionId}`);
+        console.log(`Socket ${socket.id} joined session_${sessionId}`);
 
-      // Send QR if available
-      const qrDataUrl = whatsappClient.getQrCode();
-      if (qrDataUrl) {
-        console.log('Sending cached QR code to new client');
-        socket.emit('qr', { qr: qrDataUrl });
-      }
-
-      // Listen for user login/logout events
-      socket.on('user_logged_in', async (data) => {
-        if (data && data.userId) {
-          await whatsappClient.setActiveUserId(data.userId);
-          console.log(`[Server] Active user set to: ${data.userId}`);
-        }
+        // Optionally send immediate status for this session
+        const status = sessionManager.getSessionStatus(sessionId);
+        socket.emit('session_status', { sessionId, ...status });
       });
 
-      socket.on('user_logged_out', async () => {
-        await whatsappClient.setActiveUserId(null);
-        console.log('[Server] Active user cleared');
+      // Listen for user login/logout events
+      // These might be relevant if we track active user per socket
+      socket.on('user_logged_in', async (data) => {
+        if (data && data.userId) {
+          // sessionManager.setUserActive(data.userId, socket.id); // If we tracked users
+          console.log(`[Server] Socket ${socket.id} logged in as user: ${data.userId}`);
+        }
       });
 
       socket.on('disconnect', () => {

@@ -138,6 +138,7 @@ export const initializeSocket = () => {
 export const getSocket = () => socket;
 
 // Initialize API base URL - will be updated when port info is available
+export const getApiUrl = (): string => API_BASE_URL;
 let API_BASE_URL = getApiBaseUrl();
 
 // Create axios instance (must be defined before updateApiBaseUrl uses it)
@@ -302,7 +303,7 @@ if (typeof window === 'undefined' || import.meta.env.VITE_API_URL) {
   markBackendPortReady();
 }
 
-// Add interceptor to include userId in headers
+// Add interceptor to include userId and sessionId in headers
 api.interceptors.request.use((config) => {
   // Get current user from localStorage (stored as 'user')
   const userStr = localStorage.getItem('user');
@@ -316,6 +317,13 @@ api.interceptors.request.use((config) => {
       console.warn('Error parsing user from localStorage:', e);
     }
   }
+
+  // Get selected session from localStorage
+  const sessionId = localStorage.getItem('selectedSessionId');
+  if (sessionId) {
+    config.headers['x-session-id'] = sessionId;
+  }
+
   return config;
 });
 
@@ -826,6 +834,61 @@ export const exportMenus = async () => {
 
 export const importMenus = async (menus: any[]) => {
   const response = await api.post('/menus/import', { menus });
+  return response.data;
+};
+
+// Export complete configuration (menus + rules + media)
+export const exportCompleteConfig = async () => {
+  const apiUrl = getApiUrl();
+  const sessionId = localStorage.getItem('selectedSessionId') || '';
+  const response = await fetch(`${apiUrl}/api/config/export-all?sessionId=${sessionId}`);
+
+  if (!response.ok) {
+    throw new Error('Error al exportar configuración completa');
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `whatsapp-config-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+
+  return { success: true };
+};
+
+// Import complete configuration (menus + rules + media)
+export const importCompleteConfig = async (file: File, applyToAllSessions: boolean = false) => {
+  const apiUrl = getApiUrl();
+  const sessionId = localStorage.getItem('selectedSessionId') || '';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('sessionId', sessionId);
+  formData.append('applyToAllSessions', String(applyToAllSessions));
+
+  const response = await fetch(`${apiUrl}/api/config/import-all`, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al importar configuración completa');
+  }
+
+  return await response.json();
+};
+
+// Cleanup orphaned media files
+export const cleanupOrphanedFiles = async (sessionId?: string, allSessions: boolean = false) => {
+  const response = await api.post('/cleanup-orphaned-files', {
+    sessionId,
+    allSessions
+  });
   return response.data;
 };
 

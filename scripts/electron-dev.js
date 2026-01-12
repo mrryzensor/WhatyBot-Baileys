@@ -27,7 +27,7 @@ const restoreTerminal = () => {
         // Ignore if already in cooked mode
       }
     }
-    
+
     // Ensure stdout is in normal mode
     if (process.stdout.isTTY) {
       // Show cursor if hidden
@@ -35,7 +35,7 @@ const restoreTerminal = () => {
       // Reset any terminal formatting
       process.stdout.write('\x1b[0m');
     }
-    
+
     // On Windows, ensure the terminal is in the correct mode
     if (process.platform === 'win32') {
       // Write a newline to ensure we're on a new line
@@ -50,19 +50,19 @@ const restoreTerminal = () => {
 const cleanup = () => {
   if (cleanupCalled) return;
   cleanupCalled = true;
-  
+
   console.log('\nShutting down all processes...');
-  
+
   // Restore terminal state first
   restoreTerminal();
-  
+
   const killProcess = (proc, name, signal = 'SIGTERM') => {
     if (!proc || proc.killed) return;
     const pid = proc.pid;
     if (!pid) {
       try {
         proc.kill(signal);
-      } catch {}
+      } catch { }
       return;
     }
     try {
@@ -71,26 +71,26 @@ const cleanup = () => {
           console.warn(`Failed to kill ${name} (pid ${pid}) with ${signal}:`, err.message);
           try {
             proc.kill(signal);
-          } catch {}
+          } catch { }
         }
       });
     } catch (error) {
       try {
         proc.kill(signal);
-      } catch {}
+      } catch { }
     }
   };
-  
+
   killProcess(viteProcess, 'Vite');
   killProcess(serverProcess, 'Server');
   killProcess(electronProcess, 'Electron');
-  
+
   // Force kill if graceful shutdown fails
   setTimeout(() => {
     killProcess(viteProcess, 'Vite (force)', 'SIGKILL');
     killProcess(serverProcess, 'Server (force)', 'SIGKILL');
     killProcess(electronProcess, 'Electron (force)', 'SIGKILL');
-    
+
     // Final terminal restore
     restoreTerminal();
     process.exit(0);
@@ -127,14 +127,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start Vite dev server
 console.log('Starting Vite dev server...');
-const pm = (() => {
-  try {
-    const out = execFileSync('pnpm', ['-v'], { stdio: 'pipe', shell: true }).toString();
-    return out ? 'pnpm' : 'npm';
-  } catch {
-    return 'npm';
-  }
-})();
+const pm = 'npm';
 viteProcess = spawn(pm, ['run', 'dev'], {
   cwd: projectRoot,
   stdio: ['ignore', 'pipe', 'pipe'], // Don't inherit to avoid terminal issues
@@ -251,19 +244,19 @@ const startElectron = async () => {
       stdio: 'inherit',
       shell: true
     });
-    
+
     electronProcess.on('close', (code) => {
       console.log(`\nElectron process exited with code ${code}`);
       restoreTerminal();
       cleanup();
     });
-    
+
     electronProcess.on('error', (error) => {
       console.error('Electron process error:', error);
       restoreTerminal();
       cleanup();
     });
-    
+
   } catch (error) {
     console.error('Error starting Electron:', error);
     console.log('Please check if all servers are running properly.');

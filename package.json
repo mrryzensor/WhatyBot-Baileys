@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.4",
   "type": "module",
-  "main": "dist/electron.js",
+  "main": "public/electron.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -20,14 +20,15 @@
   "dependencies": {
     "@google/genai": "^1.30.0",
     "axios": "^1.6.2",
+    "electron-updater": "^6.6.2",
+    "emoji-picker-react": "^4.16.1",
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-confetti": "^6.4.0",
     "react-dom": "^19.2.0",
     "socket.io-client": "^4.7.2",
     "sonner": "^2.0.7",
-    "xlsx": "^0.18.5",
-    "electron-updater": "^6.6.2"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

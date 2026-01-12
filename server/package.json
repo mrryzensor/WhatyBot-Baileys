@@ -11,6 +11,7 @@
     "dependencies": {
         "@supabase/supabase-js": "^2.86.0",
         "@whiskeysockets/baileys": "^7.0.0-rc.9",
+        "archiver": "^7.0.1",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
         "express": "^4.18.2",
@@ -18,6 +19,7 @@
         "node-schedule": "^2.1.1",
         "qrcode": "^1.5.3",
         "socket.io": "^4.7.2",
+        "unzipper": "^0.12.3",
         "uuid": "^13.0.0"
     }
 }

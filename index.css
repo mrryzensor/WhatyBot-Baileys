@@ -2,16 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
-body { 
-  font-family: 'Inter', sans-serif; 
-  background-color: #f0f2f5; 
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f0f2f5;
 }
 
 /* Custom scrollbar for message lists */
-::-webkit-scrollbar { 
-  width: 6px; 
-  height: 6px; 
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Custom scrollbar for sidebar navigation */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Responsive card utilities - prevent overflow */
+@layer utilities {
+
+  /* Truncate text with ellipsis */
+  .truncate-2-lines {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .truncate-3-lines {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Ensure content never overflows cards */
+  .card-content-safe {
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Responsive badge that wraps text */
+  .badge-responsive {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Responsive button group */
+  .button-group-responsive {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .button-group-responsive>* {
+    flex: 1 1 auto;
+    min-width: fit-content;
+  }
+
+  /* Prevent phone numbers from breaking layout */
+  .phone-number {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Responsive container for cards */
+  .card-container {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* Global card overflow prevention */
+.bg-white,
+.bg-slate-50,
+.bg-slate-100,
+.bg-blue-50,
+.bg-green-50,
+.bg-yellow-50,
+.bg-purple-50 {
+  overflow: hidden;
+}
+
+/* Ensure all cards have proper box-sizing */
+* {
+  box-sizing: border-box;
+}

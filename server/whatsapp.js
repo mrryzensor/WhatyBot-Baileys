@@ -1,7 +1,9 @@
 import qrcode from 'qrcode';
+import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { EventEmitter } from 'events';
 import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,9 +17,18 @@ const resolveSessionDir = () => {
   return path.join(__dirname, '.baileys_auth');
 };
 
-class WhatsAppClient {
-  constructor(io) {
+// Helper for display formatting
+const formatTarget = (jid) => {
+  if (!jid) return 'Desconocido';
+  return jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+};
+
+class WhatsAppClient extends EventEmitter {
+  constructor(io, authDir = null, sessionId = null) {
+    super();
     this.io = io;
+    this.authDir = authDir || resolveSessionDir();
+    this.sessionId = sessionId;
     this.client = null;
     this.sock = null;
     this.contactsCache = {};
@@ -25,9 +36,9 @@ class WhatsAppClient {
     this.qrCode = null;
     this.qrDataUrl = null;
     this.autoReplyRules = [];
-    this.interactiveMenus = []; // Interactive menu system
-    this.userSessions = new Map(); // Active user sessions
-    this.sessionTimeout = 15 * 60 * 1000; // 15 minutes
+    this.interactiveMenus = [];
+    this.userSessions = new Map();
+    this.sessionTimeout = 15 * 60 * 1000;
     this.activeUserId = null;
     this.config = {
       headless: true,
@@ -35,7 +46,8 @@ class WhatsAppClient {
       maxContactsPerBatch: 50,
       waitTimeBetweenBatches: 15
     };
-    this.bulkControllers = new Map(); // Control por usuario para envíos masivos
+    this.bulkControllers = new Map();
+    this.globalSessionsEnabled = true; // Default to true
 
     this._initializePromise = null;
     this._reconnectTimer = null;
@@ -46,6 +58,29 @@ class WhatsAppClient {
     this.loadInteractiveMenus();
     this.loadUserSessions();
     this.loadConfig();
+    this.loadGlobalSessionsConfig();
+  }
+
+  loadGlobalSessionsConfig() {
+    try {
+      const configPath = path.join(__dirname, 'data/globalSessionsConfig.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        this.globalSessionsEnabled = config.enabled ?? true;
+        this.activeSessionId = config.activeSessionId ?? null;
+        console.log('[WhatsApp] Global sessions config loaded:', {
+          enabled: this.globalSessionsEnabled,
+          activeSessionId: this.activeSessionId,
+          thisSessionId: this.sessionId
+        });
+      } else {
+        this.globalSessionsEnabled = true;
+        this.activeSessionId = null;
+      }
+    } catch (error) {
+      console.error('[WhatsApp] Error loading global sessions config:', error);
+      this.globalSessionsEnabled = true;
+    }
   }
 
   scheduleReconnect(delayMs) {
@@ -145,7 +180,23 @@ class WhatsAppClient {
 
   loadAutoReplyRules() {
     try {
-      const rulesPath = path.join(__dirname, 'data', 'autoReplyRules.json');
+      // Use session-specific file if sessionId is present, otherwise use default
+      const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
+      const rulesPath = path.join(__dirname, 'data', fileName);
+
+      // Migration/Fallback: If session file doesn't exist but global default exists, copy it
+      if (!fs.existsSync(rulesPath) && this.sessionId) {
+        const globalPath = path.join(__dirname, 'data', 'autoReplyRules.json');
+        if (fs.existsSync(globalPath)) {
+          try {
+            fs.copyFileSync(globalPath, rulesPath);
+            console.log(`[WhatsApp] Copied global auto-reply rules to session ${this.sessionId}`);
+          } catch (e) {
+            console.warn('[WhatsApp] Failed to copy global auto-reply rules:', e);
+          }
+        }
+      }
+
       if (fs.existsSync(rulesPath)) {
         const rawRules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
         // Normalize keywords to arrays (handle legacy string format)
@@ -187,21 +238,40 @@ class WhatsAppClient {
 
   saveAutoReplyRules() {
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
+      const rulesPath = path.join(__dirname, 'data', fileName);
+
+      const dataDir = path.dirname(rulesPath);
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
-      const rulesPath = path.join(dataDir, 'autoReplyRules.json');
       fs.writeFileSync(rulesPath, JSON.stringify(this.autoReplyRules, null, 2));
     } catch (error) {
       console.error('Error saving auto-reply rules:', error);
     }
   }
 
+
+
   // Interactive Menus Management
   loadInteractiveMenus() {
     try {
-      const menusPath = path.join(__dirname, 'data', 'interactiveMenus.json');
+      const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
+      const menusPath = path.join(__dirname, 'data', fileName);
+
+      // Migration/Fallback: If session file doesn't exist but global default exists, copy it
+      if (!fs.existsSync(menusPath) && this.sessionId) {
+        const globalPath = path.join(__dirname, 'data', 'interactiveMenus.json');
+        if (fs.existsSync(globalPath)) {
+          try {
+            fs.copyFileSync(globalPath, menusPath);
+            console.log(`[WhatsApp] Copied global interactive menus to session ${this.sessionId}`);
+          } catch (e) {
+            console.warn('[WhatsApp] Failed to copy global interactive menus:', e);
+          }
+        }
+      }
+
       if (fs.existsSync(menusPath)) {
         this.interactiveMenus = JSON.parse(fs.readFileSync(menusPath, 'utf8'));
         console.log(`[WhatsApp] Loaded ${this.interactiveMenus.length} interactive menus`);
@@ -218,11 +288,13 @@ class WhatsAppClient {
 
   saveInteractiveMenus() {
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
+      const menusPath = path.join(__dirname, 'data', fileName);
+
+      const dataDir = path.dirname(menusPath);
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
-      const menusPath = path.join(dataDir, 'interactiveMenus.json');
       fs.writeFileSync(menusPath, JSON.stringify(this.interactiveMenus, null, 2));
       console.log(`[WhatsApp] Saved ${this.interactiveMenus.length} interactive menus`);
     } catch (error) {
@@ -600,7 +672,7 @@ class WhatsAppClient {
         }
       } catch { }
 
-      const authDir = resolveSessionDir();
+      const authDir = this.authDir;
       if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
       const { state, saveCreds } = await useMultiFileAuthState(authDir);
       const { version } = await fetchLatestBaileysVersion();
@@ -620,13 +692,14 @@ class WhatsAppClient {
       this.client = this.sock;
       this.sock.ev.on('creds.update', saveCreds);
       this.sock.ev.on('connection.update', async (update) => {
+        this.emit('connection.update', update);
         const { connection, qr, lastDisconnect } = update;
         if (qr) {
           try {
             this.qrCode = qr;
             const qrDataUrl = await qrcode.toDataURL(qr);
             this.qrDataUrl = qrDataUrl;
-            this.io.emit('qr', { qr: qrDataUrl });
+            this.io.emit('qr', { sessionId: this.sessionId, qr: qrDataUrl });
           } catch (e) { }
         }
         if (connection === 'open') {
@@ -683,13 +756,13 @@ class WhatsAppClient {
             console.error('Error validating phone number usage:', error);
           }
 
-          this.io?.emit('authenticated', { phone: phoneNumber });
-          this.io?.emit('ready', { status: 'connected', phone: phoneNumber });
+          this.io?.emit('authenticated', { sessionId: this.sessionId, phone: phoneNumber });
+          this.io?.emit('ready', { sessionId: this.sessionId, status: 'connected', phone: phoneNumber });
         } else if (connection === 'close') {
           this.isReady = false;
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const loggedOut = statusCode === DisconnectReason.loggedOut;
-          this.io.emit('disconnected', { reason: loggedOut ? 'logged_out' : 'connection_closed' });
+          this.io.emit('disconnected', { sessionId: this.sessionId, reason: loggedOut ? 'logged_out' : 'connection_closed' });
 
           // If WhatsApp logged out (invalid/expired session), auto-reset once to force a new QR,
           // same behavior as the manual "Limpiar sesión y generar nuevo QR" button.
@@ -713,9 +786,11 @@ class WhatsAppClient {
                 this._autoResetInProgress = false;
               }
             } else {
-              try {
-                await this.destroy();
-              } catch { }
+              if (this._autoResetInProgress) {
+                console.log('⚠️ Auto-reset ya en progreso, ignorando evento logged_out duplicado.');
+              } else {
+                console.log('⏳ Auto-reset en enfriamiento (cooldown), esperando...');
+              }
             }
 
             this.clearReconnectTimer();
@@ -723,12 +798,22 @@ class WhatsAppClient {
             return;
           }
 
-          // Controlled reconnect with backoff, avoid parallel init storms
-          this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
-          const baseDelay = 2000;
-          const maxDelay = 60000;
-          const delay = Math.min(maxDelay, baseDelay * (2 ** Math.min(6, this._reconnectAttempts - 1)));
-          this.scheduleReconnect(delay);
+          // Unified reconnection logic
+          if (statusCode !== DisconnectReason.loggedOut) {
+            const isConflict = String(lastDisconnect?.error)?.includes('Stream Errored (conflict)');
+
+            if (isConflict) {
+              console.log('[WhatsApp] Conflict detected (Stream Errored), waiting 5s before reconnect...');
+              this.scheduleReconnect(5000);
+            } else {
+              this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
+              const baseDelay = 2000;
+              const maxDelay = 60000;
+              const delay = Math.min(maxDelay, baseDelay * (2 ** Math.min(6, this._reconnectAttempts - 1)));
+              console.log(`[WhatsApp] Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts})...`);
+              this.scheduleReconnect(delay);
+            }
+          }
         }
       });
       this.sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -786,6 +871,17 @@ class WhatsAppClient {
             }
           }
 
+          // Check if we should process menus/rules based on global sessions configuration
+          if (!this.globalSessionsEnabled) {
+            // Allow processing ONLY if this is the active session
+            if (this.sessionId !== this.activeSessionId) {
+              console.log(`[WhatsApp] ⛔ SKIP: Session ${this.sessionId} is NOT active. Active is: ${this.activeSessionId}`);
+              return;
+            }
+
+            console.log(`[WhatsApp] ✅ PROCESS: Session ${this.sessionId} IS active.`);
+          }
+
           // Check for active menu session FIRST
           const session = this.getSession(from);
           if (session) {
@@ -814,8 +910,71 @@ class WhatsAppClient {
           }
 
           // Process auto-reply rules (only if no menu session or menu didn't handle it)
+          // First, check for menu-type rules (higher priority)
+          console.log(`[WhatsApp] Checking ${this.autoReplyRules.length} auto-reply rules...`);
           for (const rule of this.autoReplyRules) {
-            if (!rule.isActive) continue;
+            if (!rule.isActive || rule.type !== 'menu') continue;
+
+            const messageText = body.trim();
+            let shouldReply = false;
+
+            if (rule.matchType === 'exact') {
+              shouldReply = rule.keywords.some(keyword => messageText === keyword.toLowerCase().trim());
+            } else if (rule.matchType === 'contains') {
+              shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase().trim()));
+            }
+
+            console.log(`[WhatsApp] Rule [${rule.name}] match result: ${shouldReply} (Keywords: ${rule.keywords.join(',')}, Input: ${messageText})`);
+
+            if (shouldReply && rule.menuId) {
+              // Start menu session
+              const menu = this.interactiveMenus.find(m => String(m.id) === String(rule.menuId) && m.isActive);
+              if (menu) {
+                console.log('[WhatsAppClient] Starting menu session:', {
+                  userId: from,
+                  menuId: menu.id,
+                  menuName: menu.name
+                });
+
+                await new Promise(r => setTimeout(r, rule.delay * 1000));
+
+                await this.sendMenu(from, menu);
+
+                this.setSession(from, menu.id);
+
+                if (currentUser && currentUser.id) {
+                  await messageCountService.incrementCount(currentUser.id, 1);
+                  await messageLogService.logMessage(
+                    currentUser.id,
+                    'menu-start',
+                    from,
+                    'sent',
+                    `Menu started: ${menu.name}`,
+                    null
+                  );
+                }
+
+                if (this.io) {
+                  this.io.emit('message_log', {
+                    id: Date.now().toString(),
+                    sessionId: this.sessionId,
+                    userId: currentUser?.id || null,
+                    target: from,
+                    status: 'sent',
+                    timestamp: new Date(),
+                    content: `Menu started: ${menu.name}`,
+                    messageType: 'menu-start'
+                  });
+                }
+
+                return; // Menu started, don't process other rules
+              }
+            }
+          }
+
+          // Then, check for simple auto-reply rules
+          for (const rule of this.autoReplyRules) {
+            if (!rule.isActive || rule.type === 'menu') continue;
             const messageText = body;
             let shouldReply = false;
             if (rule.matchType === 'exact') {
@@ -824,95 +983,65 @@ class WhatsAppClient {
               shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase()));
             }
             if (shouldReply) {
-              // Check if this is a menu-type rule
-              if (rule.type === 'menu' && rule.menuId) {
-                // Start menu session
-                const menu = this.interactiveMenus.find(m => String(m.id) === String(rule.menuId) && m.isActive);
-                if (menu) {
-                  console.log('[WhatsAppClient] Starting menu session:', {
-                    userId: from,
-                    menuId: menu.id,
-                    menuName: menu.name
-                  });
+              // Regular auto-reply (simple type)
+              const textMessage = rule.response || '';
 
-                  await new Promise(r => setTimeout(r, rule.delay * 1000));
+              // Soporte para múltiples archivos por regla
+              const mediaPaths = Array.isArray(rule.mediaPaths)
+                ? rule.mediaPaths.filter(Boolean)
+                : (rule.mediaPath ? [rule.mediaPath] : []);
 
-                  await this.sendMenu(from, menu);
+              let captions = Array.isArray(rule.captions)
+                ? rule.captions
+                : mediaPaths.map(() => (rule.caption || ''));
 
-                  this.setSession(from, menu.id);
+              console.log('[WhatsAppClient] Auto-reply matched rule:', {
+                id: rule.id,
+                name: rule.name,
+                mediaPaths,
+                captions
+              });
 
-                  if (currentUser && currentUser.id) {
-                    await messageCountService.incrementCount(currentUser.id, 1);
-                    await messageLogService.logMessage(
-                      currentUser.id,
-                      'menu-start',
-                      from,
-                      'sent',
-                      `Menu started: ${menu.name}`,
-                      null
-                    );
-                  }
-
-                  if (this.io) {
-                    this.io.emit('message_log', {
-                      id: Date.now().toString(),
-                      userId: currentUser?.id || null,
-                      target: from,
-                      status: 'sent',
-                      timestamp: new Date(),
-                      content: `Menu started: ${menu.name}`,
-                      messageType: 'menu-start'
-                    });
-                  }
-
-                  break;
-                }
-              } else {
-                // Regular auto-reply (simple type)
-                const textMessage = rule.response || '';
-
-                // Soporte para múltiples archivos por regla
-                const mediaPaths = Array.isArray(rule.mediaPaths)
-                  ? rule.mediaPaths.filter(Boolean)
-                  : (rule.mediaPath ? [rule.mediaPath] : []);
-
-                let captions = Array.isArray(rule.captions)
-                  ? rule.captions
-                  : mediaPaths.map(() => (rule.caption || ''));
-
-                console.log('[WhatsAppClient] Auto-reply matched rule:', {
-                  id: rule.id,
-                  name: rule.name,
-                  mediaPaths,
-                  captions
-                });
-
-                await new Promise(r => setTimeout(r, rule.delay * 1000));
+              await new Promise(r => setTimeout(r, rule.delay * 1000));
+              try {
                 await this.sendMessage(from, textMessage, mediaPaths, captions);
-                if (currentUser && currentUser.id) {
-                  await messageCountService.incrementCount(currentUser.id, 1);
-                  await messageLogService.logMessage(
-                    currentUser.id,
-                    'auto-reply',
-                    from,
-                    'sent',
-                    `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
-                    null
-                  );
-                }
+                const cleanTarget = formatTarget(from);
                 if (this.io) {
                   this.io.emit('message_log', {
-                    id: Date.now().toString(),
+                    id: uuidv4(),
+                    sessionId: this.sessionId,
                     userId: currentUser?.id || null,
-                    target: from,
+                    target: cleanTarget,
                     status: 'sent',
                     timestamp: new Date(),
                     content: `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
                     messageType: 'auto-reply'
                   });
                 }
-                break;
+                if (currentUser && currentUser.id) {
+                  await messageCountService.incrementCount(currentUser.id, 1);
+                  await messageLogService.logMessage(currentUser.id, 'auto-reply', cleanTarget, 'sent', `Auto-reply: ${textMessage || '[Archivo multimedia]'}`, null);
+                }
+              } catch (replyError) {
+                console.error('[WhatsAppClient] Error sending auto-reply:', replyError);
+                const cleanTargetByError = formatTarget(from);
+                if (this.io) {
+                  this.io.emit('message_log', {
+                    id: uuidv4(),
+                    sessionId: this.sessionId,
+                    userId: currentUser?.id || null,
+                    target: cleanTargetByError,
+                    status: 'failed',
+                    timestamp: new Date(),
+                    content: `Auto-reply: ${textMessage || '[Archivo multimedia]'}`,
+                    messageType: 'auto-reply'
+                  });
+                }
+                if (currentUser && currentUser.id) {
+                  await messageLogService.logMessage(currentUser.id, 'auto-reply', cleanTargetByError, 'failed', `Auto-reply: ${textMessage || '[Archivo multimedia]'}`, null);
+                }
               }
+              break;
             }
           }
         } catch (error) { }
@@ -1034,7 +1163,15 @@ class WhatsAppClient {
 
       // Send text message FIRST (if exists)
       if (message && message.trim()) {
-        await this.sock.sendMessage(jid, { text: message });
+        try {
+          await this.sock.sendMessage(jid, { text: message });
+        } catch (error) {
+          // Si el error es específicamente por permisos de grupo (frecuentemente 401/403 de WhatsApp)
+          if (jid.endsWith('@g.us') && (error.message.includes('not authorized') || error.message.includes('403') || error.message.includes('401'))) {
+            throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
+          }
+          throw error;
+        }
       }
 
       // Then send media files
@@ -1043,16 +1180,46 @@ class WhatsAppClient {
         if (!currentPath) continue;
         const currentCaption = captions[i] || '';
 
-        const ext = path.extname(currentPath).toLowerCase();
-        const data = fs.readFileSync(currentPath);
-        if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
-          await this.sock.sendMessage(jid, { image: data, caption: currentCaption || undefined });
-        } else if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) {
-          await this.sock.sendMessage(jid, { video: data, caption: currentCaption || undefined });
-        } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
-          await this.sock.sendMessage(jid, { audio: data });
-        } else {
-          await this.sock.sendMessage(jid, { document: data, fileName: path.basename(currentPath) });
+        // Normalize path separators (handle both / and \)
+        const normalizedPath = currentPath.replace(/\\/g, '/');
+
+        // Convert relative paths to absolute paths
+        const absolutePath = path.isAbsolute(normalizedPath)
+          ? normalizedPath
+          : path.join(__dirname, normalizedPath);
+
+        console.log('[sendMessage] Media file debug:', {
+          currentPath,
+          normalizedPath,
+          __dirname,
+          absolutePath,
+          exists: fs.existsSync(absolutePath)
+        });
+
+        if (!fs.existsSync(absolutePath)) {
+          console.error(`[sendMessage] File not found: ${absolutePath}`);
+          console.error(`[sendMessage] Tried to find file from path: ${currentPath}`);
+          continue; // Skip this file and continue with the next one
+        }
+
+        const ext = path.extname(absolutePath).toLowerCase();
+        const data = fs.readFileSync(absolutePath);
+        try {
+          if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+            await this.sock.sendMessage(jid, { image: data, caption: currentCaption || undefined });
+          } else if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) {
+            await this.sock.sendMessage(jid, { video: data, caption: currentCaption || undefined });
+          } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
+            await this.sock.sendMessage(jid, { audio: data });
+          } else {
+            await this.sock.sendMessage(jid, { document: data, fileName: path.basename(currentPath) });
+          }
+        } catch (error) {
+          // Si el error es específicamente por permisos de grupo
+          if (jid.endsWith('@g.us') && (error.message.includes('not authorized') || error.message.includes('403') || error.message.includes('401'))) {
+            throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
+          }
+          throw error;
         }
 
         // Emit simple progress event for individual media sends (usar canal separado para no interferir con bulk_progress de campañas masivas)
@@ -1099,9 +1266,21 @@ class WhatsAppClient {
     const results = [];
     const totalContacts = contacts.length;
     let processedCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
     const controller = this.getBulkController(userId);
     controller.cancelled = false;
     controller.paused = false;
+
+    // Obtener grupos participando para validar permisos preventivamente (solo si hay grupos en los contactos)
+    let myGroups = {};
+    if (contacts.some(c => c.phone && (c.phone.endsWith('@g.us') || c.phone.includes('-')))) {
+      try {
+        myGroups = await this.sock.groupFetchAllParticipating();
+      } catch (e) {
+        console.warn('[WhatsApp] Error fetching groups for validation:', e.message);
+      }
+    }
 
     // Split contacts into batches
     const batches = [];
@@ -1132,6 +1311,24 @@ class WhatsAppClient {
         }
         const contact = batch[i];
         try {
+          // Validación preventiva para grupos
+          const jid = this.resolveJid(contact.phone);
+          if (jid.endsWith('@g.us')) {
+            const groupMetadata = myGroups[jid];
+            if (groupMetadata) {
+              const announce = !!groupMetadata.announce;
+              const selfJid = this.sock?.user?.id || this.sock?.user?.jid || '';
+              const selfNumber = selfJid.split('@')[0].split(':')[0];
+              const isAdmin = !!(groupMetadata.participants || []).find(p =>
+                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
+              );
+
+              if (announce && !isAdmin) {
+                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
+              }
+            }
+          }
+
           // Replace variables in message y captions
           let personalizedMessage = message || '';
 
@@ -1171,12 +1368,15 @@ class WhatsAppClient {
           });
 
           processedCount++;
+          successCount++;
 
           // Emit progress to frontend with userId
           this.io.emit('bulk_progress', {
             userId: userId || null,
             current: processedCount,
             total: totalContacts,
+            successCount,
+            failedCount,
             contact: contact.phone,
             status: 'sent',
             batch: batchIndex + 1,
@@ -1198,11 +1398,14 @@ class WhatsAppClient {
           });
 
           processedCount++;
+          failedCount++;
 
           this.io.emit('bulk_progress', {
             userId: userId || null,
             current: processedCount,
             total: totalContacts,
+            successCount,
+            failedCount,
             contact: contact.phone,
             status: 'failed',
             batch: batchIndex + 1,
@@ -1581,10 +1784,10 @@ class WhatsAppClient {
 
   clearSessionFiles() {
     try {
-      const authDir = resolveSessionDir();
+      const authDir = this.authDir || resolveSessionDir();
       if (fs.existsSync(authDir)) {
         fs.rmSync(authDir, { recursive: true, force: true });
-        console.log('🧹 Sesión Baileys eliminada manualmente');
+        console.log(`🧹 Sesión Baileys eliminada manualmente: ${authDir}`);
       }
     } catch (error) {
       console.error('Error al eliminar sesión Baileys:', error);

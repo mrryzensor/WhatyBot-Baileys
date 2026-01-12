@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Smartphone, Wifi, Activity, CheckCircle, XCircle, Crown, Gift, Zap, TrendingUp, AlertCircle } from 'lucide-react';
+import { Smartphone, Wifi, Activity, CheckCircle, XCircle, Crown, Gift, Zap, TrendingUp, AlertCircle, Infinity as InfinityIcon, CircleCheckBig } from 'lucide-react';
 import { MessageLog } from '../types';
-import { getCurrentUser, getUserStats } from '../services/usersApi';
-import { getSubscriptionLimits } from '../services/usersApi';
+import { getSubscriptionLimits, getCurrentUser, getUserStats } from '../services/usersApi';
+import { SessionManager, SessionManagerHandle } from './SessionManager';
+import { useSession } from '../context/SessionContext';
 
 interface DashboardProps {
   isConnected: boolean;
@@ -20,14 +21,18 @@ interface DashboardPropsWithUser extends DashboardProps {
   connectedPhone?: string | null;
 }
 
-export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs, qrCode, onInitialize, onResetSession, isInitializing, socketStatus, currentUserId, currentUser: propCurrentUser, connectedPhone }) => {
-  console.log('Dashboard render:', { isConnected, hasQrCode: !!qrCode, qrCodeLength: qrCode?.length, isInitializing, socketStatus });
-  
+export const Dashboard: React.FC<DashboardPropsWithUser> = ({ logs, onInitialize, onResetSession, socketStatus, currentUserId, currentUser: propCurrentUser, connectedPhone }) => {
+  const { sessions, selectedSession, selectedSessionId, loading: sessionsLoading, initializeSession, refreshQR } = useSession();
+  const isConnected = selectedSession?.isReady || false;
+  const qrCode = selectedSession?.status === 'waiting_qr' ? '(Cargando QR...)' : null; // QR handling will be via SessionManager or refreshQR
+  console.log('Dashboard render:', { isConnected, hasQrCode: !!qrCode, qrCodeLength: qrCode?.length, socketStatus });
+
   const [userInfo, setUserInfo] = useState<any>(null);
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const qrContainerRef = useRef<HTMLDivElement>(null);
+  const sessionManagerRef = useRef<SessionManagerHandle>(null);
 
   useEffect(() => {
     loadUserInfo();
@@ -38,16 +43,16 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
       setLoading(true);
       const user = propCurrentUser || await getCurrentUser();
       setUserInfo(user);
-      
+
       const [limitsResponse, statsResponse] = await Promise.all([
         getSubscriptionLimits(),
         currentUserId ? getUserStats(currentUserId) : Promise.resolve(null)
       ]);
-      
+
       if (limitsResponse.success) {
         setSubscriptionLimits(limitsResponse.limits);
       }
-      
+
       if (statsResponse && statsResponse.success) {
         setUserStats(statsResponse.stats);
       }
@@ -57,7 +62,7 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
       setLoading(false);
     }
   };
- 
+
   const formatPhone = (phone?: string | null) => {
     if (!phone) return '';
     const digits = phone.replace(/\D/g, '');
@@ -72,12 +77,12 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
     // Fallback genérico: +<todo>
     return `+${digits}`;
   };
-  
+
   // Filter logs by current user
-  const userLogs = currentUserId 
+  const userLogs = currentUserId
     ? logs.filter(l => !l.userId || l.userId === currentUserId)
     : logs; // Show all logs if no userId (backward compatibility)
-  
+
   // Use DB count as source of truth for sent messages (includes auto-replies and all message types)
   const sentCountFromDB = userStats?.currentMonthCount || 0;
   // Also count from logs for display (may differ if logs weren't loaded or filtered)
@@ -88,7 +93,7 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
   const subscriptionType = userInfo?.subscription_type || 'gratuito';
   const subscriptionLimit = subscriptionLimits.find(l => l.type === subscriptionType);
   const currentMonthCount = userStats?.currentMonthCount || 0;
-  
+
   // Administrador always has unlimited messages
   const isUnlimited = subscriptionType === 'administrador' || subscriptionLimit?.messages === Infinity;
   const messagesLimit = isUnlimited ? Infinity : (subscriptionLimit?.messages || 0);
@@ -128,7 +133,11 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
   };
 
   const handleInitializeAndScroll = () => {
-    onInitialize();
+    if (sessionManagerRef.current) {
+      sessionManagerRef.current.createSession();
+    } else {
+      onInitialize(); // fallback
+    }
     // Scroll to QR container after a short delay to allow QR to render
     setTimeout(() => {
       qrContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -136,13 +145,13 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
   };
 
   return (
-    <div className="space-y-6">
-      <header className="mb-8 flex justify-between items-center">
+    <div className="space-y-4">
+      <header className="mb-4 flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Resumen del Sistema</h2>
           <p className="text-slate-500">Estado en tiempo real de tu instancia WhatyBot.</p>
         </div>
-        <div 
+        <div
           onClick={handleInitializeAndScroll}
           className={`text-xs px-3 py-1 rounded-full cursor-pointer transition-all hover:opacity-80 ${socketStatus === 'Connected' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
           title="Haz clic para conectar WhatsApp y generar QR"
@@ -153,282 +162,210 @@ export const Dashboard: React.FC<DashboardPropsWithUser> = ({ isConnected, logs,
 
       {/* Subscription Info Card */}
       {!loading && userInfo && subscriptionLimit && (
-        <div className={`bg-white rounded-xl shadow-sm border-2 p-6 ${getSubscriptionColor(subscriptionType).split(' ')[0]} border-${subscriptionType === 'administrador' ? 'yellow' : subscriptionType === 'pro' ? 'blue' : subscriptionType === 'elite' ? 'purple' : 'green'}-300`}>
-          <div className="flex items-start justify-between mb-4">
+        <div className={`bg-white rounded-xl shadow-sm border-2 p-4 ${getSubscriptionColor(subscriptionType).split(' ')[0]} border-${subscriptionType === 'administrador' ? 'yellow' : subscriptionType === 'pro' ? 'blue' : subscriptionType === 'elite' ? 'purple' : 'green'}-300`}>
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              {getSubscriptionIcon(subscriptionType)}
+              <div className="p-2.5 bg-white/50 rounded-xl shadow-sm border border-white/60">
+                {getSubscriptionIcon(subscriptionType)}
+              </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-800 capitalize">{subscriptionType}</h3>
-                <p className="text-sm text-slate-600">
+                <h3 className="text-xl font-black text-slate-800 capitalize leading-none tracking-tight">{subscriptionType}</h3>
+                <p className="text-sm font-medium text-slate-500 mt-2">
                   {userInfo.subscription_start_date && userInfo.subscription_end_date ? (
-                    <>
+                    <span className="flex items-center gap-1.5">
                       Válido hasta: {formatDate(userInfo.subscription_end_date)}
                       {isSubscriptionExpired(userInfo.subscription_end_date) && (
-                        <span className="ml-2 text-red-600 font-semibold">(Expirada)</span>
+                        <span className="ml-1 text-red-600 font-bold">(Expirada)</span>
                       )}
-                    </>
+                    </span>
                   ) : (
-                    'Suscripción permanente'
+                    <span className="flex items-center gap-1.5">
+                      <InfinityIcon size={14} className="opacity-70" />
+                      Suscripción permanente
+                    </span>
                   )}
                 </p>
               </div>
             </div>
             {subscriptionLimit.price > 0 && (
               <div className="text-right">
-                <p className="text-xs text-slate-500">Precio</p>
+                <p className="text-xs text-slate-500 font-medium">Precio</p>
                 <p className="text-lg font-bold text-slate-800">${subscriptionLimit.price}/mes</p>
               </div>
             )}
           </div>
 
-          {/* Messages Usage */}
-          <div className="mt-4">
+          <div className="mt-4 bg-white/50 p-4 rounded-xl border border-white/70 shadow-inner">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-slate-700">Mensajes del mes</span>
-              <span className="text-sm font-semibold text-slate-800">
-                {isUnlimited ? (
-                  <span className="text-green-600">{currentMonthCount} / Ilimitado</span>
-                ) : (
-                  `${currentMonthCount} / ${messagesLimit.toLocaleString()}`
-                )}
+              <span className="text-sm font-bold text-slate-600 uppercase tracking-wide">Mensajes consumidos</span>
+              <span className="text-sm font-black text-slate-800">
+                <span className={`px-3 py-1 rounded-lg border ${isUnlimited ? 'text-green-700 bg-green-100/80 border-green-200' :
+                  usagePercentage >= 90 ? 'text-red-700 bg-red-100/80 border-red-200' :
+                    'text-indigo-700 bg-indigo-100/80 border-indigo-200'
+                  }`}>
+                  {currentMonthCount} / {isUnlimited ? 'ILIMITADO' : messagesLimit.toLocaleString()}
+                </span>
               </span>
             </div>
-            {!isUnlimited && messagesLimit > 0 && (
-              <>
-                <div className="w-full bg-slate-200 rounded-full h-3 mb-2">
+
+            {isUnlimited ? (
+              <div className="flex items-center gap-4 py-1">
+                <div className="flex items-center gap-1.5 text-xs font-black text-green-700 bg-green-100/50 px-3 py-1 rounded-lg border border-green-200 shadow-sm">
+                  <CircleCheckBig size={16} />
+                  <span>SIN LÍMITES ACTIVOS</span>
+                </div>
+                <div className="h-6 w-px bg-slate-300/40"></div>
+                <p className="text-xs text-slate-500 font-bold italic">Tu cuenta no tiene restricciones de envío de mensajes.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                <div className="w-full bg-slate-200/50 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full transition-all ${
-                      usagePercentage >= 90 ? 'bg-red-500' :
+                    className={`h-3 rounded-full transition-all ${usagePercentage >= 90 ? 'bg-red-500' :
                       usagePercentage >= 70 ? 'bg-orange-500' :
-                      'bg-green-500'
-                    }`}
+                        'bg-green-500'
+                      }`}
                     style={{ width: `${Math.min(100, usagePercentage)}%` }}
                   />
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className={`font-semibold ${
-                    messagesRemaining === 0 ? 'text-red-600' :
-                    messagesRemaining <= messagesLimit * 0.1 ? 'text-orange-600' :
-                    'text-green-600'
-                  }`}>
-                    {messagesRemaining === 0 ? (
-                      <span className="flex items-center gap-1">
-                        <AlertCircle size={14} />
-                        Límite alcanzado
-                      </span>
-                    ) : (
-                      `${messagesRemaining} mensajes restantes`
-                    )}
+                  <span className={`font-bold ${messagesRemaining === 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                    {messagesRemaining === 0 ? 'Límite alcanzado' : `${messagesRemaining} mensajes restantes`}
                   </span>
-                  <span className="text-slate-500">
+                  <span className="text-slate-500 font-medium">
                     {usagePercentage.toFixed(1)}% utilizado
                   </span>
                 </div>
-              </>
-            )}
-            {isUnlimited && (
-              <div className="mt-2">
-                <p className="text-sm font-medium text-green-600">✓ Mensajes ilimitados</p>
-                <p className="text-xs text-slate-500 mt-1">No hay restricciones de envío</p>
               </div>
             )}
-          </div>
-
-          {/* Subscription Details */}
-          <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-slate-500">Duración</p>
-              <p className="font-semibold text-slate-800">
-                {subscriptionLimit.duration ? `${subscriptionLimit.duration} día(s)` : 'Permanente'}
-              </p>
-            </div>
-            <div>
-              <p className="text-slate-500">Límite mensual</p>
-              <p className="font-semibold text-slate-800">
-                {messagesLimit === Infinity ? 'Ilimitado' : `${messagesLimit.toLocaleString()} mensajes`}
-              </p>
-            </div>
           </div>
         </div>
       )}
 
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div 
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Card: Client Status */}
+        <div
           onClick={handleInitializeAndScroll}
-          className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          title="Haz clic para conectar WhatsApp y generar QR"
+          className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3 cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          title="Haz clic para gestionar sesiones de WhatsApp"
         >
-          <div className={`p-4 rounded-full ${isConnected ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-            <Wifi size={24} />
+          <div className={`p-3 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+            <Wifi size={20} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Estado del Cliente</p>
-            <h3 className={`text-xl font-bold ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-              {isConnected
-                ? connectedPhone
-                  ? `Conectado: ${formatPhone(connectedPhone)}`
-                  : 'Conectado'
-                : 'Desconectado - Conectar'}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cliente</p>
+            <h3 className={`text-lg font-black truncate ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+              {isConnected ? 'CONECTADO' : 'DESCONECTADO'}
             </h3>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-          <div className="p-4 rounded-full bg-blue-100 text-blue-600">
-            <CheckCircle size={24} />
+        {/* Card: Sent Messages */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <div className="p-3 rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
+            <CheckCircle size={20} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Mensajes Enviados</p>
-            <h3 className="text-xl font-bold text-slate-800">{sentCountFromDB}</h3>
-            {sentCountFromDB !== sentCountFromLogs && (
-              <p className="text-xs text-slate-400 mt-1">
-                ({sentCountFromLogs} en registros recientes)
-              </p>
-            )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Enviados</p>
+            <div className="flex items-baseline gap-1.5">
+              <h3 className="text-lg font-black text-slate-800">{sentCountFromDB}</h3>
+              {sentCountFromDB !== sentCountFromLogs && (
+                <span className="text-[10px] text-slate-400 font-medium">({sentCountFromLogs} rec.)</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-          <div className="p-4 rounded-full bg-orange-100 text-orange-600">
-            <Activity size={24} />
+        {/* Card: Failed Messages */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <div className="p-3 rounded-full bg-red-100 text-red-600 flex-shrink-0">
+            <XCircle size={20} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Estado de la Cola</p>
-            <h3 className="text-xl font-bold text-slate-800">{userLogs.length > 0 ? 'Activa' : 'Inactiva'}</h3>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fallidos</p>
+            <h3 className="text-lg font-black text-red-600">{failedCount}</h3>
+          </div>
+        </div>
+
+        {/* Card: Queue Status */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <div className="p-3 rounded-full bg-orange-100 text-orange-600 flex-shrink-0">
+            <Activity size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cola</p>
+            <h3 className="text-lg font-black text-slate-800">{userLogs.length > 0 ? 'ACTIVA' : 'INACTIVA'}</h3>
           </div>
         </div>
       </div>
 
       {/* Connection Area / QR Code */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div ref={qrContainerRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Smartphone size={20} /> Conexión del Dispositivo
-            </h3>
-          </div>
-          <div className="p-8 flex flex-col items-center justify-center min-h-[300px]">
-            {isConnected ? (
-              <div className="text-center">
-                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
-                  <CheckCircle size={48} />
-                </div>
-                <h4 className="text-lg font-bold text-slate-800">WhatsApp está Listo</h4>
-                <p className="text-slate-500 mt-2">La sesión está activa. Puedes comenzar a enviar mensajes.</p>
-                {onResetSession && (
-                  <button
-                    onClick={onResetSession}
-                    className="mt-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Desconectar / Cambiar número
-                  </button>
-                )}
-              </div>
-            ) : qrCode ? (
-              <div className="text-center">
-                <img src={qrCode} alt="QR Code" className="w-64 h-64 mx-auto mb-4 border-4 border-slate-200 rounded-lg" />
-                <p className="text-slate-600 font-medium">Escanea este código QR con WhatsApp</p>
-                <p className="text-slate-500 text-sm mt-2">Abre WhatsApp &gt; Dispositivos Vinculados &gt; Vincular un dispositivo</p>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="w-64 h-64 bg-slate-100 mx-auto rounded-lg flex items-center justify-center mb-4 border-2 border-dashed border-slate-300">
-                  <Smartphone size={48} className="text-slate-300" />
-                </div>
-                <p className="text-slate-600 font-medium mb-4">
-                  {isInitializing ? 'Conectando...' : 'El cliente de WhatsApp está detenido'}
-                </p>
-                <button
-                  onClick={onInitialize}
-                  disabled={isInitializing}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-                >
-                  {isInitializing ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Iniciando...
-                    </>
-                  ) : (
-                    <>
-                      <Wifi size={18} />
-                      Conectar WhatsApp
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={onResetSession}
-                  disabled={isInitializing}
-                  className="mt-3 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Limpiar sesión y generar nuevo QR
-                </button>
-                {!isInitializing && (
-                  <p className="text-slate-400 text-xs mt-3">
-                    💡 Si tienes una sesión guardada, se reconectará automáticamente
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+      <div id="session-manager-area" className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div ref={qrContainerRef} className="">
+          <SessionManager ref={sessionManagerRef} currentUser={propCurrentUser} />
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-800">Registros Recientes</h3>
-          </div>
-          <div className="flex-1 overflow-y-auto max-h-[300px] p-0">
-            {userLogs.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 italic">No hay registros recientes</div>
-            ) : (
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-3">Hora</th>
-                    <th className="px-6 py-3">Tipo</th>
-                    <th className="px-6 py-3">Destino</th>
-                    <th className="px-6 py-3">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userLogs.slice().reverse().map((log) => {
-                    const messageType = log.messageType || 'single';
-                    const getTypeLabel = (type: string) => {
-                      switch (type) {
-                        case 'auto-reply': return { label: 'Auto-respuesta', color: 'bg-purple-100 text-purple-700' };
-                        case 'bulk': return { label: 'Masivo', color: 'bg-blue-100 text-blue-700' };
-                        case 'group': return { label: 'Grupo', color: 'bg-indigo-100 text-indigo-700' };
-                        case 'media': return { label: 'Multimedia', color: 'bg-pink-100 text-pink-700' };
-                        default: return { label: 'Individual', color: 'bg-slate-100 text-slate-700' };
-                      }
-                    };
-                    const typeInfo = getTypeLabel(messageType);
-                    
-                    return (
-                      <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-6 py-4 font-mono text-slate-500">
-                          {log.timestamp.toLocaleTimeString()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeInfo.color}`}>
-                            {typeInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-700">{log.target}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${log.status === 'sent' ? 'bg-green-100 text-green-700' :
-                            log.status === 'failed' ? 'bg-red-100 text-red-700' :
-                              'bg-yellow-100 text-yellow-700'
-                            }`}>
-                            {log.status === 'sent' ? 'ENVIADO' : log.status === 'failed' ? 'FALLIDO' : 'PENDIENTE'}
-                          </span>
-                        </td>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1 min-h-[32px]">
+                <h3 className="font-semibold text-slate-800">Registros Recientes</h3>
+              </div>
+              <div className="h-[350px] overflow-y-auto pr-2 -mr-2">
+                {userLogs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 italic">No hay registros recientes</div>
+                ) : (
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+                      <tr>
+                        <th className="px-6 py-3">Hora</th>
+                        <th className="px-6 py-3">Tipo</th>
+                        <th className="px-6 py-3">Destino</th>
+                        <th className="px-6 py-3">Estado</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+                    </thead>
+                    <tbody>
+                      {userLogs.slice().reverse().map((log) => {
+                        const messageType = log.messageType || 'single';
+                        const getTypeLabel = (type: string) => {
+                          switch (type) {
+                            case 'auto-reply': return { label: 'Auto-respuesta', color: 'bg-purple-100 text-purple-700' };
+                            case 'bulk': return { label: 'Masivo', color: 'bg-blue-100 text-blue-700' };
+                            case 'group': return { label: 'Grupo', color: 'bg-indigo-100 text-indigo-700' };
+                            case 'media': return { label: 'Multimedia', color: 'bg-pink-100 text-pink-700' };
+                            default: return { label: 'Individual', color: 'bg-slate-100 text-slate-700' };
+                          }
+                        };
+                        const typeInfo = getTypeLabel(messageType);
+
+                        return (
+                          <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="px-6 py-4 font-mono text-slate-500">
+                              {log.timestamp.toLocaleTimeString()}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeInfo.color}`}>
+                                {typeInfo.label}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-700">{log.target}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${log.status === 'sent' ? 'bg-green-100 text-green-700' :
+                                log.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                  'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                {log.status === 'sent' ? 'ENVIADO' : log.status === 'failed' ? 'FALLIDO' : 'PENDIENTE'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, Save, X, Menu as MenuIcon, ArrowRight, CheckCircle, Circle, Users, Clock, Download, Upload } from 'lucide-react';
 import { InteractiveMenu, MenuOption } from '../types';
-import { getInteractiveMenus, createInteractiveMenu, updateInteractiveMenu, deleteInteractiveMenu, getUserSessions, clearUserSession, uploadOptionMedia, exportMenus, importMenus } from '../services/api';
+import { getInteractiveMenus, createInteractiveMenu, updateInteractiveMenu, deleteInteractiveMenu, getUserSessions, clearUserSession, uploadOptionMedia, exportMenus, importMenus, getApiUrl } from '../services/api';
 import { ConfirmModal } from './ConfirmModal';
 import { MediaUpload } from './MediaUpload';
 import { useMedia } from '../hooks/useMedia';
+import { GlobalSessionIndicator } from './GlobalSessionToggle';
+import { useGlobalSessions } from '../hooks/useGlobalSessions';
+import { ImportModal } from './ImportModal';
+import { MessageEditorToolbar } from './MessageEditorToolbar';
 
 interface MenuManagerProps {
     toast?: {
@@ -23,6 +27,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [menuToDelete, setMenuToDelete] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+    const [isExporting, setIsExporting] = useState(false);
 
     const [formData, setFormData] = useState<Partial<InteractiveMenu>>({
         name: '',
@@ -36,9 +41,16 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
     // Local state for triggers input (to handle commas and spaces properly)
     const [triggersInput, setTriggersInput] = useState('');
+    const [showImportModal, setShowImportModal] = useState(false);
 
     const menuMedia = useMedia({ maxFiles: 10 }); // For menu-level media
     const optionMedia = useMedia({ maxFiles: 10 }); // For option-level media
+    const { globalSessionsEnabled } = useGlobalSessions();
+
+    // Refs para los textareas del editor de formato
+    const menuMessageRef = useRef<HTMLTextAreaElement>(null);
+    const optionMessageRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
+    const optionResponseRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         loadMenus();
@@ -91,12 +103,28 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
         // Load menu-level media
         if (menu.mediaPaths && menu.mediaPaths.length > 0) {
-            const mediaItems = menu.mediaPaths.map((path, index) => ({
-                id: `menu-${index}`,
-                mediaPath: path,
-                caption: menu.captions?.[index] || '',
-                file: undefined
-            }));
+            const mediaItems = menu.mediaPaths.map((path, index) => {
+                const previewUrl = path.startsWith('http')
+                    ? path
+                    : `${getApiUrl()}/uploads/${path.replace(/^.*[\\/]/, '')}`;
+
+                let type: 'image' | 'video' | 'document' = 'document';
+                const lowerPath = path.toLowerCase();
+                if (lowerPath.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+                    type = 'image';
+                } else if (lowerPath.match(/\.(mp4|avi|mov|webm)$/)) {
+                    type = 'video';
+                }
+
+                return {
+                    id: `menu-${index}`,
+                    mediaPath: path,
+                    type,
+                    caption: menu.captions?.[index] || '',
+                    preview: previewUrl,
+                    file: undefined
+                };
+            });
             menuMedia.setMediaItems(mediaItems);
         } else {
             menuMedia.setMediaItems([]);
@@ -176,7 +204,9 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
         } catch (error: any) {
             console.error('Error saving menu:', error);
             if (toast) {
-                toast.error('Error al guardar menú: ' + error.message);
+                // Enhanced error message
+                const serverMsg = error.response?.data?.error || error.message;
+                toast.error('Error al guardar menú: ' + serverMsg);
             }
         } finally {
             setIsLoading(false);
@@ -259,12 +289,28 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
             setEditingOption({ ...option });
             // Load existing media into optionMedia
             if (option.mediaPaths && option.mediaPaths.length > 0) {
-                const mediaItems = option.mediaPaths.map((path, index) => ({
-                    id: `existing-${index}`,
-                    mediaPath: path,
-                    caption: option.captions?.[index] || '',
-                    file: undefined
-                }));
+                const mediaItems = option.mediaPaths.map((path, index) => {
+                    const previewUrl = path.startsWith('http')
+                        ? path
+                        : `${getApiUrl()}/uploads/${path.replace(/^.*[\\/]/, '')}`;
+
+                    let type: 'image' | 'video' | 'document' = 'document';
+                    const lowerPath = path.toLowerCase();
+                    if (lowerPath.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+                        type = 'image';
+                    } else if (lowerPath.match(/\.(mp4|avi|mov|webm)$/)) {
+                        type = 'video';
+                    }
+
+                    return {
+                        id: `existing-${index}`,
+                        mediaPath: path,
+                        type,
+                        caption: option.captions?.[index] || '',
+                        preview: previewUrl,
+                        file: undefined
+                    };
+                });
                 optionMedia.setMediaItems(mediaItems);
             } else {
                 optionMedia.setMediaItems([]);
@@ -424,10 +470,39 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleExport = async () => {
+        setIsExporting(true);
         try {
-            const response = await exportMenus();
-            if (response.success) {
-                const dataStr = JSON.stringify(response.menus, null, 2);
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/menus/export`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al exportar menús');
+            }
+
+            const contentType = response.headers.get('content-type');
+
+            if (contentType && contentType.includes('application/zip')) {
+                // Download ZIP file
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `menus-export-${new Date().toISOString().split('T')[0]}.zip`;
+                link.click();
+                URL.revokeObjectURL(url);
+
+                if (toast) {
+                    toast.success('Menús exportados exitosamente');
+                }
+            } else {
+                // Download JSON file (legacy, no media files)
+                const data = await response.json();
+                const dataStr = JSON.stringify(data.menus, null, 2);
                 const dataBlob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(dataBlob);
                 const link = document.createElement('a');
@@ -437,7 +512,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                 URL.revokeObjectURL(url);
 
                 if (toast) {
-                    toast.success(`${response.count} menú(s) exportado(s) exitosamente`);
+                    toast.success(`${data.count} menú(s) exportado(s) exitosamente`);
                 }
             }
         } catch (error: any) {
@@ -445,6 +520,8 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
             if (toast) {
                 toast.error('Error al exportar menús: ' + error.message);
             }
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -452,32 +529,87 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
         fileInputRef.current?.click();
     };
 
+    const handleImportFromModal = async (file: File, applyToAllSessions: boolean) => {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('applyToAllSessions', String(applyToAllSessions));
+
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/menus/import`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al importar');
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                await loadMenus(); // Reload menus
+                if (toast) {
+                    const parts = [];
+                    if (result.imported > 0) parts.push(`${result.imported} nuevo(s)`);
+                    if (result.replaced > 0) parts.push(`${result.replaced} reemplazado(s)`);
+                    if (result.skipped > 0) parts.push(`${result.skipped} omitido(s)`);
+
+                    const sessionScope = applyToAllSessions ? ' (todas las sesiones)' : ' (sesión activa)';
+                    const message = parts.length > 0
+                        ? `Menús importados: ${parts.join(', ')}${sessionScope}`
+                        : `Importación completada${sessionScope}`;
+                    toast.success(message);
+                }
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('Import errors:', result.errors);
+                }
+            }
+        } catch (error: any) {
+            console.error('Error importing menus:', error);
+            if (toast) {
+                toast.error('Error al importar menús: ' + error.message);
+            }
+        }
+    };
+
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
         try {
-            const text = await file.text();
-            const data = JSON.parse(text);
+            const formData = new FormData();
+            formData.append('file', file);
 
-            // Validate that it's an array of menus
-            const menusToImport = Array.isArray(data) ? data : (data.menus || []);
+            const apiUrl = getApiUrl();
+            const response = await fetch(`${apiUrl}/api/menus/import`, {
+                method: 'POST',
+                body: formData
+            });
 
-            if (!Array.isArray(menusToImport) || menusToImport.length === 0) {
-                if (toast) {
-                    toast.error('Archivo inválido: debe contener un array de menús');
-                }
-                return;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al importar');
             }
 
-            const response = await importMenus(menusToImport);
-            if (response.success) {
+            const result = await response.json();
+
+            if (result.success) {
                 await loadMenus(); // Reload menus
                 if (toast) {
-                    toast.success(`${response.imported} menú(s) importado(s) exitosamente${response.skipped > 0 ? `, ${response.skipped} omitido(s)` : ''}`);
+                    const parts = [];
+                    if (result.imported > 0) parts.push(`${result.imported} nuevo(s)`);
+                    if (result.replaced > 0) parts.push(`${result.replaced} reemplazado(s)`);
+                    if (result.skipped > 0) parts.push(`${result.skipped} omitido(s)`);
+
+                    const message = parts.length > 0
+                        ? `Menús importados: ${parts.join(', ')}`
+                        : 'Importación completada';
+                    toast.success(message);
                 }
-                if (response.errors && response.errors.length > 0) {
-                    console.warn('Import errors:', response.errors);
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('Import errors:', result.errors);
                 }
             }
         } catch (error: any) {
@@ -500,9 +632,12 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                 <div className="lg:col-span-1 flex flex-col gap-4">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <div className="mb-4">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                                <MenuIcon size={20} className="text-blue-600" /> Menús Interactivos
-                            </h3>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                    <MenuIcon size={20} className="text-blue-600" /> Menús Interactivos
+                                </h3>
+                                <GlobalSessionIndicator enabled={globalSessionsEnabled} />
+                            </div>
                             <p className="text-xs text-slate-500 mt-2">
                                 Crea menús con opciones para guiar conversaciones.
                             </p>
@@ -511,14 +646,24 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             <div className="flex gap-2 mt-4">
                                 <button
                                     onClick={handleExport}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
+                                    disabled={isExporting}
+                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="Exportar menús"
                                 >
-                                    <Download size={14} />
-                                    Exportar
+                                    {isExporting ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent"></div>
+                                            Exportando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download size={14} />
+                                            Exportar
+                                        </>
+                                    )}
                                 </button>
                                 <button
-                                    onClick={handleImport}
+                                    onClick={() => setShowImportModal(true)}
                                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-xs font-medium"
                                     title="Importar menús"
                                 >
@@ -528,7 +673,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 <input
                                     ref={fileInputRef}
                                     type="file"
-                                    accept=".json"
+                                    accept=".json,.zip"
                                     onChange={handleFileChange}
                                     className="hidden"
                                 />
@@ -663,12 +808,26 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 )}
                             </div>
 
+
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
                                     Mensaje del Menú <span className="text-slate-400 text-xs font-normal">(opcional si hay captions)</span>
                                 </label>
+
+                                {/* Barra de Formato */}
+                                <MessageEditorToolbar
+                                    textareaRef={menuMessageRef}
+                                    value={formData.message}
+                                    onChange={(value) => {
+                                        setFormData({ ...formData, message: value });
+                                        if (formErrors.message) setFormErrors({ ...formErrors, message: '' });
+                                    }}
+                                    showVariables={false}
+                                />
+
                                 <textarea
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none ${formErrors.message ? 'border-red-300' : 'border-slate-300'
+                                    ref={menuMessageRef}
+                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2 ${formErrors.message ? 'border-red-300' : 'border-slate-300'
                                         }`}
                                     placeholder="¡Hola! 👋 ¿En qué puedo ayudarte?&#10;&#10;1️⃣ Información&#10;2️⃣ Precios&#10;3️⃣ Soporte"
                                     rows={6}
@@ -855,8 +1014,18 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Respuesta (opcional)</label>
+
+                                    {/* Barra de Formato */}
+                                    <MessageEditorToolbar
+                                        textareaRef={optionResponseRef}
+                                        value={editingOption.response || ''}
+                                        onChange={(value) => setEditingOption({ ...editingOption, response: value })}
+                                        showVariables={false}
+                                    />
+
                                     <textarea
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                        ref={optionResponseRef}
+                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2"
                                         placeholder="Texto de respuesta cuando se selecciona esta opción"
                                         rows={4}
                                         value={editingOption.response || ''}
@@ -1002,6 +1171,15 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                 message={`¿Estás seguro de que deseas eliminar el menú "${menus.find(m => m.id === menuToDelete)?.name}"? Esta acción no se puede deshacer.`}
                 confirmText="Eliminar"
                 confirmButtonClass="bg-red-600 hover:bg-red-700"
+            />
+
+            <ImportModal
+                isOpen={showImportModal}
+                onClose={() => setShowImportModal(false)}
+                onImport={handleImportFromModal}
+                title="Importar Menús"
+                description="Selecciona un archivo ZIP o JSON con menús"
+                acceptedFormats=".json,.zip"
             />
         </>
     );

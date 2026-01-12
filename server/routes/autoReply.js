@@ -3,11 +3,26 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { deleteItemMediaFiles, cleanSessionOrphanedFiles } from '../utils/mediaCleanup.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+// Helper to get session ID
+const getSessionId = (req) => {
+    const sessionManager = req.app.get('sessionManager');
+    if (req.sessionId) return req.sessionId;
+    if (req.userId) return sessionManager.getFirstActiveSession(req.userId);
+
+    // If no userId, get the first session from the sessions Map
+    if (sessionManager.sessions && sessionManager.sessions.size > 0) {
+        const firstSessionId = sessionManager.sessions.keys().next().value;
+        return firstSessionId;
+    }
+    return null;
+};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -26,27 +41,34 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: {
-        fileSize: 100 * 1024 * 1024 // 100MB limit
-    },
+    limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|gif|mp4|avi|mov|pdf|doc|docx|xls|xlsx|mp3|wav|ogg/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
-        if (mimetype && extname) {
+        const allowedTypes = /jpeg|jpg|png|gif|mp4|avi|mov|pdf|doc|docx|xls|xlsx|mp3|wav|ogg|webp|zip|json/;
+        if (allowedTypes.test(path.extname(file.originalname).toLowerCase()) && allowedTypes.test(file.mimetype)) {
             return cb(null, true);
-        } else {
-            cb(new Error('Invalid file type'));
         }
+        cb(new Error('Invalid file type'));
     }
 });
 
 // GET /api/auto-reply/rules - Get all auto-reply rules
 router.get('/rules', (req, res) => {
     try {
-        const whatsappClient = req.app.get('whatsappClient');
-        // Normalize keywords to arrays and isActive to boolean before sending to frontend
-        const normalizedRules = whatsappClient.autoReplyRules.map(rule => {
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+
+        if (!sessionId) {
+            // Return empty rules if no session is active, or error?
+            // For now return empty list to avoid UI breaking
+            return res.json({ success: true, rules: [] });
+        }
+
+        const client = sessionManager.getSessionClient(sessionId);
+        if (!client) {
+            return res.json({ success: true, rules: [] });
+        }
+
+        const normalizedRules = client.autoReplyRules.map(rule => {
             const normalizedRule = { ...rule };
             if (normalizedRule.keywords && typeof normalizedRule.keywords === 'string') {
                 try {
@@ -55,15 +77,13 @@ router.get('/rules', (req, res) => {
                     normalizedRule.keywords = normalizedRule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
                 }
             }
-            // Ensure keywords is always an array
-            if (!Array.isArray(normalizedRule.keywords)) {
-                normalizedRule.keywords = [];
-            }
-            // Ensure isActive is always a boolean
+            if (!Array.isArray(normalizedRule.keywords)) normalizedRule.keywords = [];
+
+            // Normalize isActive
             if (normalizedRule.isActive !== undefined) {
                 normalizedRule.isActive = Boolean(normalizedRule.isActive);
             } else {
-                normalizedRule.isActive = true; // Default to true if not set
+                normalizedRule.isActive = true;
             }
             return normalizedRule;
         });
@@ -74,255 +94,176 @@ router.get('/rules', (req, res) => {
     }
 });
 
-// POST /api/auto-reply/rules - Create new rule (with optional single or multiple media files)
+// POST /api/auto-reply/rules - Create new rule
 router.post('/rules', upload.array('media', 10), (req, res) => {
     try {
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
+
+        const client = sessionManager.getSessionClient(sessionId);
+        if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
+
         const rule = req.body;
-
-        console.log('[autoReply] POST /rules - body:', rule);
-
         if (!rule.name || !rule.keywords) {
             return res.status(400).json({ error: 'Missing required fields: name, keywords' });
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
-        console.log('[autoReply] PUT /rules/:id - files:', files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, path: f.path })));
-        console.log('[autoReply] POST /rules - files:', files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, path: f.path })));
 
-        // Validation: menu-type rules need menuId, simple-type rules need response or media
-        if (rule.type === 'menu') {
-            if (!rule.menuId) {
-                return res.status(400).json({ error: 'Menu-type rules require menuId' });
-            }
-        } else {
-            if (!rule.response && (!files || files.length === 0)) {
-                return res.status(400).json({ error: 'Missing required field: response or media' });
-            }
+        if (rule.type === 'menu' && !rule.menuId) {
+            return res.status(400).json({ error: 'Menu-type rules require menuId' });
+        } else if (rule.type !== 'menu' && !rule.response && (!files || files.length === 0)) {
+            return res.status(400).json({ error: 'Missing required field: response or media' });
         }
 
-        // Normalize keywords to array
         let keywordsArray = [];
         if (typeof rule.keywords === 'string') {
-            try {
-                keywordsArray = JSON.parse(rule.keywords);
-            } catch {
-                keywordsArray = rule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
-            }
+            try { keywordsArray = JSON.parse(rule.keywords); }
+            catch { keywordsArray = rule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0); }
         } else if (Array.isArray(rule.keywords)) {
             keywordsArray = rule.keywords;
         }
 
         rule.id = Date.now().toString();
-        rule.keywords = keywordsArray; // Ensure it's always an array
+        rule.keywords = keywordsArray;
 
-        // Manejo de múltiples medias: construir mediaPaths y captions
-        const mediaPaths = files && files.length > 0 ? files.map(f => f.path) : [];
-
+        // Convert absolute paths to relative paths (relative to server directory)
+        const mediaPaths = files.map(f => {
+            const relativePath = path.relative(process.cwd(), f.path);
+            return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+        });
         let mediaCaptions = [];
         if (rule.captions) {
             try {
-                const parsed = JSON.parse(rule.captions);
-                if (Array.isArray(parsed)) {
-                    mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
-                }
-            } catch (e) {
-                // fallback a caption simple más abajo
-            }
+                const parsed = JSON.parse(rule.captions); // Assuming rule.captions is JSON string
+                if (Array.isArray(parsed)) mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
+            } catch (e) { }
         }
-
         if (mediaCaptions.length === 0 && mediaPaths.length > 0) {
-            const baseCaption = rule.caption || '';
-            mediaCaptions = mediaPaths.map(() => baseCaption);
+            mediaCaptions = mediaPaths.map(() => rule.caption || '');
         }
 
         rule.mediaPaths = mediaPaths;
         rule.captions = mediaCaptions;
+        rule.mediaPath = mediaPaths[0] || null;
+        rule.caption = mediaCaptions[0] || (rule.caption || '');
 
-        console.log('[autoReply] POST /rules - computed mediaPaths:', mediaPaths, 'mediaCaptions:', mediaCaptions);
-
-        // Compatibilidad con campos antiguos de un solo archivo
-        rule.mediaPath = mediaPaths.length > 0 ? mediaPaths[0] : null;
-        rule.caption = mediaCaptions.length > 0 ? mediaCaptions[0] : (rule.caption || '');
-
-        // Normalize isActive to boolean
         if (rule.isActive !== undefined) {
-            if (typeof rule.isActive === 'string') {
-                rule.isActive = rule.isActive === 'true' || rule.isActive === '1';
-            } else {
-                rule.isActive = Boolean(rule.isActive);
-            }
+            rule.isActive = (String(rule.isActive) === 'true' || rule.isActive === true || rule.isActive === '1');
         } else {
-            rule.isActive = true; // Default to true if not set
+            rule.isActive = true;
         }
 
-        // Handle type and menuId for menu-type rules
         rule.type = rule.type || 'simple';
-        if (rule.type === 'menu' && rule.menuId) {
-            rule.menuId = rule.menuId;
-        }
 
-        whatsappClient.autoReplyRules.push(rule);
-        whatsappClient.saveAutoReplyRules();
+        client.autoReplyRules.push(rule);
+        client.saveAutoReplyRules();
 
-        // Ensure isActive is boolean in response
-        const normalizedRule = { ...rule };
-        normalizedRule.isActive = Boolean(normalizedRule.isActive);
-
+        const normalizedRule = { ...rule, isActive: Boolean(rule.isActive) };
         res.json({ success: true, rule: normalizedRule });
+
     } catch (error) {
         console.error('Error creating rule:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// PUT /api/auto-reply/rules/:id - Update rule (with optional single or multiple media files)
+// PUT /api/auto-reply/rules/:id - Update rule
 router.put('/rules/:id', upload.array('media', 10), (req, res) => {
     try {
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
+
+        const client = sessionManager.getSessionClient(sessionId);
+        if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
+
         const { id } = req.params;
         const updatedRule = req.body;
 
-        console.log('[autoReply] PUT /rules/:id - id:', id, 'body:', updatedRule);
+        const index = client.autoReplyRules.findIndex(r => r.id === id);
+        if (index === -1) return res.status(404).json({ error: 'Rule not found' });
 
-        const index = whatsappClient.autoReplyRules.findIndex(r => r.id === id);
-        if (index === -1) {
-            return res.status(404).json({ error: 'Rule not found' });
-        }
-
-        // Normalize keywords to array
         if (updatedRule.keywords) {
             let keywordsArray = [];
             if (typeof updatedRule.keywords === 'string') {
-                try {
-                    keywordsArray = JSON.parse(updatedRule.keywords);
-                } catch {
-                    keywordsArray = updatedRule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
-                }
+                try { keywordsArray = JSON.parse(updatedRule.keywords); }
+                catch { keywordsArray = updatedRule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0); }
             } else if (Array.isArray(updatedRule.keywords)) {
                 keywordsArray = updatedRule.keywords;
             }
-            updatedRule.keywords = keywordsArray; // Ensure it's always an array
+            updatedRule.keywords = keywordsArray;
         }
 
-        // Normalize isActive to boolean
         if (updatedRule.isActive !== undefined) {
-            if (typeof updatedRule.isActive === 'string') {
-                updatedRule.isActive = updatedRule.isActive === 'true' || updatedRule.isActive === '1';
-            } else {
-                updatedRule.isActive = Boolean(updatedRule.isActive);
-            }
+            updatedRule.isActive = (String(updatedRule.isActive) === 'true' || updatedRule.isActive === true || updatedRule.isActive === '1');
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
 
-        // Handle media updates (single o múltiples archivos)
-        if (files && files.length > 0) {
-            // New files uploaded - delete old ones and use new paths
-            const oldRule = whatsappClient.autoReplyRules[index];
+        // First, handle existing media paths (this is the source of truth from frontend)
+        let currentMediaPaths = [];
+        let currentCaptions = [];
 
-            // Borrar todos los archivos antiguos si existen
-            if (Array.isArray(oldRule.mediaPaths) && oldRule.mediaPaths.length > 0) {
-                for (const p of oldRule.mediaPaths) {
-                    if (p && fs.existsSync(p)) {
-                        try { fs.unlinkSync(p); } catch { }
-                    }
-                }
-            } else if (oldRule.mediaPath && fs.existsSync(oldRule.mediaPath)) {
-                try { fs.unlinkSync(oldRule.mediaPath); } catch { }
-            }
-
-            const mediaPaths = files.map(f => f.path);
-
-            let mediaCaptions = [];
-            if (updatedRule.captions) {
-                try {
-                    const parsed = JSON.parse(updatedRule.captions);
-                    if (Array.isArray(parsed)) {
-                        mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
-                    }
-                } catch (e) {
-                    // fallback a caption simple más abajo
-                }
-            }
-
-            if (mediaCaptions.length === 0 && mediaPaths.length > 0) {
-                const baseCaption = updatedRule.caption || '';
-                mediaCaptions = mediaPaths.map(() => baseCaption);
-            }
-
-            updatedRule.mediaPaths = mediaPaths;
-            updatedRule.captions = mediaCaptions;
-
-            console.log('[autoReply] PUT /rules/:id - computed mediaPaths:', mediaPaths, 'mediaCaptions:', mediaCaptions);
-
-            // Compatibilidad con campos antiguos de un solo archivo
-            updatedRule.mediaPath = mediaPaths.length > 0 ? mediaPaths[0] : null;
-            updatedRule.caption = mediaCaptions.length > 0 ? mediaCaptions[0] : (updatedRule.caption || '');
-
-        } else if (updatedRule.existingMediaPaths) {
-            // No new files, but preserve existing mediaPaths (array serializado)
+        if (updatedRule.existingMediaPaths) {
             try {
                 const parsed = typeof updatedRule.existingMediaPaths === 'string'
                     ? JSON.parse(updatedRule.existingMediaPaths)
                     : updatedRule.existingMediaPaths;
                 if (Array.isArray(parsed)) {
-                    updatedRule.mediaPaths = parsed;
-                    // Compatibilidad: mediaPath simple = primer elemento
-                    updatedRule.mediaPath = parsed.length > 0 ? parsed[0] : null;
-
-                    // Parse and update captions array
-                    let mediaCaptions = [];
-                    if (updatedRule.captions) {
-                        try {
-                            const parsedCaptions = typeof updatedRule.captions === 'string'
-                                ? JSON.parse(updatedRule.captions)
-                                : updatedRule.captions;
-                            if (Array.isArray(parsedCaptions)) {
-                                mediaCaptions = parsedCaptions.map(c => (typeof c === 'string' ? c : ''));
-                            }
-                        } catch (e) {
-                            console.warn('[autoReply] Error parsing captions:', e);
-                        }
-                    }
-
-                    // Ensure captions array matches mediaPaths length
-                    while (mediaCaptions.length < parsed.length) {
-                        mediaCaptions.push('');
-                    }
-
-                    updatedRule.captions = mediaCaptions;
-                    updatedRule.caption = mediaCaptions.length > 0 ? mediaCaptions[0] : '';
-
-                    console.log('[autoReply] PUT /rules/:id - preserving existing media with updated captions:', {
-                        mediaPaths: updatedRule.mediaPaths,
-                        captions: updatedRule.captions
-                    });
+                    currentMediaPaths = parsed;
                 }
             } catch (e) {
-                console.warn('[autoReply] Error parsing existingMediaPaths:', e);
+                console.error('Error parsing existingMediaPaths:', e);
             }
             delete updatedRule.existingMediaPaths;
-        } else if (updatedRule.existingMediaPath) {
-            // Compatibilidad antigua: un solo mediaPath preservado
-            updatedRule.mediaPath = updatedRule.existingMediaPath;
-            delete updatedRule.existingMediaPath;
-        } else if (updatedRule.caption !== undefined) {
-            // Caption updated but no file change - preserve existing media
-            const oldRule = whatsappClient.autoReplyRules[index];
-            updatedRule.mediaPath = oldRule.mediaPath;
-            if (Array.isArray(oldRule.mediaPaths)) {
-                updatedRule.mediaPaths = oldRule.mediaPaths;
+        }
+
+        if (updatedRule.captions) {
+            try {
+                const parsedC = typeof updatedRule.captions === 'string'
+                    ? JSON.parse(updatedRule.captions)
+                    : updatedRule.captions;
+                if (Array.isArray(parsedC)) {
+                    currentCaptions = parsedC.map(c => (typeof c === 'string' ? c : ''));
+                }
+            } catch (e) {
+                console.error('Error parsing captions:', e);
             }
         }
 
-        // Merge with existing rule to preserve all fields
-        const existingRule = whatsappClient.autoReplyRules[index];
+        // Add newly uploaded files
+        if (files && files.length > 0) {
+            // Convert absolute paths to relative paths (relative to server directory)
+            const newMediaPaths = files.map(f => {
+                const relativePath = path.relative(process.cwd(), f.path);
+                return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+            });
+            currentMediaPaths = [...currentMediaPaths, ...newMediaPaths];
+
+            // Add empty captions for new files or use provided caption
+            const newCaptions = files.map(() => updatedRule.caption || '');
+            currentCaptions = [...currentCaptions, ...newCaptions];
+        }
+
+        // Update the rule with the final media paths and captions
+        updatedRule.mediaPaths = currentMediaPaths;
+        updatedRule.captions = currentCaptions;
+        updatedRule.mediaPath = currentMediaPaths[0] || null;
+        updatedRule.caption = currentCaptions[0] || '';
+
+        // Clean up old fields
+        if (updatedRule.existingMediaPath) {
+            delete updatedRule.existingMediaPath;
+        }
+
+        const existingRule = client.autoReplyRules[index];
         const mergedRule = {
             ...existingRule,
             ...updatedRule,
             keywords: updatedRule.keywords || existingRule.keywords,
-            id: existingRule.id, // Preserve ID
+            id: existingRule.id,
             mediaPath: updatedRule.mediaPath !== undefined ? updatedRule.mediaPath : existingRule.mediaPath,
             mediaPaths: updatedRule.mediaPaths !== undefined ? updatedRule.mediaPaths : existingRule.mediaPaths,
             captions: updatedRule.captions !== undefined ? updatedRule.captions : existingRule.captions,
@@ -330,27 +271,18 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId
         };
 
-        whatsappClient.autoReplyRules[index] = mergedRule;
-        whatsappClient.saveAutoReplyRules();
+        client.autoReplyRules[index] = mergedRule;
+        client.saveAutoReplyRules();
 
-        // Normalize keywords and isActive before sending response
+        // Limpiar archivos huérfanos después de actualizar
+        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
+        cleanSessionOrphanedFiles(client, uploadDir);
+
         const normalizedRule = { ...mergedRule };
         if (normalizedRule.keywords && typeof normalizedRule.keywords === 'string') {
-            try {
-                normalizedRule.keywords = JSON.parse(normalizedRule.keywords);
-            } catch {
-                normalizedRule.keywords = normalizedRule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
-            }
+            try { normalizedRule.keywords = JSON.parse(normalizedRule.keywords); } catch { normalizedRule.keywords = []; }
         }
-        if (!Array.isArray(normalizedRule.keywords)) {
-            normalizedRule.keywords = [];
-        }
-        // Ensure isActive is a boolean
-        if (normalizedRule.isActive !== undefined) {
-            normalizedRule.isActive = Boolean(normalizedRule.isActive);
-        } else {
-            normalizedRule.isActive = true; // Default to true if not set
-        }
+        normalizedRule.isActive = Boolean(normalizedRule.isActive);
 
         res.json({ success: true, rule: normalizedRule });
     } catch (error) {
@@ -359,161 +291,335 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
     }
 });
 
-// DELETE /api/auto-reply/rules/:id - Delete rule
+// DELETE /api/auto-reply/rules/:id
 router.delete('/rules/:id', (req, res) => {
     try {
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
+
+        const client = sessionManager.getSessionClient(sessionId);
+        if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
+
         const { id } = req.params;
+        const index = client.autoReplyRules.findIndex(r => r.id === id);
+        if (index === -1) return res.status(404).json({ error: 'Rule not found' });
 
-        const index = whatsappClient.autoReplyRules.findIndex(r => r.id === id);
-        if (index === -1) {
-            return res.status(404).json({ error: 'Rule not found' });
-        }
+        const rule = client.autoReplyRules[index];
 
-        // Delete associated media file if exists
-        const rule = whatsappClient.autoReplyRules[index];
-        if (rule.mediaPath && fs.existsSync(rule.mediaPath)) {
-            try {
-                fs.unlinkSync(rule.mediaPath);
-                console.log(`Deleted media file: ${rule.mediaPath}`);
-            } catch (error) {
-                console.warn(`Could not delete media file: ${rule.mediaPath}`, error);
-            }
-        }
+        // Eliminar archivos multimedia de la regla (maneja mediaPaths y mediaPath)
+        deleteItemMediaFiles(rule);
 
-        whatsappClient.autoReplyRules.splice(index, 1);
-        whatsappClient.saveAutoReplyRules();
+        // Eliminar la regla
+        client.autoReplyRules.splice(index, 1);
+        client.saveAutoReplyRules();
 
-        res.json({ success: true, message: 'Rule deleted successfully' });
+        // Limpiar archivos huérfanos
+        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
+        cleanSessionOrphanedFiles(client, uploadDir);
+
+        res.json({ success: true, message: 'Rule deleted' });
     } catch (error) {
-        console.error('Error deleting rule:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST /api/auto-reply/rules/import - Import rules from JSON (with automatic media file copying)
-router.post('/rules/import', express.json(), (req, res) => {
+// GET /api/auto-reply/export - Export rules with media files as ZIP
+router.get('/export', async (req, res) => {
+    console.log('[Export Rules] ========== EXPORT RULES ENDPOINT CALLED ==========');
     try {
-        const whatsappClient = req.app.get('whatsappClient');
-        const { rules } = req.body;
+        console.log('[Export Rules] Step 1: Getting session manager');
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        console.log('[Export Rules] Step 2: Session ID:', sessionId);
+        const client = sessionId ? sessionManager.getSessionClient(sessionId) : null;
+        console.log('[Export Rules] Step 3: Client:', client ? 'Found' : 'Not found');
 
-        if (!Array.isArray(rules)) {
+        const rules = client ? client.autoReplyRules : [];
+        console.log('[Export Rules] Step 4: Rules count:', rules.length);
+
+        if (rules.length === 0) {
+            console.log('[Export Rules] No rules to export, returning empty JSON');
+            return res.json({
+                success: true,
+                rules: [],
+                exportDate: new Date().toISOString(),
+                count: 0
+            });
+        }
+
+        console.log(`[Export Rules] Exporting ${rules.length} rules`);
+        rules.forEach((rule, i) => {
+            console.log(`[Export Rules] Rule ${i}: ${rule.name}, mediaPaths:`, rule.mediaPaths, 'mediaPath:', rule.mediaPath);
+        });
+
+        console.log('[Export Rules] Step 5: Collecting media files');
+        const mediaFiles = new Set();
+        rules.forEach(rule => {
+            if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
+                rule.mediaPaths.forEach(p => {
+                    if (p && !p.startsWith('http')) {
+                        mediaFiles.add(p);
+                    }
+                });
+            } else if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
+                mediaFiles.add(rule.mediaPath);
+            }
+        });
+
+        console.log(`[Export Rules] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles));
+
+        console.log('[Export Rules] Step 6: Creating ZIP archive');
+        // Always create ZIP (even if no media files)
+        const archiver = (await import('archiver')).default;
+        const archive = archiver('zip', { zlib: { level: 9 } });
+
+        console.log('[Export Rules] Step 7: Setting response headers');
+        res.attachment('auto-reply-rules-export.zip');
+        archive.pipe(res);
+
+        console.log('[Export Rules] Step 8: Adding JSON file to ZIP');
+        // Add JSON file
+        const jsonData = {
+            rules,
+            exportDate: new Date().toISOString(),
+            count: rules.length,
+            version: '1.0'
+        };
+        archive.append(JSON.stringify(jsonData, null, 2), { name: 'rules.json' });
+
+        console.log('[Export Rules] Step 9: Adding media files to ZIP');
+        // Add media files if any
+        for (const mediaPath of mediaFiles) {
+            const fullPath = path.isAbsolute(mediaPath) ? mediaPath : path.join(process.cwd(), mediaPath);
+            if (fs.existsSync(fullPath)) {
+                const fileName = path.basename(mediaPath);
+                console.log(`[Export Rules] Adding media file: ${fileName} from ${fullPath}`);
+                archive.file(fullPath, { name: `media/${fileName}` });
+            } else {
+                console.warn(`[Export Rules] Media file not found: ${fullPath}`);
+            }
+        }
+
+        console.log('[Export Rules] Step 10: Finalizing ZIP archive');
+        archive.finalize();
+        console.log('[Export Rules] ========== EXPORT COMPLETED SUCCESSFULLY ==========');
+    } catch (error) {
+        console.error('[Export Rules] ERROR:', error);
+        console.error('[Export Rules] Error stack:', error.stack);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/auto-reply/rules/import - Import rules from ZIP or JSON
+router.post('/rules/import', upload.single('file'), async (req, res) => {
+    try {
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
+
+        const client = sessionManager.getSessionClient(sessionId);
+        if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
+
+        let rulesData;
+
+        // Check if it's a ZIP file or JSON
+        if (req.file) {
+            const filePath = req.file.path;
+            const ext = path.extname(req.file.originalname).toLowerCase();
+
+            if (ext === '.zip') {
+                // Handle ZIP file
+                const unzipper = (await import('unzipper')).default;
+                const uploadDir = process.env.UPLOAD_DIR || './uploads';
+                if (!fs.existsSync(uploadDir)) {
+                    fs.mkdirSync(uploadDir, { recursive: true });
+                }
+
+                const directory = await unzipper.Open.file(filePath);
+                let jsonContent = null;
+
+                for (const file of directory.files) {
+                    if (file.path === 'rules.json') {
+                        const content = await file.buffer();
+                        jsonContent = JSON.parse(content.toString('utf8'));
+                    } else if (file.path.startsWith('media/')) {
+                        // Extract media file to uploads directory
+                        const fileName = path.basename(file.path);
+                        const targetPath = path.join(uploadDir, fileName);
+
+                        // If file exists, replace it
+                        if (fs.existsSync(targetPath)) {
+                            fs.unlinkSync(targetPath);
+                        }
+
+                        const content = await file.buffer();
+                        fs.writeFileSync(targetPath, content);
+                    }
+                }
+
+                if (!jsonContent) {
+                    // Clean up uploaded file
+                    fs.unlinkSync(filePath);
+                    return res.status(400).json({ error: 'Invalid ZIP file: rules.json not found' });
+                }
+
+                rulesData = jsonContent.rules || [];
+
+                // Clean up uploaded ZIP file
+                fs.unlinkSync(filePath);
+            } else if (ext === '.json') {
+                // Handle JSON file
+                const content = fs.readFileSync(filePath, 'utf8');
+                const parsed = JSON.parse(content);
+                rulesData = Array.isArray(parsed) ? parsed : (parsed.rules || []);
+
+                // Clean up uploaded file
+                fs.unlinkSync(filePath);
+            } else {
+                fs.unlinkSync(filePath);
+                return res.status(400).json({ error: 'Invalid file type. Please upload a .zip or .json file' });
+            }
+        } else if (req.body.rules) {
+            // Handle JSON body (legacy support)
+            rulesData = req.body.rules;
+        } else {
+            return res.status(400).json({ error: 'No file or data provided' });
+        }
+
+        if (!Array.isArray(rulesData)) {
             return res.status(400).json({ error: 'Rules must be an array' });
         }
 
         const uploadDir = process.env.UPLOAD_DIR || './uploads';
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
+        const results = { success: 0, failed: 0, replaced: 0, errors: [], rules: [] };
 
-        const results = {
-            success: 0,
-            failed: 0,
-            errors: [],
-            rules: []
-        };
+        // Check if we should apply to all sessions
+        const applyToAllSessions = req.body.applyToAllSessions === 'true';
 
-        for (const rule of rules) {
+        // Get all sessions if applyToAllSessions is true
+        const sessionsToUpdate = applyToAllSessions
+            ? Array.from(sessionManager.sessions.values()).map(s => s.client)
+            : [client];
+
+        console.log(`[Import] Applying to ${sessionsToUpdate.length} session(s)`);
+
+        for (const rule of rulesData) {
             try {
-                if (!rule.name || !rule.keywords || !Array.isArray(rule.keywords)) {
+                if (!rule.name || !rule.keywords) {
                     results.failed++;
-                    results.errors.push(`${rule.name || 'Regla sin nombre'}: Campos requeridos faltantes`);
+                    results.errors.push(`Rule "${rule.name || 'unnamed'}": Missing required fields`);
                     continue;
                 }
 
-                // Normalize keywords
-                let keywordsArray = [];
-                if (Array.isArray(rule.keywords)) {
-                    keywordsArray = rule.keywords;
-                } else if (typeof rule.keywords === 'string') {
-                    try {
-                        keywordsArray = JSON.parse(rule.keywords);
-                    } catch {
-                        keywordsArray = rule.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0);
+                let keywordsArray = Array.isArray(rule.keywords) ? rule.keywords : (typeof rule.keywords === 'string' ? rule.keywords.split(',').map(k => k.trim()) : []);
+
+                // Update media paths to point to correct location
+                let mediaPaths = [];
+                if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
+                    mediaPaths = rule.mediaPaths.map(p => {
+                        if (p && !p.startsWith('http')) {
+                            const fileName = path.basename(p);
+                            return path.join(uploadDir, fileName);
+                        }
+                        return p;
+                    });
+                } else if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
+                    const fileName = path.basename(rule.mediaPath);
+                    mediaPaths = [path.join(uploadDir, fileName)];
+                }
+
+                // If this is a menu-type rule, try to find the menu by name and update menuId
+                let finalMenuId = rule.menuId;
+                if (rule.type === 'menu' && rule.menuId) {
+                    // Try to find menu in the first session (they should all have the same menus)
+                    const firstSession = sessionsToUpdate[0];
+                    const menuByName = firstSession.interactiveMenus.find(m =>
+                        m.name === 'Principal' || // Try common menu names
+                        m.isActive
+                    );
+
+                    // If we can't find by name, try to find by the old menuId
+                    const menuById = firstSession.interactiveMenus.find(m => String(m.id) === String(rule.menuId));
+
+                    if (!menuById && menuByName) {
+                        console.log(`[Import] Updating menuId for rule "${rule.name}" from ${rule.menuId} to ${menuByName.id}`);
+                        finalMenuId = menuByName.id;
+                    } else if (menuById) {
+                        finalMenuId = menuById.id;
                     }
                 }
 
-                // Handle media file copying
-                let mediaPath = null;
-                if (rule.mediaPath) {
-                    const originalPath = rule.mediaPath;
-                    let sourcePath = null;
+                // Apply to each session
+                sessionsToUpdate.forEach((sessionClient, sessionIndex) => {
+                    // Check if a rule with the same name already exists
+                    const existingIndex = sessionClient.autoReplyRules.findIndex(r => r.name === rule.name);
 
-                    // Try multiple path resolutions
-                    // 1. Try absolute path as-is
-                    if (fs.existsSync(originalPath)) {
-                        sourcePath = originalPath;
-                    }
-                    // 2. Try relative to current working directory
-                    else if (fs.existsSync(path.resolve(originalPath))) {
-                        sourcePath = path.resolve(originalPath);
-                    }
-                    // 3. Try relative to uploads directory (just filename)
-                    else {
-                        const fileName = path.basename(originalPath);
-                        const relativePath = path.join(uploadDir, fileName);
-                        if (fs.existsSync(relativePath)) {
-                            sourcePath = relativePath;
-                        }
-                    }
+                    if (existingIndex !== -1) {
+                        // Replace existing rule
+                        const existingRule = sessionClient.autoReplyRules[existingIndex];
+                        const updatedRule = {
+                            id: existingRule.id, // Keep the same ID
+                            name: rule.name,
+                            keywords: keywordsArray,
+                            response: rule.response || '',
+                            matchType: rule.matchType || 'contains',
+                            delay: rule.delay || 2,
+                            isActive: rule.isActive !== undefined ? rule.isActive : true,
+                            mediaPaths: mediaPaths,
+                            mediaPath: mediaPaths[0] || null,
+                            captions: rule.captions || [],
+                            caption: (rule.captions && rule.captions[0]) || rule.caption || '',
+                            type: rule.type || 'simple',
+                            menuId: finalMenuId || null
+                        };
+                        sessionClient.autoReplyRules[existingIndex] = updatedRule;
 
-                    // If we found the source file, copy it
-                    if (sourcePath) {
-                        try {
-                            const ext = path.extname(sourcePath);
-                            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                            const newFileName = uniqueSuffix + ext;
-                            const newPath = path.join(uploadDir, newFileName);
-
-                            // Copy file to uploads directory
-                            fs.copyFileSync(sourcePath, newPath);
-                            mediaPath = newPath;
-                            console.log(`Copied media file from ${sourcePath} to ${newPath}`);
-                        } catch (copyError) {
-                            console.warn(`Could not copy media file from ${sourcePath}:`, copyError);
-                            results.errors.push(`${rule.name}: No se pudo copiar el archivo de media desde ${originalPath}`);
-                            // Continue without media
+                        // Only count once (for the first session)
+                        if (sessionIndex === 0) {
+                            results.replaced++;
+                            results.rules.push(updatedRule);
+                            console.log(`[Import] Replaced existing rule: ${rule.name}`);
                         }
                     } else {
-                        console.warn(`Media file not found: ${originalPath}`);
-                        results.errors.push(`${rule.name}: Archivo de media no encontrado en ${originalPath}. Asegúrate de que el archivo exista en el servidor.`);
-                        // Continue without media - rule will be created but without media
+                        // Create new rule
+                        const newRule = {
+                            id: Date.now().toString() + '-' + Math.round(Math.random() * 1E9),
+                            name: rule.name,
+                            keywords: keywordsArray,
+                            response: rule.response || '',
+                            matchType: rule.matchType || 'contains',
+                            delay: rule.delay || 2,
+                            isActive: rule.isActive !== undefined ? rule.isActive : true,
+                            mediaPaths: mediaPaths,
+                            mediaPath: mediaPaths[0] || null,
+                            captions: rule.captions || [],
+                            caption: (rule.captions && rule.captions[0]) || rule.caption || '',
+                            type: rule.type || 'simple',
+                            menuId: finalMenuId || null
+                        };
+                        sessionClient.autoReplyRules.push(newRule);
+
+                        // Only count once (for the first session)
+                        if (sessionIndex === 0) {
+                            results.success++;
+                            results.rules.push(newRule);
+                            console.log(`[Import] Created new rule: ${rule.name}`);
+                        }
                     }
-                }
-
-                // Create rule
-                const newRule = {
-                    id: Date.now().toString() + '-' + Math.round(Math.random() * 1E9),
-                    name: rule.name,
-                    keywords: keywordsArray,
-                    response: rule.response || '',
-                    matchType: rule.matchType || 'contains',
-                    delay: rule.delay || 2,
-                    isActive: rule.isActive !== undefined ? rule.isActive : true,
-                    mediaPath: mediaPath,
-                    caption: rule.caption || ''
-                };
-
-                whatsappClient.autoReplyRules.push(newRule);
-                results.success++;
-                results.rules.push(newRule);
-            } catch (error) {
+                });
+            } catch (e) {
                 results.failed++;
-                results.errors.push(`${rule.name || 'Regla desconocida'}: ${error.message}`);
-                console.error('Error importing rule:', error);
+                results.errors.push(`Rule "${rule.name || 'unnamed'}": ${e.message}`);
             }
         }
 
-        // Save all rules
-        whatsappClient.saveAutoReplyRules();
-
-        res.json({
-            success: results.success > 0,
-            imported: results.success,
-            failed: results.failed,
-            errors: results.errors,
-            rules: results.rules
+        // Save all updated sessions
+        sessionsToUpdate.forEach(sessionClient => {
+            sessionClient.saveAutoReplyRules();
         });
+
+        res.json({ success: results.success > 0, ...results });
     } catch (error) {
         console.error('Error importing rules:', error);
         res.status(500).json({ error: error.message });

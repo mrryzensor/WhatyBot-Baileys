@@ -1,18 +1,18 @@
 $ErrorActionPreference = 'Stop'
-$store = pnpm store path --silent
-if (-not $store) {
-  Write-Error 'No store path'
-  exit 1
+
+Write-Host "Cleaning Electron dependencies using npm..."
+
+# Remove electron from node_modules if it exists
+if (Test-Path "node_modules/electron") {
+    Write-Host "Removing node_modules/electron..."
+    Remove-Item -Recurse -Force "node_modules/electron"
 }
 
-$electronDirs = Get-ChildItem -Path $store -Directory -Filter 'electron@*' -ErrorAction SilentlyContinue
-if ($electronDirs) {
-  foreach ($dir in $electronDirs) {
-    Write-Host ('Removing ' + $dir.FullName)
-    Remove-Item -Recurse -Force $dir.FullName
-  }
-} else {
-  Write-Host ('No electron dirs found in ' + $store)
-}
+# Clear npm cache (optional, but can help)
+# Write-Host "Clearing npm cache..."
+# npm cache clean --force
 
-pnpm add electron@39.2.4 --force
+Write-Host "Reinstalling electron 39.2.4 using npm..."
+npm install electron@39.2.4 --save-dev --force
+
+Write-Host "✅ Electron has been reinstalled."

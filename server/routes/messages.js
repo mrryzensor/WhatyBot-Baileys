@@ -1,4 +1,5 @@
 import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -8,6 +9,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+// Helper to get session ID with fallback
+const getSessionId = (req) => {
+    const sessionManager = req.app.get('sessionManager');
+    return req.sessionId || sessionManager.getFirstActiveSession(req.userId);
+};
+
+// Helper for display formatting
+const formatTarget = (jid, groupName = null) => {
+    if (!jid) return 'Desconocido';
+    if (jid.endsWith('@g.us')) return groupName || jid;
+    return jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+};
 
 // GET /api/messages/logs - Get message logs for current user
 router.get('/logs', async (req, res) => {
@@ -29,7 +43,7 @@ router.get('/logs', async (req, res) => {
             status: log.status,
             timestamp: new Date(log.sent_at),
             content: log.content || '',
-            messageType: log.message_type || 'single' // Include message type to identify auto-replies
+            messageType: log.message_type || 'single'
         }));
 
         res.json({ success: true, logs: formattedLogs });
@@ -60,7 +74,6 @@ const upload = multer({
         fileSize: 100 * 1024 * 1024 // 100MB limit for heavy media
     },
     fileFilter: (req, file, cb) => {
-        // Accept images, videos, documents, audio
         const allowedTypes = /jpeg|jpg|png|gif|mp4|avi|mov|pdf|doc|docx|xls|xlsx|mp3|wav|ogg/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
@@ -77,12 +90,16 @@ const upload = multer({
 router.post('/send', async (req, res) => {
     try {
         const { to, message, scheduledAt } = req.body;
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
         const messageScheduler = req.app.get('messageScheduler');
-        const userService = req.app.get('userService');
         const validationService = req.app.get('validationService');
         const messageCountService = req.app.get('messageCountService');
         const messageLogService = req.app.get('messageLogService');
+
+        const sessionId = getSessionId(req);
+        if (!sessionId) {
+            return res.status(400).json({ error: 'No hay una sesión de WhatsApp activa' });
+        }
 
         if (!to) {
             return res.status(400).json({ error: 'Missing required field: to' });
@@ -92,7 +109,6 @@ router.post('/send', async (req, res) => {
             return res.status(400).json({ error: 'Missing required field: message or media' });
         }
 
-        // Validate user can send messages (only for immediate sends, not scheduled)
         if (!scheduledAt) {
             const userId = req.userId;
             if (!userId) {
@@ -100,13 +116,11 @@ router.post('/send', async (req, res) => {
             }
             const validation = await validationService.canSendMessages(userId, 1);
             if (!validation.allowed) {
-                return res.status(403).json({ 
+                return res.status(403).json({
                     error: validation.reason,
                     limitExceeded: validation.limitExceeded || false,
-                    subscriptionExpired: validation.subscriptionExpired || false,
                     currentCount: validation.currentCount,
-                    limit: validation.limit,
-                    subscriptionType: validation.subscriptionType
+                    limit: validation.limit
                 });
             }
         }
@@ -114,67 +128,83 @@ router.post('/send', async (req, res) => {
         if (scheduledAt) {
             const scheduleTime = new Date(scheduledAt);
             if (isNaN(scheduleTime.getTime())) {
-                return res.status(400).json({ 
-                    error: `Invalid scheduledAt date format: "${scheduledAt}". Expected ISO 8601 format.` 
-                });
+                return res.status(400).json({ error: 'Invalid date format' });
             }
-            
-            // Validate: must be at least 30 seconds in the future
-            const now = new Date();
-            const diffFromNow = scheduleTime.getTime() - now.getTime();
-            const diffSeconds = Math.round(diffFromNow / 1000);
-            
-            if (diffSeconds < 30) {
-                if (diffSeconds < 0) {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada está en el pasado. Por favor selecciona una fecha y hora futura.` 
-                    });
-                } else {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada debe ser al menos 30 segundos en el futuro. Faltan ${diffSeconds} segundos.` 
-                    });
-                }
-            }
-            
+
             const userId = req.userId;
-            if (!userId) {
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
             const jobId = messageScheduler.scheduleMessage(to, message || '', null, '', scheduleTime, userId);
-            if (!jobId) {
-                return res.status(500).json({ error: 'Failed to create scheduled job' });
-            }
-            return res.json({ 
-                success: true, 
-                message: 'Message scheduled', 
-                jobId,
-                scheduledAt: scheduleTime.toISOString()
-            });
+            return res.json({ success: true, message: 'Message scheduled', jobId });
         }
 
-        const result = await whatsappClient.sendMessage(to, message || '');
-        
-        // Increment message count and log message (only for immediate sends, not scheduled)
-        if (!scheduledAt) {
-            const userId = req.userId;
-            if (!userId) {
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
-            await messageCountService.incrementCount(userId, 1);
-            console.log(`Incremented message count for user ${userId}: +1 message`);
-            
-            // Log message to database
-            await messageLogService.logMessage(
-                userId,
-                'single',
-                to,
-                'sent',
-                message || '',
-                null
-            );
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Usuario no autenticado' });
         }
-        
-        res.json({ success: true, result });
+
+        let targetDisplay = null;
+        try {
+            // Validación preventiva para grupos si el destino es un grupo
+            if (to.endsWith('@g.us')) {
+                const client = sessionManager.getSessionClient(sessionId);
+                if (client && client.sock) {
+                    try {
+                        const myGroups = await client.sock.groupFetchAllParticipating();
+                        const groupMetadata = myGroups[to];
+                        if (groupMetadata) {
+                            targetDisplay = groupMetadata.subject;
+                            const announce = !!groupMetadata.announce;
+                            const selfJid = client.sock?.user?.id || client.sock?.user?.jid || '';
+                            const selfNumber = selfJid.split('@')[0].split(':')[0];
+                            const isAdmin = !!(groupMetadata.participants || []).find(p =>
+                                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
+                            );
+
+                            if (announce && !isAdmin) {
+                                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
+                            }
+                        }
+                    } catch (e) {
+                        if (e.message.includes('permiso')) throw e;
+                    }
+                }
+            }
+
+            const cleanTarget = formatTarget(to, targetDisplay);
+            const result = await sessionManager.sendMessage(sessionId, to, message || '');
+            await messageCountService.incrementCount(userId, 1);
+            await messageLogService.logMessage(userId, 'single', cleanTarget, 'sent', message || '', null);
+
+            if (io) {
+                io.emit('message_log', {
+                    id: uuidv4(),
+                    userId,
+                    target: cleanTarget,
+                    status: 'sent',
+                    timestamp: new Date(),
+                    content: message || '',
+                    messageType: 'single'
+                });
+            }
+
+            res.json({ success: true, result });
+        } catch (sendError) {
+            const cleanTarget = formatTarget(to, targetDisplay);
+            await messageLogService.logMessage(userId, 'single', cleanTarget, 'failed', message || '', null);
+
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('message_log', {
+                    id: uuidv4(),
+                    userId,
+                    target: cleanTarget,
+                    status: 'failed',
+                    timestamp: new Date(),
+                    content: message || '',
+                    messageType: 'single'
+                });
+            }
+            throw sendError;
+        }
     } catch (error) {
         console.error('Error sending message:', error);
         res.status(500).json({ error: error.message });
@@ -185,57 +215,35 @@ router.post('/send', async (req, res) => {
 router.post('/send-media', upload.array('media', 10), async (req, res) => {
     try {
         const { to, message, caption, captions, scheduledAt } = req.body;
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
         const messageScheduler = req.app.get('messageScheduler');
-        const userService = req.app.get('userService');
         const validationService = req.app.get('validationService');
         const messageCountService = req.app.get('messageCountService');
         const messageLogService = req.app.get('messageLogService');
+
+        const sessionId = getSessionId(req);
+        if (!sessionId) {
+            return res.status(400).json({ error: 'No hay una sesión de WhatsApp activa' });
+        }
 
         if (!to) {
             return res.status(400).json({ error: 'Missing required field: to' });
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
-
         if (!files || files.length === 0) {
             return res.status(400).json({ error: 'No media file uploaded' });
         }
 
-        // Validate user can send messages (only for immediate sends, not scheduled)
         if (!scheduledAt) {
             const userId = req.userId;
-            if (!userId) {
-                // Clean up uploaded files
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
             const validation = await validationService.canSendMessages(userId, 1);
             if (!validation.allowed) {
-                // Clean up uploaded files
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(403).json({ 
-                    error: validation.reason,
-                    limitExceeded: validation.limitExceeded || false,
-                    subscriptionExpired: validation.subscriptionExpired || false,
-                    currentCount: validation.currentCount,
-                    limit: validation.limit,
-                    subscriptionType: validation.subscriptionType
-                });
+                return res.status(403).json({ error: validation.reason });
             }
         }
 
         const mediaPaths = files.map(f => f.path);
-
-        // Captions: si viene captions (JSON de array) lo usamos, si no, repetimos caption simple
         let mediaCaptions = [];
         if (captions) {
             try {
@@ -243,177 +251,130 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
                 if (Array.isArray(parsed)) {
                     mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
                 }
-            } catch (e) {
-                // fallback a caption simple más abajo
-            }
+            } catch (e) { }
         }
-
         if (mediaCaptions.length === 0) {
-            const baseCaption = caption || '';
-            mediaCaptions = mediaPaths.map(() => baseCaption);
+            mediaCaptions = mediaPaths.map(() => caption || '');
         }
-
-        // caption(s) goes with the media, message is sent separately
-        const textMessage = message || '';
 
         if (scheduledAt) {
             const scheduleTime = new Date(scheduledAt);
-            if (isNaN(scheduleTime.getTime())) {
-                return res.status(400).json({ 
-                    error: `Invalid scheduledAt date format: "${scheduledAt}". Expected ISO 8601 format.` 
+            const userId = req.userId;
+            const jobId = messageScheduler.scheduleMessage(to, message || '', mediaPaths, mediaCaptions, scheduleTime, userId);
+            return res.json({ success: true, message: 'Media message scheduled', jobId });
+        }
+
+        const userId = req.userId;
+        let targetDisplay = null;
+        try {
+            // Validación preventiva para grupos
+            if (to.endsWith('@g.us')) {
+                const client = sessionManager.getSessionClient(sessionId);
+                if (client && client.sock) {
+                    try {
+                        const myGroups = await client.sock.groupFetchAllParticipating();
+                        const groupMetadata = myGroups[to];
+                        if (groupMetadata) {
+                            targetDisplay = groupMetadata.subject;
+                            const announce = !!groupMetadata.announce;
+                            const selfJid = client.sock?.user?.id || client.sock?.user?.jid || '';
+                            const selfNumber = selfJid.split('@')[0].split(':')[0];
+                            const isAdmin = !!(groupMetadata.participants || []).find(p =>
+                                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
+                            );
+
+                            if (announce && !isAdmin) {
+                                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
+                            }
+                        }
+                    } catch (e) {
+                        if (e.message.includes('permiso')) throw e;
+                    }
+                }
+            }
+
+            const cleanTarget = formatTarget(to, targetDisplay);
+            const result = await sessionManager.sendMessage(sessionId, to, message || '', mediaPaths, mediaCaptions);
+            await messageCountService.incrementCount(userId, 1);
+            await messageLogService.logMessage(userId, 'media', cleanTarget, 'sent', message || '[Archivo multimedia]', null);
+
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('message_log', {
+                    id: uuidv4(),
+                    userId,
+                    target: cleanTarget,
+                    status: 'sent',
+                    timestamp: new Date(),
+                    content: message || '[Archivo multimedia]',
+                    messageType: 'media'
                 });
             }
-            
-            // Validate: must be at least 30 seconds in the future
-            const now = new Date();
-            const diffFromNow = scheduleTime.getTime() - now.getTime();
-            const diffSeconds = Math.round(diffFromNow / 1000);
-            
-            if (diffSeconds < 30) {
-                if (diffSeconds < 0) {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada está en el pasado. Por favor selecciona una fecha y hora futura.` 
-                    });
-                } else {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada debe ser al menos 30 segundos en el futuro. Faltan ${diffSeconds} segundos.` 
-                    });
-                }
-            }
-            
-            const userId = req.userId;
-            if (!userId) {
-                // Clean up uploaded files
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
+
+            setTimeout(() => {
+                if (!scheduledAt) {
+                    for (const p of mediaPaths) {
+                        if (p && fs.existsSync(p)) fs.unlinkSync(p);
                     }
                 }
-                return res.status(401).json({ error: 'Usuario no autenticado' });
+            }, 5000);
+
+            res.json({ success: true, result });
+        } catch (sendError) {
+            const cleanTarget = formatTarget(to, targetDisplay);
+            await messageLogService.logMessage(userId, 'media', cleanTarget, 'failed', message || '[Archivo multimedia]', null);
+
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('message_log', {
+                    id: uuidv4(),
+                    userId,
+                    target: cleanTarget,
+                    status: 'failed',
+                    timestamp: new Date(),
+                    content: message || '[Archivo multimedia]',
+                    messageType: 'media'
+                });
             }
-            const jobId = messageScheduler.scheduleMessage(to, textMessage, mediaPaths, mediaCaptions, scheduleTime, userId);
-            if (!jobId) {
-                return res.status(500).json({ error: 'Failed to create scheduled job' });
-            }
-            return res.json({ 
-                success: true, 
-                message: 'Media message scheduled', 
-                jobId,
-                scheduledAt: scheduleTime.toISOString()
-            });
+            throw sendError;
         }
-
-        const result = await whatsappClient.sendMessage(to, textMessage, mediaPaths, mediaCaptions);
-
-        // Increment message count and log message (only for immediate sends, not scheduled)
-        if (!scheduledAt) {
-            const userId = req.userId;
-            if (!userId) {
-                // Clean up uploaded files
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
-            await messageCountService.incrementCount(userId, 1);
-            console.log(`Incremented message count for user ${userId}: +1 message`);
-            
-            // Log message to database
-            await messageLogService.logMessage(
-                userId,
-                'media',
-                to,
-                'sent',
-                message || '[Archivo multimedia]',
-                null
-            );
-        }
-
-        // Clean up uploaded files after sending (only if not scheduled, scheduler handles cleanup logic if needed, 
-        // but for now we keep files for scheduled job. Ideally we should clean up after job execution)
-        setTimeout(() => {
-            if (!scheduledAt) {
-                for (const p of mediaPaths) {
-                    if (p && fs.existsSync(p)) {
-                        fs.unlinkSync(p);
-                    }
-                }
-            }
-        }, 5000);
-
-        res.json({ success: true, result });
     } catch (error) {
         console.error('Error sending media:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST /api/messages/send-bulk - Send bulk messages (one message per contact, each con uno o varios adjuntos)
+// POST /api/messages/send-bulk - Send bulk messages
 router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
     try {
         const { contacts, message, caption, captions, delay, scheduledAt } = req.body;
-        const whatsappClient = req.app.get('whatsappClient');
+        const sessionManager = req.app.get('sessionManager');
         const messageScheduler = req.app.get('messageScheduler');
         const validationService = req.app.get('validationService');
         const messageCountService = req.app.get('messageCountService');
         const messageLogService = req.app.get('messageLogService');
+
+        const sessionId = getSessionId(req);
+        if (!sessionId) {
+            return res.status(400).json({ error: 'No hay una sesión de WhatsApp activa' });
+        }
 
         if (!contacts) {
             return res.status(400).json({ error: 'Missing required field: contacts' });
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
+        let contactsList = typeof contacts === 'string' ? JSON.parse(contacts) : contacts;
 
-        if (!message && (!files || files.length === 0)) {
-            return res.status(400).json({ error: 'Missing required field: message or media' });
-        }
-
-        let contactsList;
-        try {
-            contactsList = typeof contacts === 'string' ? JSON.parse(contacts) : contacts;
-        } catch (error) {
-            return res.status(400).json({ error: 'Invalid contacts format' });
-        }
-
-        // Validate user can send messages (only for immediate sends, not scheduled)
         if (!scheduledAt) {
             const userId = req.userId;
-            if (!userId) {
-                // Clean up uploaded files if exists
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
             const validation = await validationService.canSendMessages(userId, contactsList.length);
             if (!validation.allowed) {
-                // Clean up uploaded files if exists
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(403).json({ 
-                    error: validation.reason,
-                    limitExceeded: validation.limitExceeded || false,
-                    subscriptionExpired: validation.subscriptionExpired || false,
-                    currentCount: validation.currentCount,
-                    limit: validation.limit,
-                    subscriptionType: validation.subscriptionType
-                });
+                return res.status(403).json({ error: validation.reason });
             }
         }
 
-        const mediaPath = files && files.length > 0 ? files[0].path : null; // compatibilidad para código que aún espera string
-
-        // Para múltiples adjuntos, construimos arrays
-        const mediaPaths = files && files.length > 0 ? files.map(f => f.path) : (mediaPath ? [mediaPath] : []);
-
-        // caption(s) va con el/los media, message se envía por separado
+        const mediaPaths = files.map(f => f.path);
         let mediaCaptions = [];
         if (captions) {
             try {
@@ -421,261 +382,145 @@ router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
                 if (Array.isArray(parsed)) {
                     mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
                 }
-            } catch (e) {
-                // fallback a caption simple más abajo
-            }
+            } catch (e) { }
+        }
+        if (mediaCaptions.length === 0) {
+            mediaCaptions = mediaPaths.map(() => caption || '');
         }
 
-        if (mediaCaptions.length === 0) {
-            const baseCaption = caption || '';
-            mediaCaptions = mediaPaths.map(() => baseCaption);
-        }
-        const textMessage = message || '';
-        const messageDelay = parseInt(delay) || whatsappClient.config.messageDelay || 2; // seconds
-        const maxContactsPerBatch = whatsappClient.config.maxContactsPerBatch || 50;
-        const waitTimeBetweenBatches = whatsappClient.config.waitTimeBetweenBatches || 15; // minutes
+        const userId = req.userId;
+        const messageDelay = parseInt(delay) || 2;
+        const maxContactsPerBatch = 50;
+        const waitTimeBetweenBatches = 15;
 
         if (scheduledAt) {
             const scheduleTime = new Date(scheduledAt);
-            if (isNaN(scheduleTime.getTime())) {
-                return res.status(400).json({ 
-                    error: `Invalid scheduledAt date format: "${scheduledAt}". Expected ISO 8601 format.` 
-                });
-            }
-            
-            // Validate: must be at least 30 seconds in the future
-            const now = new Date();
-            const diffFromNow = scheduleTime.getTime() - now.getTime();
-            const diffSeconds = Math.round(diffFromNow / 1000);
-            
-            if (diffSeconds < 30) {
-                if (diffSeconds < 0) {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada está en el pasado. Por favor selecciona una fecha y hora futura.` 
-                    });
-                } else {
-                    return res.status(400).json({ 
-                        error: `La fecha y hora programada debe ser al menos 30 segundos en el futuro. Faltan ${diffSeconds} segundos.` 
-                    });
-                }
-            }
-            
-            const userId = req.userId;
-            if (!userId) {
-                // Clean up uploaded files if exists
-                for (const f of files) {
-                    if (f && f.path && fs.existsSync(f.path)) {
-                        fs.unlinkSync(f.path);
-                    }
-                }
-                return res.status(401).json({ error: 'Usuario no autenticado' });
-            }
-            const jobId = messageScheduler.scheduleBulkMessages(contactsList, textMessage, mediaPaths, mediaCaptions, messageDelay, scheduleTime, userId, maxContactsPerBatch, waitTimeBetweenBatches);
-            return res.json({ 
-                success: true, 
-                message: 'Bulk messages scheduled', 
-                jobId,
-                scheduledAt: scheduleTime.toISOString(),
-                contacts: contactsList,
-                message: textMessage,
-                hasMedia: !!mediaPath,
-                caption: mediaCaption
-            });
+            const jobId = messageScheduler.scheduleBulkMessages(contactsList, message || '', mediaPaths, mediaCaptions, messageDelay, scheduleTime, userId, maxContactsPerBatch, waitTimeBetweenBatches);
+            return res.json({ success: true, message: 'Bulk messages scheduled', jobId });
         }
 
-        // Send bulk messages (this will run in background)
-        const userId = req.userId;
-        if (!userId) {
-            // Clean up uploaded files if exists
-            for (const f of files) {
-                if (f && f.path && fs.existsSync(f.path)) {
-                    fs.unlinkSync(f.path);
-                }
-            }
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
-        const sentCount = contactsList.filter(c => c.phone).length;
-        
-        // Store references for use in promise callbacks
-        const countService = messageCountService;
-        
-        whatsappClient.sendBulkMessages(contactsList, textMessage, mediaPaths, mediaCaptions, messageDelay, userId, maxContactsPerBatch, waitTimeBetweenBatches)
+        sessionManager.sendBulkMessages(sessionId, contactsList, message || '', mediaPaths, mediaCaptions, messageDelay, userId, maxContactsPerBatch, waitTimeBetweenBatches)
             .then(async (results) => {
-                console.log('Bulk send completed:', results.length, 'messages');
-                
-                // Increment message count for successful sends
                 const successCount = results.filter(r => r.status === 'sent').length;
                 if (successCount > 0) {
-                    await countService.incrementCount(userId, successCount);
-                    console.log(`Incremented message count for user ${userId}: +${successCount} messages`);
-                    
-                    // Log each successful message to database
-                    const logService = req.app.get('messageLogService');
-                    for (const result of results) {
-                        if (result.status === 'sent') {
-                            await logService.logMessage(
-                                userId,
-                                'bulk',
-                                result.contact,
-                                'sent',
-                                textMessage || '[Archivo multimedia]',
-                                null
-                            );
-                        }
-                    }
+                    await messageCountService.incrementCount(userId, successCount);
                 }
 
-                // Clean up media files after all sends
-                if (mediaPaths && mediaPaths.length > 0) {
+                const io = req.app.get('io');
+                // Log all results (sent and failed)
+                for (const result of results) {
+                    const status = result.status === 'sent' ? 'sent' : 'failed';
+                    const cleanTarget = formatTarget(result.contact);
+                    await messageLogService.logMessage(
+                        userId,
+                        'bulk',
+                        cleanTarget,
+                        status,
+                        message || '[Archivo multimedia]',
+                        null
+                    );
+
+                    // Emit to dashboard
+                    if (io) {
+                        io.emit('message_log', {
+                            id: uuidv4(),
+                            userId,
+                            target: cleanTarget,
+                            status: status,
+                            timestamp: new Date(),
+                            content: message || '[Archivo multimedia]',
+                            messageType: 'bulk'
+                        });
+                    }
+                }
+                if (mediaPaths.length > 0) {
                     for (const p of mediaPaths) {
-                        if (p && fs.existsSync(p)) {
-                            fs.unlinkSync(p);
-                        }
+                        if (p && fs.existsSync(p)) fs.unlinkSync(p);
                     }
                 }
             })
-            .catch(error => {
-                console.error('Error in bulk send:', error);
-            });
+            .catch(error => console.error('Error in bulk send:', error));
 
-        // Return immediately
-        res.json({
-            success: true,
-            message: 'Bulk send started',
-            total: contactsList.length
-        });
+        res.json({ success: true, message: 'Bulk send started', total: contactsList.length });
     } catch (error) {
         console.error('Error starting bulk send:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST /api/messages/bulk/pause - Pause bulk sending for current user
+// Pause/Resume/Cancel Bulk
 router.post('/bulk/pause', async (req, res) => {
     try {
-        const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
-        const whatsappClient = req.app.get('whatsappClient');
-        whatsappClient.pauseBulk(userId);
-        return res.json({ success: true });
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        const client = sessionManager.getSessionClient(sessionId);
+        if (client) client.pauseBulk(req.userId);
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error pausing bulk send:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST /api/messages/bulk/resume - Resume bulk sending for current user
 router.post('/bulk/resume', async (req, res) => {
     try {
-        const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
-        const whatsappClient = req.app.get('whatsappClient');
-        whatsappClient.resumeBulk(userId);
-        return res.json({ success: true });
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        const client = sessionManager.getSessionClient(sessionId);
+        if (client) client.resumeBulk(req.userId);
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error resuming bulk send:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST /api/messages/bulk/cancel - Cancel bulk sending for current user
 router.post('/bulk/cancel', async (req, res) => {
     try {
-        const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
-        const whatsappClient = req.app.get('whatsappClient');
-        whatsappClient.cancelBulk(userId);
-        return res.json({ success: true });
+        const sessionManager = req.app.get('sessionManager');
+        const sessionId = getSessionId(req);
+        const client = sessionManager.getSessionClient(sessionId);
+        if (client) client.cancelBulk(req.userId);
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error cancelling bulk send:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// GET /api/messages/scheduled - Get scheduled jobs for current user
+// Scheduled messages
 router.get('/scheduled', async (req, res) => {
     try {
         const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
         const messageScheduler = req.app.get('messageScheduler');
         const jobs = messageScheduler.getJobs().filter(job => !job.userId || job.userId === userId);
-        return res.json({ success: true, jobs });
+        res.json({ success: true, jobs });
     } catch (error) {
-        console.error('Error getting scheduled jobs:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// DELETE /api/messages/scheduled/:jobId - Cancel a scheduled job for current user
 router.delete('/scheduled/:jobId', async (req, res) => {
     try {
         const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
         const { jobId } = req.params;
         const messageScheduler = req.app.get('messageScheduler');
         const cancelled = messageScheduler.cancelJob(jobId, userId);
-        if (!cancelled) {
-            return res.status(404).json({ error: 'Job no encontrado o no autorizado' });
-        }
-        return res.json({ success: true });
+        if (!cancelled) return res.status(404).json({ error: 'Job no encontrado' });
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error cancelling scheduled job:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// PUT /api/messages/scheduled/:jobId - Reschedule a job for current user
 router.put('/scheduled/:jobId', async (req, res) => {
     try {
         const userId = req.userId;
-        if (!userId) {
-            return res.status(401).json({ error: 'Usuario no autenticado' });
-        }
         const { jobId } = req.params;
         const { scheduledAt } = req.body;
-        if (!scheduledAt) {
-            return res.status(400).json({ error: 'Missing required field: scheduledAt' });
-        }
         const scheduleTime = new Date(scheduledAt);
-        if (isNaN(scheduleTime.getTime())) {
-            return res.status(400).json({ 
-                error: `Invalid scheduledAt date format: "${scheduledAt}". Expected ISO 8601 format.` 
-            });
-        }
-
-        const now = new Date();
-        const diffFromNow = scheduleTime.getTime() - now.getTime();
-        const diffSeconds = Math.round(diffFromNow / 1000);
-        if (diffSeconds < 30) {
-            if (diffSeconds < 0) {
-                return res.status(400).json({ 
-                    error: 'La nueva fecha y hora programada está en el pasado. Por favor selecciona una fecha y hora futura.' 
-                });
-            } else {
-                return res.status(400).json({ 
-                    error: `La nueva fecha y hora programada debe ser al menos 30 segundos en el futuro. Faltan ${diffSeconds} segundos.` 
-                });
-            }
-        }
-
         const messageScheduler = req.app.get('messageScheduler');
         const updated = messageScheduler.rescheduleJob(jobId, scheduleTime, userId);
-        if (!updated) {
-            return res.status(404).json({ error: 'Job no encontrado o no autorizado' });
-        }
-        return res.json({ success: true, scheduledAt: scheduleTime.toISOString() });
+        if (!updated) return res.status(404).json({ error: 'Job no encontrado' });
+        res.json({ success: true, scheduledAt: scheduleTime.toISOString() });
     } catch (error) {
-        console.error('Error rescheduling job:', error);
         res.status(500).json({ error: error.message });
     }
 });

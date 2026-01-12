@@ -1,25 +1,32 @@
-import { useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 
 interface UseMessageEditorOptions {
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   onTextChange?: (text: string) => void;
   variables?: string[];
+  value?: string; // Optional: current value for more reliable insertion
 }
 
 export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
-  const { textareaRef, onTextChange, variables = [] } = options;
+  const { textareaRef, onTextChange, variables = [], value: propValue } = options;
   const internalTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const textarea = textareaRef?.current || internalTextareaRef.current;
+
+  const getTextarea = useCallback(() => {
+    return textareaRef?.current || internalTextareaRef.current;
+  }, [textareaRef]);
 
   // Insert text at cursor position
   const insertTextAtCursor = useCallback((text: string, cursorOffset?: number) => {
+    const textarea = getTextarea();
     if (!textarea) return;
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+
+    // Prioritize DOM value to ensure we have exactly what's in the textarea
     const currentValue = textarea.value;
     const newValue = currentValue.substring(0, start) + text + currentValue.substring(end);
-    
+
     if (onTextChange) {
       onTextChange(newValue);
     } else {
@@ -28,19 +35,28 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
       const event = new Event('input', { bubbles: true });
       textarea.dispatchEvent(event);
     }
-    
-    // Restore cursor position after text insertion
-    setTimeout(() => {
-      if (textarea) {
-        textarea.focus();
-        const cursorPos = cursorOffset !== undefined ? cursorOffset : start + text.length;
-        textarea.setSelectionRange(cursorPos, cursorPos);
+
+    // Restore cursor position and focus
+    const newCursorPos = cursorOffset !== undefined ? cursorOffset : start + text.length;
+
+    // We use requestAnimationFrame or a slightly longer timeout to ensure React bit finished the update
+    const restoreRef = () => {
+      const currentTextarea = getTextarea();
+      if (currentTextarea) {
+        currentTextarea.focus();
+        currentTextarea.setSelectionRange(newCursorPos, newCursorPos);
       }
-    }, 10);
-  }, [textarea, onTextChange]);
+    };
+
+    // Try multiple times to be absolutely sure focus is restored after potential re-renders
+    restoreRef();
+    setTimeout(restoreRef, 0);
+    setTimeout(restoreRef, 50);
+  }, [getTextarea, onTextChange]);
 
   // Insert formatting
   const insertFormatting = useCallback((format: 'bold' | 'italic' | 'strikethrough' | 'code' | 'monospace') => {
+    const textarea = getTextarea();
     if (!textarea) return;
 
     const formats: Record<string, string> = {
@@ -52,10 +68,10 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
     };
 
     const symbol = formats[format] || '';
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
     const selectedText = textarea.value.substring(start, end);
-    
+
     if (selectedText) {
       // Wrap selected text
       insertTextAtCursor(`${symbol}${selectedText}${symbol}`);
@@ -64,7 +80,7 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
       const cursorPos = start;
       insertTextAtCursor(`${symbol}${symbol}`, cursorPos + symbol.length);
     }
-  }, [textarea, insertTextAtCursor]);
+  }, [getTextarea, insertTextAtCursor]);
 
   // Insert variable
   const insertVariable = useCallback((variable: string) => {
@@ -73,26 +89,28 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
 
   // Insert list item (bullet)
   const insertBulletList = useCallback(() => {
+    const textarea = getTextarea();
     if (!textarea) return;
-    const start = textarea.selectionStart;
+    const start = textarea.selectionStart ?? 0;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     // Check if we're at the start of a line or need a new line
     if (currentLine.trim() === '') {
       insertTextAtCursor('* ');
     } else {
       insertTextAtCursor('\n* ');
     }
-  }, [textarea, insertTextAtCursor]);
+  }, [getTextarea, insertTextAtCursor]);
 
   // Insert numbered list item
   const insertNumberedList = useCallback(() => {
+    const textarea = getTextarea();
     if (!textarea) return;
-    const start = textarea.selectionStart;
+    const start = textarea.selectionStart ?? 0;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     // Find the last numbered item to continue numbering
     let nextNumber = 1;
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -102,27 +120,28 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
         break;
       }
     }
-    
+
     if (currentLine.trim() === '') {
       insertTextAtCursor(`${nextNumber}. `);
     } else {
       insertTextAtCursor(`\n${nextNumber}. `);
     }
-  }, [textarea, insertTextAtCursor]);
+  }, [getTextarea, insertTextAtCursor]);
 
   // Insert quote
   const insertQuote = useCallback(() => {
+    const textarea = getTextarea();
     if (!textarea) return;
-    const start = textarea.selectionStart;
+    const start = textarea.selectionStart ?? 0;
     const lines = textarea.value.substring(0, start).split('\n');
     const currentLine = lines[lines.length - 1];
-    
+
     if (currentLine.trim() === '') {
       insertTextAtCursor('> ');
     } else {
       insertTextAtCursor('\n> ');
     }
-  }, [textarea, insertTextAtCursor]);
+  }, [getTextarea, insertTextAtCursor]);
 
   return {
     textareaRef: internalTextareaRef,
@@ -131,7 +150,7 @@ export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
     insertBulletList,
     insertNumberedList,
     insertQuote,
+    insertText: insertTextAtCursor,
     variables
   };
 };
-

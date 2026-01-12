@@ -9,6 +9,12 @@ class MessageScheduler {
         this.io = whatsappClient.io; // Access to socket.io for emitting events
     }
 
+    // Helper for display formatting
+    formatTarget(jid) {
+        if (!jid) return 'Desconocido';
+        return jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+    }
+
     // Schedule a single message (mediaPath/caption pueden ser string o arrays)
     scheduleMessage(to, message, mediaPath, caption, scheduledDate, userId = null) {
         const jobId = uuidv4();
@@ -19,17 +25,18 @@ class MessageScheduler {
                 console.log(`Executing scheduled message to ${to}`);
                 await this.whatsappClient.sendMessage(to, message || '', mediaPath, caption || '');
                 console.log(`Scheduled message sent to ${to}`);
-                
+
+                const cleanTarget = this.formatTarget(to);
                 // Increment message count (only if userId is provided)
                 if (userId) {
                     await messageCountService.incrementCount(userId, 1);
                     console.log(`Incremented message count for user ${userId}: +1 message (scheduled)`);
-                    
+
                     // Log message to database
                     await messageLogService.logMessage(
                         userId,
                         'single',
-                        to,
+                        cleanTarget,
                         'sent',
                         message || '[Archivo multimedia]',
                         scheduledDate
@@ -37,13 +44,13 @@ class MessageScheduler {
                 } else {
                     console.warn('Cannot increment message count: userId is missing for scheduled message');
                 }
-                
+
                 // Emit log event for dashboard with userId
                 if (this.io) {
                     this.io.emit('message_log', {
                         id: `scheduled-${jobId}`,
                         userId: userId || null,
-                        target: to,
+                        target: cleanTarget,
                         status: 'sent',
                         timestamp: new Date(),
                         content: message || '[Archivo multimedia]',
@@ -52,29 +59,30 @@ class MessageScheduler {
                 }
             } catch (error) {
                 console.error(`Failed to send scheduled message to ${to}:`, error);
-                
+                const cleanTarget = this.formatTarget(to);
+
                 // Log failed message to database (only if userId is provided)
                 if (userId) {
                     await messageLogService.logMessage(
                         userId,
                         'single',
-                        to,
+                        cleanTarget,
                         'failed',
                         message || '[Archivo multimedia]',
                         scheduledDate
                     );
                 }
-                
-                // Emit log event for failed message with userId
+
+                // Emit log event for dashboard (failed)
                 if (this.io) {
                     this.io.emit('message_log', {
-                        id: `scheduled-${jobId}`,
+                        id: `scheduled-${jobId}-failed`,
                         userId: userId || null,
-                        target: to,
+                        target: cleanTarget,
                         status: 'failed',
                         timestamp: new Date(),
                         content: message || '[Archivo multimedia]',
-                        messageType: 'single' // Include message type
+                        messageType: 'single'
                     });
                 }
             } finally {
@@ -109,7 +117,7 @@ class MessageScheduler {
                 // sendBulkMessages already emits bulk_progress events, which are handled in App.tsx
                 // Those events will automatically add logs to the dashboard
                 const results = await this.whatsappClient.sendBulkMessages(contacts, message || '', mediaPath, caption || '', delay, userId, maxContactsPerBatch, waitTimeBetweenBatches);
-                
+
                 // Increment message count for successful sends (only if userId is provided)
                 if (userId) {
                     const successCount = results.filter(r => r.status === 'sent').length;
@@ -117,10 +125,23 @@ class MessageScheduler {
                         await messageCountService.incrementCount(userId, successCount);
                         console.log(`Incremented message count for user ${userId}: +${successCount} messages (scheduled bulk)`);
                     }
+
+                    // Log individual results to database
+                    for (const result of results) {
+                        const cleanTarget = this.formatTarget(result.contact);
+                        await messageLogService.logMessage(
+                            userId,
+                            'bulk',
+                            cleanTarget,
+                            result.status === 'sent' ? 'sent' : 'failed',
+                            message || '[Archivo multimedia]',
+                            scheduledDate
+                        );
+                    }
                 } else {
                     console.warn('Cannot increment message count: userId is missing for scheduled bulk messages');
                 }
-                
+
                 // Also emit a summary log event for the scheduled bulk send with userId
                 if (this.io) {
                     const successCount = results.filter(r => r.status === 'sent').length;
@@ -128,15 +149,15 @@ class MessageScheduler {
                         id: `scheduled-bulk-${jobId}`,
                         userId: userId || null,
                         target: `${contacts.length} contactos`,
-                        status: 'sent',
+                        status: successCount === contacts.length ? 'sent' : (successCount > 0 ? 'sent' : 'failed'),
                         timestamp: new Date(),
                         content: `Envío masivo programado completado (${successCount}/${contacts.length} mensajes)`,
-                        messageType: 'bulk' // Include message type
+                        messageType: 'bulk'
                     });
                 }
             } catch (error) {
                 console.error(`Failed to execute scheduled bulk messages:`, error);
-                
+
                 // Emit error log for scheduled bulk send with userId
                 if (this.io) {
                     this.io.emit('message_log', {
@@ -182,7 +203,7 @@ class MessageScheduler {
         const job = schedule.scheduleJob(scheduledDate, async () => {
             try {
                 console.log(`Executing scheduled group messages`);
-                
+
                 // Get group names for better logging
                 let groupNamesMap = {};
                 try {
@@ -193,21 +214,21 @@ class MessageScheduler {
                 } catch (e) {
                     console.warn('Could not fetch group names:', e.message);
                 }
-                
+
                 let successCount = 0;
-                
+
                 for (const groupId of groupIds) {
                     try {
                         await this.whatsappClient.sendMessage(groupId, message || '', mediaPath, caption || '');
-                        
+
                         // Increment message count for each successful group send (only if userId is provided)
                         if (userId) {
                             await messageCountService.incrementCount(userId, 1);
                             console.log(`Incremented message count for user ${userId}: +1 message (scheduled group)`);
-                            
+
                             // Use group name if available, otherwise use ID
                             const groupName = groupNamesMap[groupId] || groupId;
-                            
+
                             // Log message to database
                             await messageLogService.logMessage(
                                 userId,
@@ -221,10 +242,10 @@ class MessageScheduler {
                             console.warn('Cannot increment message count: userId is missing for scheduled group message');
                         }
                         successCount++;
-                        
+
                         // Use group name if available, otherwise use ID
                         const groupName = groupNamesMap[groupId] || groupId;
-                        
+
                         // Emit log event for each group with userId
                         if (this.io) {
                             this.io.emit('message_log', {
@@ -239,10 +260,10 @@ class MessageScheduler {
                         }
                     } catch (error) {
                         console.error(`Failed to send to group ${groupId}:`, error);
-                        
+
                         // Use group name if available, otherwise use ID
                         const groupName = groupNamesMap[groupId] || groupId;
-                        
+
                         // Log failed message to database (only if userId is provided)
                         if (userId) {
                             await messageLogService.logMessage(
@@ -254,7 +275,7 @@ class MessageScheduler {
                                 scheduledDate
                             );
                         }
-                        
+
                         // Emit log event for failed group message with userId
                         if (this.io) {
                             this.io.emit('message_log', {

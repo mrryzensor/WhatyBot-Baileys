@@ -1,5 +1,11 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import supabase, { supabaseAnon } from './supabase.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Cache para límites de suscripción
 let SUBSCRIPTION_LIMITS = {};
@@ -574,46 +580,74 @@ export const messageCountService = {
     }
 };
 
+// Almacenamiento local para logs persistente en archivos
+const LOGS_DIR = path.join(__dirname, 'data/local_logs');
+
+// Asegurar que el directorio de logs existe
+if (!fs.existsSync(LOGS_DIR)) {
+    fs.mkdirSync(LOGS_DIR, { recursive: true });
+}
+
+const getLogFilePath = (userId) => path.join(LOGS_DIR, `logs_${userId}.json`);
+
+const loadLocalLogs = (userId) => {
+    const filePath = getLogFilePath(userId);
+    if (fs.existsSync(filePath)) {
+        try {
+            return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        } catch (e) {
+            console.error(`Error cargando logs locales para ${userId}:`, e);
+            return [];
+        }
+    }
+    return [];
+};
+
+const saveLocalLogs = (userId, logs) => {
+    try {
+        const filePath = getLogFilePath(userId);
+        fs.writeFileSync(filePath, JSON.stringify(logs, null, 2), 'utf8');
+    } catch (e) {
+        console.error(`Error guardando logs locales para ${userId}:`, e);
+    }
+};
+
 // Message log functions
 export const messageLogService = {
     // Log a message
     async logMessage(userId, messageType, recipient, status, content, scheduledAt = null) {
-        const { data, error } = await supabase
-            .from('message_logs')
-            .insert({
-                user_id: userId,
-                message_type: messageType,
-                recipient,
-                status,
-                content,
-                scheduled_at: scheduledAt
-            })
-            .select()
-            .single();
+        const logEntry = {
+            id: 'local-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+            user_id: userId,
+            message_type: messageType || 'single',
+            recipient: recipient || 'Desconocido',
+            status: status || 'pending',
+            content: content || '',
+            scheduled_at: scheduledAt,
+            sent_at: new Date().toISOString()
+        };
 
-        if (error) {
-            console.error('Error registrando mensaje:', error);
-            throw error;
+        if (userId) {
+            let userLogs = loadLocalLogs(userId);
+            userLogs.push(logEntry); // Agregamos al final (más reciente al final)
+
+            // Mantener solo los últimos 100 logs
+            if (userLogs.length > 100) {
+                userLogs = userLogs.slice(-100);
+            }
+            saveLocalLogs(userId, userLogs);
         }
 
-        return data;
+        return logEntry;
     },
 
-    // Get message logs
+    // Get message logs (desde archivos locales)
     async getMessageLogs(userId, limit = 100) {
-        const { data, error } = await supabase
-            .from('message_logs')
-            .select('*')
-            .eq('user_id', userId)
-            .order('sent_at', { ascending: false })
-            .limit(limit);
-
-        if (error) {
-            console.error('Error obteniendo logs de mensajes:', error);
-            return [];
-        }
-
-        return data || [];
+        if (!userId) return [];
+        const userLogs = loadLocalLogs(userId);
+        // Retornamos los últimos N logs en el orden que están (más viejos a más nuevos)
+        // El frontend se encarga de reversarlos para mostrar los más recientes arriba
+        return userLogs.slice(-limit);
     }
 };
 
