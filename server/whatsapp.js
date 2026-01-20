@@ -739,6 +739,7 @@ class WhatsAppClient extends EventEmitter {
                     this.io.emit('phone_limit_exceeded', {
                       phone: phoneNumber,
                       userId: this.activeUserId,
+                      sessionId: this.sessionId,
                       message: 'Este número de WhatsApp ya está sincronizado con el máximo de cuentas permitidas (2).'
                     });
                     this.io.emit('disconnected', { reason: 'phone_limit_exceeded' });

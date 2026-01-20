@@ -915,12 +915,14 @@ export const phoneNumberService = {
             throw new Error('Invalid phone number');
         }
 
+        // Use maybeSingle to avoid error if 0 rows, but limit(1) to avoid error if >1 rows
         const { data: existing } = await supabase
             .from('user_phone_numbers')
             .select('*')
             .eq('user_id', userId)
             .eq('phone_number', normalized)
-            .single();
+            .limit(1)
+            .maybeSingle();
 
         if (existing) {
             return existing;
@@ -949,9 +951,10 @@ export const phoneNumberService = {
             return 0;
         }
 
-        const { count, error } = await supabase
+        // Fetch all user_ids (lightweight) to count distinct manually
+        const { data, error } = await supabase
             .from('user_phone_numbers')
-            .select('id', { count: 'exact', head: true })
+            .select('user_id')
             .eq('phone_number', normalized);
 
         if (error) {
@@ -959,7 +962,11 @@ export const phoneNumberService = {
             return 0;
         }
 
-        return count || 0;
+        if (!data || data.length === 0) return 0;
+
+        // Count distinct user_ids
+        const uniqueUsers = new Set(data.map(r => r.user_id));
+        return uniqueUsers.size;
     },
 
     async countOtherUsersForPhone(phoneNumber, excludeUserId) {
@@ -968,9 +975,9 @@ export const phoneNumberService = {
             return 0;
         }
 
-        const { count, error } = await supabase
+        const { data, error } = await supabase
             .from('user_phone_numbers')
-            .select('id', { count: 'exact', head: true })
+            .select('user_id')
             .eq('phone_number', normalized)
             .neq('user_id', excludeUserId);
 
@@ -979,7 +986,11 @@ export const phoneNumberService = {
             return 0;
         }
 
-        return count || 0;
+        if (!data || data.length === 0) return 0;
+
+        // Count distinct user_ids
+        const uniqueUsers = new Set(data.map(r => r.user_id));
+        return uniqueUsers.size;
     },
 
     async unlinkPhoneFromUser(userId, phoneNumber) {

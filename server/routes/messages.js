@@ -174,6 +174,7 @@ router.post('/send', async (req, res) => {
             await messageCountService.incrementCount(userId, 1);
             await messageLogService.logMessage(userId, 'single', cleanTarget, 'sent', message || '', null);
 
+            const io = req.app.get('io');
             if (io) {
                 io.emit('message_log', {
                     id: uuidv4(),

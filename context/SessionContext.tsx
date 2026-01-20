@@ -21,6 +21,7 @@ interface SessionContextType {
     initializeSession: (sessionId: string) => Promise<boolean>;
     destroySession: (sessionId: string) => Promise<boolean>;
     refreshQR: (sessionId: string) => Promise<string | null>;
+    clearSessions: () => void;
     loading: boolean;
 }
 
@@ -63,9 +64,19 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     }, [selectedSessionId]);
 
+    const clearSessions = () => {
+        setSessions([]);
+        setSelectedSessionId(null);
+        localStorage.removeItem('selectedSessionId');
+        selectedSessionRef.current = null;
+    };
+
     const loadSessions = async () => {
         // Prevent loading if not logged in
-        if (!localStorage.getItem('user')) return;
+        if (!localStorage.getItem('user')) {
+            clearSessions();
+            return;
+        }
 
         try {
             setLoading(true);
@@ -212,6 +223,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             initializeSession,
             destroySession,
             refreshQR,
+            clearSessions,
             loading
         }}>
             {children}

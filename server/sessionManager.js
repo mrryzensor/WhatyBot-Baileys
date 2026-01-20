@@ -69,10 +69,18 @@ class SessionManager {
    */
   getSessionAuthDir(sessionId) {
     const sessionsDir = path.join(__dirname, '.baileys_sessions');
-    if (!fs.existsSync(sessionsDir)) {
-      fs.mkdirSync(sessionsDir, { recursive: true });
+
+    // Extract userId from sessionId to organize by folder
+    const match = sessionId.match(/^session_(\d+)_/);
+    const userId = match ? match[1] : 'unknown';
+
+    const userDir = path.join(sessionsDir, `user_${userId}`);
+
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
     }
-    const sessionDir = path.join(sessionsDir, sessionId);
+
+    const sessionDir = path.join(userDir, sessionId);
     if (!fs.existsSync(sessionDir)) {
       fs.mkdirSync(sessionDir, { recursive: true });
     }
@@ -475,21 +483,65 @@ class SessionManager {
         return;
       }
 
-      const sessionDirs = fs.readdirSync(sessionsDir);
-      console.log(`[SessionManager] Found ${sessionDirs.length} potential session(s)`);
+      // 1. Migración: Mover carpetas de sesión antiguas a carpetas de usuario
+      const rootItems = fs.readdirSync(sessionsDir);
+      for (const itemName of rootItems) {
+        const itemPath = path.join(sessionsDir, itemName);
 
-      for (const sessionDir of sessionDirs) {
-        const sessionPath = path.join(sessionsDir, sessionDir);
-        // Validar que sea un directorio real
+        // Skip files
         try {
-          if (!fs.statSync(sessionPath).isDirectory()) continue;
+          if (!fs.statSync(itemPath).isDirectory()) continue;
         } catch (e) { continue; }
 
-        // Extraer userId del nombre de la sesión
-        const match = sessionDir.match(/^session_(\d+)_/);
-        if (match) {
-          const userId = Number(match[1]);
+        // Si es una sesión antigua (directa en root con formato session_USERID_...)
+        const legacyMatch = itemName.match(/^session_(\d+)_/);
+        if (legacyMatch) {
+          const userId = legacyMatch[1];
+          const userDir = path.join(sessionsDir, `user_${userId}`);
+
+          if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+          }
+
+          const newSessionPath = path.join(userDir, itemName);
+          console.log(`[SessionManager] Migrating legacy session ${itemName} to ${newSessionPath}`);
+
+          try {
+            fs.renameSync(itemPath, newSessionPath);
+          } catch (err) {
+            console.error(`[SessionManager] Failed to migrate session ${itemName}:`, err);
+          }
+        }
+      }
+
+      // 2. Restauración: Buscar en carpetas de usuario
+      const updatedRootItems = fs.readdirSync(sessionsDir);
+      let sessionCount = 0;
+
+      for (const userDirName of updatedRootItems) {
+        // Buscar carpetas user_XXX
+        const userMatch = userDirName.match(/^user_(\d+)$/);
+        if (!userMatch) continue;
+
+        const userId = Number(userMatch[1]);
+        const userDirPath = path.join(sessionsDir, userDirName);
+
+        if (!fs.statSync(userDirPath).isDirectory()) continue;
+
+        const sessionDirs = fs.readdirSync(userDirPath);
+
+        for (const sessionDir of sessionDirs) {
+          const sessionPath = path.join(userDirPath, sessionDir);
+
+          // Validar que sea un directorio
+          try {
+            if (!fs.statSync(sessionPath).isDirectory()) continue;
+          } catch (e) { continue; }
+
           const sessionId = sessionDir;
+
+          // Extraer userId del nombre de la sesión para doble verificación (opcional)
+          // const match = sessionId.match(/^session_(\d+)_/);
 
           console.log(`[SessionManager] Restoring session ${sessionId} for user ${userId}`);
 
@@ -504,12 +556,12 @@ class SessionManager {
             userId,
             phoneNumber: null,
             status: 'restored',
-            createdAt: new Date(), // Usar fecha actual de restauración si no podemos leer stats
+            createdAt: new Date(),
             sessionId,
             authDir: absoluteSessionPath
           };
 
-          // Intentar preservar fecha original y obtener número de creds.json
+          // Intentar leer metadatos (creds.json)
           let phoneNumber = null;
           try {
             const stat = fs.statSync(sessionPath);
@@ -539,6 +591,8 @@ class SessionManager {
           }
           this.userSessions.get(userId).add(sessionId);
 
+          sessionCount++;
+
           // Auto-inicializar
           try {
             await this.initializeSession(sessionId);
@@ -547,6 +601,9 @@ class SessionManager {
           }
         }
       }
+
+      console.log(`[SessionManager] Restored total ${sessionCount} sessions.`);
+
     } catch (error) {
       console.error('[SessionManager] Error restoring sessions:', error);
     }

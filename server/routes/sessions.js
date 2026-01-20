@@ -2,21 +2,36 @@ import express from 'express';
 const router = express.Router();
 
 // GET /api/sessions - Obtiene todas las sesiones del usuario actual
-router.get('/', (req, res) => {
+// GET /api/sessions - Obtiene todas las sesiones del usuario actual
+router.get('/', async (req, res) => {
     try {
         const sessionManager = req.app.get('sessionManager');
+        const userService = req.app.get('userService');
         const userId = req.userId;
 
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Usuario no autenticado' });
         }
 
-        const isAdmin = req.headers['x-user-role'] === 'administrador';
-        let sessions;
+        // Verify role properly from database or safe fallback
+        // We use the userService if available to check the real role
+        let isAdmin = false;
+        try {
+            const user = await userService.getUserById(userId);
+            isAdmin = user && (user.subscription_type || '').toLowerCase() === 'administrador';
+        } catch (e) {
+            // Fallback to header if DB check fails, but prefer DB
+            isAdmin = (req.headers['x-user-role'] || '').toLowerCase() === 'administrador';
+        }
 
-        if (isAdmin) {
-            sessions = sessionManager.getAllSessions();
+        let sessions;
+        const targetUserId = req.query.userId;
+
+        // If specific userId is requested and user is admin, fetch for that user
+        if (isAdmin && targetUserId) {
+            sessions = sessionManager.getUserSessions(targetUserId);
         } else {
+            // Otherwise, ALWAYS return only current user's sessions as requested
             sessions = sessionManager.getUserSessions(userId);
         }
 

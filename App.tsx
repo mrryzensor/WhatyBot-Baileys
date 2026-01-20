@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
+import { destroySession } from './services/sessionsApi';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { SingleSender } from './components/SingleSender';
@@ -75,7 +76,7 @@ function App() {
   const { selectedSession, loadSessions } = useSession();
 
   const bulkQueueControl = useBulkQueueControl(bulkProgress);
-  const [phoneLimitModal, setPhoneLimitModal] = useState<{ show: boolean; phone: string | null; message: string | null }>({ show: false, phone: null, message: null });
+  const [phoneLimitModal, setPhoneLimitModal] = useState<{ show: boolean; phone: string | null; message: string | null; sessionId?: string | null }>({ show: false, phone: null, message: null, sessionId: null });
 
   // Listen for auto-updater status events
   useEffect(() => {
@@ -235,6 +236,15 @@ function App() {
                 timestamp: new Date(log.timestamp)
               });
             });
+
+            socket.on('phone_limit_exceeded', (data: any) => {
+              setPhoneLimitModal({
+                show: true,
+                phone: data.phone,
+                message: data.message,
+                sessionId: data.sessionId
+              });
+            });
           }
 
           // Parallel data loading
@@ -260,6 +270,7 @@ function App() {
         socket.off('bulk_wait_seconds');
         socket.off('group_progress');
         socket.off('message_log');
+        socket.off('phone_limit_exceeded');
       }
     };
   }, [isAuthenticatedState, currentUser?.id]);
@@ -394,8 +405,13 @@ function AppBody({
   groupsCache, setGroupsCache, phoneLimitModal, setPhoneLimitModal,
   rules, setRules
 }: any) {
-  const { selectedSession } = useSession();
+  const { selectedSession, clearSessions, loadSessions } = useSession();
   const isConnected = selectedSession?.isReady || false;
+
+  const handleLogoutWithSessionClear = () => {
+    clearSessions();
+    handleLogout();
+  };
 
   const handleNavigate = (tab: string) => {
     const tabMap: any = {
@@ -514,7 +530,7 @@ function AppBody({
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc]">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} currentUser={currentUser} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogoutWithSessionClear} currentUser={currentUser} />
       <main className="flex-1 lg:ml-64 p-4 sm:p-6 lg:p-8 overflow-x-hidden pb-24 lg:pb-8">
         {/* Top bar */}
         <div className="flex justify-between items-center mb-8">
@@ -629,7 +645,17 @@ function AppBody({
             </div>
             <div className="bg-slate-50 px-6 py-4 flex justify-end">
               <button
-                onClick={() => setPhoneLimitModal({ show: false, phone: null, message: null })}
+                onClick={async () => {
+                  if (phoneLimitModal.sessionId) {
+                    try {
+                      await destroySession(phoneLimitModal.sessionId);
+                      await loadSessions();
+                    } catch (e) {
+                      console.error('Error destroying session:', e);
+                    }
+                  }
+                  setPhoneLimitModal({ show: false, phone: null, message: null, sessionId: null });
+                }}
                 className="bg-slate-600 hover:bg-slate-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
               >
                 Entendido

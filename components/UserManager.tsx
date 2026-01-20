@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Users, Crown, Gift, Zap, Trash2, Edit2, Plus, TrendingUp, Calendar, MessageCircle, X, Search, ArrowUpDown, ArrowUp, ArrowDown, Upload } from 'lucide-react';
 import { User, SubscriptionInfo, SubscriptionLimit } from '../services/usersApi';
-import { 
-  getAllUsers, 
-  createUser, 
-  updateUserSubscription, 
+import {
+  getAllUsers,
+  createUser,
+  updateUserSubscription,
   updateUser,
   deleteUser,
   deleteUsersBulk,
@@ -15,6 +16,7 @@ import {
   updateSubscriptionContactLink,
   SubscriptionContactLink
 } from '../services/usersApi';
+import { getSessions, initializeSession, destroySession } from '../services/sessionsApi';
 import { BulkUserCreator } from './BulkUserCreator';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -37,6 +39,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   const [loading, setLoading] = useState(false);
   const [showBulkCreator, setShowBulkCreator] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userSessions, setUserSessions] = useState<any[]>([]);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [editingLimit, setEditingLimit] = useState<SubscriptionLimit | null>(null);
   const [editingContactLink, setEditingContactLink] = useState<{ type: string; contactType: string; contactValue: string } | null>(null);
@@ -117,7 +120,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
   const handleSaveLimit = async () => {
     if (!editingLimit) return;
-    
+
     try {
       const updates: any = {};
       if (limitMessages !== undefined) {
@@ -129,7 +132,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       if (limitPrice !== undefined) {
         updates.price = limitPrice;
       }
-      
+
       const response = await updateSubscriptionLimit(editingLimit.type, updates);
       if (response.success) {
         toast.success('Límite actualizado exitosamente');
@@ -154,7 +157,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
   const handleSaveContactLink = async () => {
     if (!editingContactLink) return;
-    
+
     try {
       const response = await updateSubscriptionContactLink(
         editingContactLink.type,
@@ -234,10 +237,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   const confirmDeleteBulk = async () => {
     const userIds = Array.from(selectedUsers) as number[];
     const total = userIds.length;
-    
+
     setDeleteProgress({ current: 0, total, isDeleting: true });
     const results = { success: 0, failed: 0 };
-    
+
     for (let i = 0; i < userIds.length; i++) {
       try {
         await deleteUser(userIds[i]);
@@ -247,10 +250,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       }
       setDeleteProgress({ current: i + 1, total, isDeleting: true });
     }
-    
+
     setDeleteProgress({ current: 0, total: 0, isDeleting: false });
     setShowBulkDeleteModal(false);
-    
+
     if (results.success > 0) {
       toast.success(`${results.success} usuario(s) eliminado(s) exitosamente`);
       setSelectedUsers(new Set());
@@ -322,8 +325,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     if (sortField !== field) {
       return <ArrowUpDown size={14} className="text-slate-400" />;
     }
-    return sortDirection === 'asc' ? 
-      <ArrowUp size={14} className="text-blue-600" /> : 
+    return sortDirection === 'asc' ?
+      <ArrowUp size={14} className="text-blue-600" /> :
       <ArrowDown size={14} className="text-blue-600" />;
   };
 
@@ -334,7 +337,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     setEditEmail(user.email || '');
     setEditPassword('');
     setEditSubscriptionType(user.subscription_type);
-    
+
     // Set dates
     if (user.subscription_start_date) {
       const startDate = new Date(user.subscription_start_date);
@@ -342,14 +345,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     } else {
       setEditStartDate('');
     }
-    
+
     if (user.subscription_end_date) {
       const endDate = new Date(user.subscription_end_date);
       setEditEndDate(endDate.toISOString().split('T')[0]);
     } else {
       setEditEndDate('');
     }
-    
+
     // Calculate duration from dates
     if (user.subscription_start_date && user.subscription_end_date) {
       const start = new Date(user.subscription_start_date);
@@ -424,7 +427,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       }
 
       const results = { success: 0, failed: 0, errors: [] as string[] };
-      
+
       for (const userId of userIds) {
         try {
           await updateUser(Number(userId), updates);
@@ -472,7 +475,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
       // Generate username from email if not provided
       const username = editUsername.trim() || generateUsernameFromEmail(editEmail);
-      
+
       if (!username) {
         toast.error('No se pudo generar el nombre de usuario desde el correo');
         return;
@@ -503,7 +506,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
     // If editing existing user
     if (!editingUser) return;
-    
+
     setIsSaving(true);
     try {
       const updates: any = {};
@@ -520,7 +523,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       if (editSubscriptionType !== editingUser.subscription_type) {
         updates.subscriptionType = editSubscriptionType;
       }
-      
+
       // Handle dates
       if (editStartDate) {
         updates.subscriptionStartDate = editStartDate;
@@ -528,11 +531,11 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       if (editEndDate) {
         updates.subscriptionEndDate = editEndDate;
       }
-      
+
       if (editDurationDays !== null && editDurationDays !== undefined) {
         updates.durationDays = editDurationDays;
       }
-      
+
       const response = await updateUser(editingUser.id, updates);
       if (response.success) {
         toast.success('Usuario actualizado exitosamente');
@@ -547,13 +550,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
   };
 
   const handleCloseUserModal = () => {
-        setEditingUser(null);
+    setEditingUser(null);
     setIsCreatingUser(false);
-        setEditUsername('');
-        setEditEmail('');
-        setEditPassword('');
-        setEditSubscriptionType('');
-        setEditDurationDays(null);
+    setEditUsername('');
+    setEditEmail('');
+    setEditPassword('');
+    setEditSubscriptionType('');
+    setEditDurationDays(null);
     setEditStartDate('');
     setEditEndDate('');
   };
@@ -593,6 +596,54 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       case 'elite': return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'platino': return 'bg-amber-100 text-amber-800 border-amber-300';
       default: return 'bg-green-100 text-green-800 border-green-300';
+    }
+  };
+
+  useEffect(() => {
+    if (editingUser) {
+      loadUserSessions(editingUser.id);
+    }
+  }, [editingUser]);
+
+  const loadUserSessions = async (userId: number) => {
+    try {
+      // Usar el nuevo parámetro userId para admin
+      const response = await getSessions(userId);
+      if (response.success) {
+        setUserSessions(response.sessions || []);
+      }
+    } catch (error) {
+      console.error('Error loading user sessions:', error);
+    }
+  };
+
+  const handleRestartUserSession = async (sessionId: string) => {
+    try {
+      const response = await initializeSession(sessionId);
+      if (response.success) {
+        toast.success('Sesión reiniciada correctamente');
+        // Recargar sesiones si es necesario, aunque en teoría SocketIO debería actualizar
+      } else {
+        toast.error('Error al reiniciar sesión');
+      }
+    } catch (error: any) {
+      toast.error('Error al reiniciar sesión: ' + error.message);
+    }
+  };
+
+  const handleDeleteUserSession = async (sessionId: string) => {
+    if (!confirm('¿Estás seguro de resetear esta sesión? Se cerrará la conexión.')) return;
+
+    try {
+      const response = await destroySession(sessionId);
+      if (response.success) {
+        toast.success('Sesión eliminada correctamente');
+        if (editingUser) loadUserSessions(editingUser.id);
+      } else {
+        toast.error('Error al eliminar sesión user');
+      }
+    } catch (error: any) {
+      toast.error('Error eliminando sesión: ' + error.message);
     }
   };
 
@@ -746,322 +797,362 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
             </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.size === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="rounded border-slate-300 text-green-600 focus:ring-green-500"
-                    />
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort('username')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Usuario
-                      <SortIcon field="username" />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort('email')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Email
-                      <SortIcon field="email" />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort('subscription_type')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Suscripción
-                      <SortIcon field="subscription_type" />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort('subscription_start_date')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Inicio
-                      <SortIcon field="subscription_start_date" />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => handleSort('subscription_end_date')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Fin
-                      <SortIcon field="subscription_end_date" />
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredAndSortedUsers.map((user) => {
-                  const isExpired = isSubscriptionExpired(user.subscription_end_date);
-                  const isSelected = selectedUsers.has(user.id);
-                  return (
-                    <tr 
-                      key={user.id} 
-                      className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''} ${isExpired ? 'bg-red-50' : ''}`}
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.size === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort('username')}
                     >
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => handleSelectUser(user.id, e.target.checked)}
-                          className="rounded border-slate-300 text-green-600 focus:ring-green-500"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {getSubscriptionIcon(user.subscription_type)}
-                          <span className="font-medium text-slate-800">{user.username}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {user.email || '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getSubscriptionColor(user.subscription_type)}`}>
-                          {user.subscription_type.toUpperCase()}
-                        </span>
-                        {isExpired && (
-                          <span className="ml-2 text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 border border-red-300">
-                            EXPIRADA
+                      <div className="flex items-center gap-1">
+                        Usuario
+                        <SortIcon field="username" />
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort('email')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Email
+                        <SortIcon field="email" />
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort('subscription_type')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Suscripción
+                        <SortIcon field="subscription_type" />
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort('subscription_start_date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Inicio
+                        <SortIcon field="subscription_start_date" />
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => handleSort('subscription_end_date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Fin
+                        <SortIcon field="subscription_end_date" />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredAndSortedUsers.map((user) => {
+                    const isExpired = isSubscriptionExpired(user.subscription_end_date);
+                    const isSelected = selectedUsers.has(user.id);
+                    return (
+                      <tr
+                        key={user.id}
+                        className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''} ${isExpired ? 'bg-red-50' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => handleSelectUser(user.id, e.target.checked)}
+                            className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {getSubscriptionIcon(user.subscription_type)}
+                            <span className="font-medium text-slate-800">{user.username}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {user.email || '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getSubscriptionColor(user.subscription_type)}`}>
+                            {user.subscription_type.toUpperCase()}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {formatDate(user.subscription_start_date)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {user.subscription_end_date ? formatDate(user.subscription_end_date) : '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditUser(user)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Editar usuario"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          {user.username !== 'admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Eliminar usuario"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                          {isExpired && (
+                            <span className="ml-2 text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 border border-red-300">
+                              EXPIRADA
+                            </span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {formatDate(user.subscription_start_date)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {user.subscription_end_date ? formatDate(user.subscription_end_date) : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditUser(user)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Editar usuario"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            {user.username !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Eliminar usuario"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       </div>
 
       {/* Edit/Create User Modal */}
-      {(editingUser || isCreatingUser) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-slate-800 mb-4">
-              {isCreatingUser ? 'Crear Nuevo Usuario' : `Editar Usuario - ${editingUser?.username}`}
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nombre de Usuario {isCreatingUser && '(Generado automáticamente)'}
-                </label>
-                <input
-                  type="text"
-                  value={editUsername}
-                  onChange={(e) => setEditUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder={isCreatingUser ? "Se generará desde el correo" : "usuario123 (opcional)"}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  {isCreatingUser 
-                    ? 'Se genera automáticamente desde el correo electrónico' 
-                    : 'Opcional - dejar vacío para mantener el actual'}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email {isCreatingUser && '*'}
-                </label>
-                <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder="usuario@ejemplo.com"
-                  required={isCreatingUser}
-                />
-                {isCreatingUser && (
-                  <p className="text-xs text-slate-500 mt-1">Campo obligatorio - El nombre de usuario se generará automáticamente</p>
+      {(editingUser || isCreatingUser) && createPortal(
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-[95vw] h-[90vh] flex flex-col relative overflow-hidden">
+            {/* Header Fijo */}
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-white z-10">
+              <h3 className="font-semibold text-slate-800 text-lg">
+                {isCreatingUser ? 'Crear Nuevo Usuario' : `Editar Usuario - ${editingUser?.username}`}
+              </h3>
+              <button
+                onClick={handleCloseUserModal}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
+                title="Cerrar"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Contenido con Scroll */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                {/* Columna 1: Datos Básicos */}
+                <div className="space-y-4">
+                  <h4 className="font-medium text-slate-700 border-b pb-2 mb-3">Datos de Cuenta</h4>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Email {isCreatingUser && '*'}
+                    </label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => handleEmailChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="usuario@ejemplo.com"
+                      required={isCreatingUser}
+                    />
+                    {isCreatingUser && (
+                      <p className="text-xs text-slate-500 mt-1">El nombre de usuario se generará automáticamente</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Nombre de Usuario
+                    </label>
+                    <input
+                      type="text"
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={isCreatingUser ? "Generado autom." : "usuario123"}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      {isCreatingUser ? 'Contraseña' : 'Nueva Contraseña'}
+                    </label>
+                    <input
+                      type="password"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={isCreatingUser ? "Opcional (default)" : "Dejar vacío para mantener"}
+                    />
+                  </div>
+                </div>
+
+                {/* Columna 2: Suscripción y Fechas */}
+                <div className="space-y-4 md:col-span-2">
+                  <h4 className="font-medium text-slate-700 border-b pb-2 mb-3">Suscripción y Vigencia</h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Tipo de Suscripción
+                      </label>
+                      <select
+                        value={editSubscriptionType}
+                        onChange={(e) => setEditSubscriptionType(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="gratuito">Gratuito</option>
+                        <option value="pro">Pro</option>
+                        <option value="elite">Elite</option>
+                        <option value="platino">Platino</option>
+                        <option value="administrador">Administrador</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    {/* Fecha Inicio */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Fecha Inicio
+                      </label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="date"
+                          value={editStartDate}
+                          onChange={(e) => setEditStartDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                        />
+                        <div className="flex gap-1 flex-wrap">
+                          {[1, 3, 6, 9].map(m => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleStartDateIncrement(m)}
+                              className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors border border-blue-100 font-medium"
+                              title={`Fin = Inicio + ${m} meses`}
+                            >
+                              +{m}M
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fecha Fin */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Fecha Fin
+                      </label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="date"
+                          value={editEndDate}
+                          onChange={(e) => setEditEndDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                        />
+                        <div className="flex gap-1 flex-wrap">
+                          {[1, 3, 6, 9].map(m => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleEndDateIncrement(m)}
+                              className="px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors border border-green-100 font-medium"
+                              title={`Extender fin +${m} meses`}
+                            >
+                              +{m}M
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400">Calculada automáticamente</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección de Sesiones - Ocupa todo el ancho si hay espacio */}
+                {!isCreatingUser && (
+                  <div className="col-span-1 md:col-span-2 lg:col-span-3 border-t border-slate-100 pt-6 mt-2">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center gap-2">
+                      <MessageCircle size={18} />
+                      Gestión de Sesiones WhatsApp
+                    </h4>
+
+                    {userSessions.length === 0 ? (
+                      <div className="text-center py-6 bg-slate-50 rounded-lg text-slate-500 text-sm border border-dashed border-slate-200">
+                        Este usuario no tiene sesiones activas
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {userSessions.map((session) => (
+                          <div key={session.sessionId} className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm flex flex-col gap-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${session.isReady ? 'bg-green-100 text-green-700' :
+                                    session.status === 'connected' ? 'bg-orange-100 text-orange-700' :
+                                      session.status === 'waiting_qr' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {session.isReady ? 'Conectado' :
+                                      session.status === 'waiting_qr' ? 'Esperando QR' :
+                                        session.status}
+                                  </span>
+                                </div>
+                                <div className="font-mono text-xs text-slate-400" title={session.sessionId}>
+                                  ID: {session.sessionId.substring(0, 15)}...
+                                </div>
+                                {session.phoneNumber && (
+                                  <div className="text-sm font-medium text-slate-700 mt-1">
+                                    {session.phoneNumber}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-1">
+                                {session.status === 'connected' && (
+                                  <button
+                                    onClick={() => handleRestartUserSession(session.sessionId)}
+                                    className="p-2 bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 transition-colors"
+                                    title="Reiniciar Sesión"
+                                  >
+                                    <Zap size={16} />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteUserSession(session.sessionId)}
+                                  className="p-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
+                                  title="Eliminar Sesión"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  {isCreatingUser ? 'Contraseña' : 'Nueva Contraseña'}
-                </label>
-                <input
-                  type="password"
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder={isCreatingUser ? "Opcional - se usará una por defecto" : "Dejar vacío para no cambiar"}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  {isCreatingUser 
-                    ? 'Opcional - Si se deja vacío se usará una contraseña por defecto' 
-                    : 'Dejar vacío para mantener la contraseña actual'}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Tipo de Suscripción
-                </label>
-                <select
-                  value={editSubscriptionType}
-                  onChange={(e) => setEditSubscriptionType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white"
-                >
-                  <option value="gratuito">Gratuito</option>
-                  <option value="pro">Pro</option>
-                  <option value="elite">Elite</option>
-                  <option value="platino">Platino</option>
-                  <option value="administrador">Administrador</option>
-                </select>
-              </div>
-              
-              {/* Fecha de Inicio */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Fecha de Inicio de Suscripción
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="date"
-                    value={editStartDate}
-                    onChange={(e) => setEditStartDate(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg"
-                  />
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleStartDateIncrement(1)}
-                      className="px-2 py-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      title="Calcular fin: Inicio + 1 mes"
-                    >
-                      +1M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartDateIncrement(3)}
-                      className="px-2 py-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      title="Calcular fin: Inicio + 3 meses"
-                    >
-                      +3M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartDateIncrement(6)}
-                      className="px-2 py-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      title="Calcular fin: Inicio + 6 meses"
-                    >
-                      +6M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartDateIncrement(9)}
-                      className="px-2 py-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      title="Calcular fin: Inicio + 9 meses"
-                    >
-                      +9M
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Los botones calculan la fecha de fin basándose en la fecha de inicio</p>
-              </div>
-
-              {/* Fecha de Fin */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Fecha de Fin de Suscripción
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="date"
-                    value={editEndDate}
-                    onChange={(e) => setEditEndDate(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg"
-                  />
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleEndDateIncrement(1)}
-                      className="px-2 py-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                      title="Incrementar fin +1 mes"
-                    >
-                      +1M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEndDateIncrement(3)}
-                      className="px-2 py-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                      title="Incrementar fin +3 meses"
-                    >
-                      +3M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEndDateIncrement(6)}
-                      className="px-2 py-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                      title="Incrementar fin +6 meses"
-                    >
-                      +6M
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEndDateIncrement(9)}
-                      className="px-2 py-2 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                      title="Incrementar fin +9 meses"
-                    >
-                      +9M
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Los botones incrementan la fecha de fin</p>
-              </div>
             </div>
-            
-            <div className="flex gap-2 mt-6">
+
+            {/* Footer Fijo con Botones */}
+            <div className="p-6 border-t border-slate-100 bg-white z-10 flex gap-3 justify-end">
               <button
                 onClick={handleCloseUserModal}
                 disabled={isSaving}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -1081,331 +1172,350 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
 
+
       {/* Edit Contact Link Modal */}
-      {editingContactLink && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-slate-800">
-                Editar Enlace de Contacto - {editingContactLink.type.toUpperCase()}
-              </h3>
-              <button
-                onClick={() => {
-                  setEditingContactLink(null);
-                  setLinkContactType('whatsapp_number');
-                  setLinkContactValue('');
-                }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Tipo de Contacto
-                </label>
-                <select
-                  value={linkContactType}
-                  onChange={(e) => setLinkContactType(e.target.value as 'whatsapp_number' | 'wa_link' | 'payment_link')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                >
-                  <option value="whatsapp_number">Número de WhatsApp</option>
-                  <option value="wa_link">Enlace Wa.link</option>
-                  <option value="payment_link">Enlace de Pago</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  {linkContactType === 'whatsapp_number' && 'Número de WhatsApp (ej: 51977638887)'}
-                  {linkContactType === 'wa_link' && 'URL de Wa.link (ej: https://wa.link/xxxxx)'}
-                  {linkContactType === 'payment_link' && 'URL de Enlace de Pago (ej: https://paypal.me/...)'}
-                </label>
-                <input
-                  type="text"
-                  value={linkContactValue}
-                  onChange={(e) => setLinkContactValue(e.target.value)}
-                  placeholder={
-                    linkContactType === 'whatsapp_number' ? '51977638887' :
-                    linkContactType === 'wa_link' ? 'https://wa.link/xxxxx' :
-                    'https://...'
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleSaveContactLink}
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors"
-                >
-                  Guardar
-                </button>
+      {
+        editingContactLink && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-slate-800">
+                  Editar Enlace de Contacto - {editingContactLink.type.toUpperCase()}
+                </h3>
                 <button
                   onClick={() => {
                     setEditingContactLink(null);
                     setLinkContactType('whatsapp_number');
                     setLinkContactValue('');
                   }}
-                  className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  Cancelar
+                  <X size={20} />
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Edit Limit Modal */}
-      {editingLimit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-            <h3 className="font-semibold text-slate-800 mb-4">
-              Editar Límites - {editingLimit.type.charAt(0).toUpperCase() + editingLimit.type.slice(1)}
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Mensajes por mes
-                </label>
-                <input
-                  type="number"
-                  value={limitMessages === 0 && editingLimit.type === 'administrador' ? '' : limitMessages}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value) || 0;
-                    setLimitMessages(val);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder={editingLimit.type === 'administrador' ? 'Ilimitados' : '0'}
-                  disabled={editingLimit.type === 'administrador'}
-                />
-                {editingLimit.type === 'administrador' && (
-                  <p className="text-xs text-slate-500 mt-1">Los administradores tienen mensajes ilimitados</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Duración (días)
-                </label>
-                <input
-                  type="number"
-                  value={limitDuration || ''}
-                  onChange={(e) => setLimitDuration(parseInt(e.target.value) || null)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder="30"
-                />
-                <p className="text-xs text-slate-500 mt-1">Dejar vacío para permanente</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Precio (USD/mes)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={() => {
-                  setEditingLimit(null);
-                  setLimitMessages(0);
-                  setLimitDuration(null);
-                  setLimitPrice(0);
-                }}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveLimit}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Guardar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Edit Modal */}
-      {showBulkEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-            <h3 className="font-semibold text-slate-800 mb-4">
-              Editar {selectedUsers.size} Usuario(s) Masivamente
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Tipo de Suscripción (opcional)
-                </label>
-                <select
-                  value={bulkSubscriptionType}
-                  onChange={(e) => setBulkSubscriptionType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                >
-                  <option value="">No cambiar</option>
-                  <option value="gratuito">Gratuito</option>
-                  <option value="pro">Pro</option>
-                  <option value="elite">Elite</option>
-                  <option value="administrador">Administrador</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nueva Contraseña (opcional)
-                </label>
-                <input
-                  type="password"
-                  value={bulkPassword}
-                  onChange={(e) => setBulkPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                  placeholder="2748curso (por defecto si se deja vacío)"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Si se deja vacío, se usará la contraseña por defecto: 2748curso
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={() => {
-                  setShowBulkEditModal(false);
-                  setBulkSubscriptionType('');
-                  setBulkPassword('');
-                }}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleBulkUpdate}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Actualizar {selectedUsers.size} Usuario(s)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk User Creator Modal */}
-      {showBulkCreator && (
-        <BulkUserCreator
-          isOpen={showBulkCreator}
-          onClose={() => setShowBulkCreator(false)}
-          onSuccess={loadUsers}
-          toast={toast}
-          subscriptionLimits={subscriptionLimits}
-        />
-      )}
-
-      {/* Delete User Confirmation Modal with Loader */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Eliminar Usuario</h3>
-            <p className="text-slate-600 mb-6">
-              ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setUserToDelete(null);
-                }}
-                disabled={isDeleting}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmDeleteUser}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isDeleting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Eliminando...
-                  </>
-                ) : (
-                  'Eliminar'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Confirmation Modal with Progress */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">
-              {deleteProgress.isDeleting ? 'Eliminando Usuarios...' : 'Eliminar Usuarios'}
-            </h3>
-            
-            {deleteProgress.isDeleting ? (
               <div className="space-y-4">
-                <p className="text-slate-600">
-                  Eliminando {deleteProgress.current} de {deleteProgress.total} usuarios...
-                </p>
-                <div className="w-full bg-slate-200 rounded-full h-3">
-                  <div 
-                    className="bg-red-600 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Tipo de Contacto
+                  </label>
+                  <select
+                    value={linkContactType}
+                    onChange={(e) => setLinkContactType(e.target.value as 'whatsapp_number' | 'wa_link' | 'payment_link')}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="whatsapp_number">Número de WhatsApp</option>
+                    <option value="wa_link">Enlace Wa.link</option>
+                    <option value="payment_link">Enlace de Pago</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    {linkContactType === 'whatsapp_number' && 'Número de WhatsApp (ej: 51977638887)'}
+                    {linkContactType === 'wa_link' && 'URL de Wa.link (ej: https://wa.link/xxxxx)'}
+                    {linkContactType === 'payment_link' && 'URL de Enlace de Pago (ej: https://paypal.me/...)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={linkContactValue}
+                    onChange={(e) => setLinkContactValue(e.target.value)}
+                    placeholder={
+                      linkContactType === 'whatsapp_number' ? '51977638887' :
+                        linkContactType === 'wa_link' ? 'https://wa.link/xxxxx' :
+                          'https://...'
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-                <p className="text-sm text-slate-500 text-center">
-                  {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% completado
-                </p>
-              </div>
-            ) : (
-              <>
-                <p className="text-slate-600 mb-6">
-                  ¿Estás seguro de que deseas eliminar {selectedUsers.size} usuario(s)? Esta acción no se puede deshacer.
-                </p>
-                <div className="flex gap-3 justify-end">
+
+                <div className="flex gap-3 pt-4">
                   <button
-                    onClick={() => setShowBulkDeleteModal(false)}
-                    className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    onClick={handleSaveContactLink}
+                    className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingContactLink(null);
+                      setLinkContactType('whatsapp_number');
+                      setLinkContactValue('');
+                    }}
+                    className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
                   >
                     Cancelar
                   </button>
-                  <button
-                    onClick={confirmDeleteBulk}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Eliminar
-                  </button>
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+      {/* Edit Limit Modal */}
+      {
+        editingLimit && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="font-semibold text-slate-800 mb-4">
+                Editar Límites - {editingLimit.type.charAt(0).toUpperCase() + editingLimit.type.slice(1)}
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Mensajes por mes
+                  </label>
+                  <input
+                    type="number"
+                    value={limitMessages === 0 && editingLimit.type === 'administrador' ? '' : limitMessages}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      setLimitMessages(val);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    placeholder={editingLimit.type === 'administrador' ? 'Ilimitados' : '0'}
+                    disabled={editingLimit.type === 'administrador'}
+                  />
+                  {editingLimit.type === 'administrador' && (
+                    <p className="text-xs text-slate-500 mt-1">Los administradores tienen mensajes ilimitados</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Duración (días)
+                  </label>
+                  <input
+                    type="number"
+                    value={limitDuration || ''}
+                    onChange={(e) => setLimitDuration(parseInt(e.target.value) || null)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    placeholder="30"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Dejar vacío para permanente</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Precio (USD/mes)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={limitPrice}
+                    onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => {
+                    setEditingLimit(null);
+                    setLimitMessages(0);
+                    setLimitDuration(null);
+                    setLimitPrice(0);
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveLimit}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+      {/* Bulk Edit Modal */}
+      {
+        showBulkEditModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="font-semibold text-slate-800 mb-4">
+                Editar {selectedUsers.size} Usuario(s) Masivamente
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Tipo de Suscripción (opcional)
+                  </label>
+                  <select
+                    value={bulkSubscriptionType}
+                    onChange={(e) => setBulkSubscriptionType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                  >
+                    <option value="">No cambiar</option>
+                    <option value="gratuito">Gratuito</option>
+                    <option value="pro">Pro</option>
+                    <option value="elite">Elite</option>
+                    <option value="administrador">Administrador</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Nueva Contraseña (opcional)
+                  </label>
+                  <input
+                    type="password"
+                    value={bulkPassword}
+                    onChange={(e) => setBulkPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    placeholder="2748curso (por defecto si se deja vacío)"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Si se deja vacío, se usará la contraseña por defecto: 2748curso
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => {
+                    setShowBulkEditModal(false);
+                    setBulkSubscriptionType('');
+                    setBulkPassword('');
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleBulkUpdate}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Actualizar {selectedUsers.size} Usuario(s)
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+      {/* Bulk User Creator Modal */}
+      {
+        showBulkCreator && (
+          <BulkUserCreator
+            isOpen={showBulkCreator}
+            onClose={() => setShowBulkCreator(false)}
+            onSuccess={loadUsers}
+            toast={toast}
+            subscriptionLimits={subscriptionLimits}
+          />
+        )
+      }
+
+      {/* Delete User Confirmation Modal with Loader */}
+      {
+        showDeleteModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">Eliminar Usuario</h3>
+              <p className="text-slate-600 mb-6">
+                ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setUserToDelete(null);
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDeleteUser}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    'Eliminar'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+      {/* Bulk Delete Confirmation Modal with Progress */}
+      {
+        showBulkDeleteModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                {deleteProgress.isDeleting ? 'Eliminando Usuarios...' : 'Eliminar Usuarios'}
+              </h3>
+
+              {deleteProgress.isDeleting ? (
+                <div className="space-y-4">
+                  <p className="text-slate-600">
+                    Eliminando {deleteProgress.current} de {deleteProgress.total} usuarios...
+                  </p>
+                  <div className="w-full bg-slate-200 rounded-full h-3">
+                    <div
+                      className="bg-red-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-slate-500 text-center">
+                    {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% completado
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-slate-600 mb-6">
+                    ¿Estás seguro de que deseas eliminar {selectedUsers.size} usuario(s)? Esta acción no se puede deshacer.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setShowBulkDeleteModal(false)}
+                      className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDeleteBulk}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      }
+    </div >
   );
 };
 

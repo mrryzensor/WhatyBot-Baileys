@@ -24,10 +24,14 @@ const handleResponse = async (response: Response) => {
     }
 };
 
-export const getSessions = async () => {
+export const getSessions = async (userId?: number | string) => {
     await waitForBackendPort();
     try {
-        const response = await fetch(`${getApiUrl()}/api/sessions`, {
+        let url = `${getApiUrl()}/api/sessions`;
+        if (userId) {
+            url += `?userId=${userId}`;
+        }
+        const response = await fetch(url, {
             headers: getHeaders()
         });
         return await handleResponse(response);

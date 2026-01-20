@@ -70,6 +70,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
             s.on('ready', handleWhatsAppReady);
             s.on('authenticated', handleWhatsAppAuthenticated);
             s.on('qr', handleWhatsAppQR);
+            s.on('phone_limit_exceeded', handlePhoneLimitExceeded);
         };
 
         const removeListeners = (s: any) => {
@@ -80,6 +81,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
             s.off('ready', handleWhatsAppReady);
             s.off('authenticated', handleWhatsAppAuthenticated);
             s.off('qr', handleWhatsAppQR);
+            s.off('phone_limit_exceeded', handlePhoneLimitExceeded);
         };
 
         const socket = getSocket();
@@ -103,6 +105,15 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
             removeListeners(getSocket());
         };
     }, []);
+
+    const handlePhoneLimitExceeded = (data: any) => {
+        console.log('[Frontend] Phone limit exceeded event received in SessionManager');
+        if (showQRModal) {
+            setShowQRModal(false);
+            setQrCode(null);
+            setSelectedSession(null);
+        }
+    };
 
     const handleWhatsAppReady = (data: any) => {
         if (!data.sessionId) return;
@@ -400,44 +411,57 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                                                     })}
                                                 </span>
                                             </div>
-                                            <button
-                                                onClick={() => handleDestroySession(session.sessionId)}
-                                                className="p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors flex items-center justify-center shrink-0"
-                                                title="Eliminar Sesión"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+
+                                            {/* Botones de acción en la misma línea */}
+                                            <div className="flex items-center gap-2">
+                                                {session.isReady ? (
+                                                    <button
+                                                        onClick={() => handleInitializeSession(session.sessionId)}
+                                                        className="p-2 bg-orange-100 text-orange-600 rounded-md hover:bg-orange-200 transition-colors flex items-center justify-center shrink-0"
+                                                        title="Reiniciar sesión si hay problemas"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                    </button>
+                                                ) : (
+                                                    <>
+                                                        {session.status === 'waiting_qr' && (
+                                                            <button
+                                                                onClick={() => handleGetQR(session.sessionId)}
+                                                                className="p-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors flex items-center justify-center shrink-0"
+                                                                title="Ver código QR"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                        {(session.status === 'initializing' || session.status === 'connected') && (
+                                                            <button
+                                                                onClick={() => handleInitializeSession(session.sessionId)}
+                                                                className="p-2 bg-green-100 text-green-600 rounded-md hover:bg-green-200 transition-colors flex items-center justify-center shrink-0"
+                                                                title={session.status === 'connected' ? 'Forzar inicio de sesión' : 'Iniciar sesión'}
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                <button
+                                                    onClick={() => handleDestroySession(session.sessionId)}
+                                                    className="p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors flex items-center justify-center shrink-0"
+                                                    title="Eliminar Sesión"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {!session.isReady && (
-                                            <div className="flex items-center gap-2">
-                                                {session.status === 'connected' && (
-                                                    <button
-                                                        onClick={() => handleInitializeSession(session.sessionId)}
-                                                        className="flex-1 px-3 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-xs font-semibold"
-                                                    >
-                                                        Forzar Inicio
-                                                    </button>
-                                                )}
-                                                {session.status === 'waiting_qr' && (
-                                                    <button
-                                                        onClick={() => handleGetQR(session.sessionId)}
-                                                        className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs font-semibold"
-                                                    >
-                                                        Ver QR
-                                                    </button>
-                                                )}
-
-                                                {session.status === 'initializing' && (
-                                                    <button
-                                                        onClick={() => handleInitializeSession(session.sessionId)}
-                                                        className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-xs font-semibold"
-                                                    >
-                                                        Iniciar
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
                                     </div>
                                 ))}
                                 {sessions.length === 0 && (
