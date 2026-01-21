@@ -68,7 +68,7 @@ class SessionManager {
    * Obtiene la carpeta de autenticación para una sesión específica
    */
   getSessionAuthDir(sessionId) {
-    const sessionsDir = path.join(__dirname, '.baileys_sessions');
+    const sessionsDir = process.env.SESSION_DIR || path.join(__dirname, '.baileys_sessions');
 
     // Extract userId from sessionId to organize by folder
     const match = sessionId.match(/^session_(\d+)_/);
@@ -475,7 +475,7 @@ class SessionManager {
    */
   async restoreSessions() {
     try {
-      const sessionsDir = path.join(__dirname, '.baileys_sessions');
+      const sessionsDir = process.env.SESSION_DIR || path.join(__dirname, '.baileys_sessions');
       console.log(`[SessionManager] Restoring sessions from: ${sessionsDir}`);
 
       if (!fs.existsSync(sessionsDir)) {

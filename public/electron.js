@@ -449,16 +449,24 @@ async function startBackendServer() {
     try {
       const baseDataDir = app.getPath('userData');
       ensureDir(baseDataDir);
+
       const sessionDir = profileContext?.sessionDir || path.join(baseDataDir, 'session');
       const uploadsDir = profileContext?.uploadsDir || path.join(baseDataDir, 'uploads');
+      const dataDir = profileContext?.dataDir || path.join(baseDataDir, 'data');
+
       ensureDir(sessionDir);
       ensureDir(uploadsDir);
+      ensureDir(dataDir);
+
       envVars.SESSION_DIR = sessionDir;
       envVars.UPLOAD_DIR = uploadsDir;
+      envVars.DATA_DIR = dataDir;
+
       console.log(`[Instance ${instanceId}] SESSION_DIR: ${sessionDir}`);
       console.log(`[Instance ${instanceId}] UPLOAD_DIR: ${uploadsDir}`);
+      console.log(`[Instance ${instanceId}] DATA_DIR: ${dataDir}`);
     } catch (e) {
-      console.warn(`[Instance ${instanceId}] Could not prepare SESSION_DIR/UPLOAD_DIR:`, e?.message || e);
+      console.warn(`[Instance ${instanceId}] Could not prepare SESSION_DIR/UPLOAD_DIR/DATA_DIR:`, e?.message || e);
     }
 
     if (app.isPackaged) {

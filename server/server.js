@@ -28,6 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const profileSlug = process.env.PROFILE_SLUG || null;
 const sessionDir = process.env.SESSION_DIR || null;
+const dataDir = process.env.DATA_DIR || null;
 const PORT_INFO_FILE = profileSlug
   ? path.join(process.cwd(), `.${profileSlug}-port-info.json`)
   : path.join(__dirname, '..', '.port-info.json');

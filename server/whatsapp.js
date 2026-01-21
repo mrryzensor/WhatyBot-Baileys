@@ -63,7 +63,8 @@ class WhatsAppClient extends EventEmitter {
 
   loadGlobalSessionsConfig() {
     try {
-      const configPath = path.join(__dirname, 'data/globalSessionsConfig.json');
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const configPath = path.join(dataDir, 'globalSessionsConfig.json');
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         this.globalSessionsEnabled = config.enabled ?? true;
@@ -180,13 +181,14 @@ class WhatsAppClient extends EventEmitter {
 
   loadAutoReplyRules() {
     try {
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       // Use session-specific file if sessionId is present, otherwise use default
       const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
-      const rulesPath = path.join(__dirname, 'data', fileName);
+      const rulesPath = path.join(dataDir, fileName);
 
       // Migration/Fallback: If session file doesn't exist but global default exists, copy it
       if (!fs.existsSync(rulesPath) && this.sessionId) {
-        const globalPath = path.join(__dirname, 'data', 'autoReplyRules.json');
+        const globalPath = path.join(dataDir, 'autoReplyRules.json');
         if (fs.existsSync(globalPath)) {
           try {
             fs.copyFileSync(globalPath, rulesPath);
@@ -238,10 +240,10 @@ class WhatsAppClient extends EventEmitter {
 
   saveAutoReplyRules() {
     try {
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
-      const rulesPath = path.join(__dirname, 'data', fileName);
+      const rulesPath = path.join(dataDir, fileName);
 
-      const dataDir = path.dirname(rulesPath);
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
@@ -256,12 +258,13 @@ class WhatsAppClient extends EventEmitter {
   // Interactive Menus Management
   loadInteractiveMenus() {
     try {
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
-      const menusPath = path.join(__dirname, 'data', fileName);
+      const menusPath = path.join(dataDir, fileName);
 
       // Migration/Fallback: If session file doesn't exist but global default exists, copy it
       if (!fs.existsSync(menusPath) && this.sessionId) {
-        const globalPath = path.join(__dirname, 'data', 'interactiveMenus.json');
+        const globalPath = path.join(dataDir, 'interactiveMenus.json');
         if (fs.existsSync(globalPath)) {
           try {
             fs.copyFileSync(globalPath, menusPath);
@@ -288,10 +291,10 @@ class WhatsAppClient extends EventEmitter {
 
   saveInteractiveMenus() {
     try {
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
-      const menusPath = path.join(__dirname, 'data', fileName);
+      const menusPath = path.join(dataDir, fileName);
 
-      const dataDir = path.dirname(menusPath);
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
@@ -305,7 +308,8 @@ class WhatsAppClient extends EventEmitter {
   // User Sessions Management
   loadUserSessions() {
     try {
-      const sessionsPath = path.join(__dirname, 'data', 'userSessions.json');
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const sessionsPath = path.join(dataDir, 'userSessions.json');
       if (fs.existsSync(sessionsPath)) {
         const sessionsArray = JSON.parse(fs.readFileSync(sessionsPath, 'utf8'));
         this.userSessions = new Map(sessionsArray.map(s => [s.userId, s]));
@@ -324,7 +328,7 @@ class WhatsAppClient extends EventEmitter {
 
   saveUserSessions() {
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
@@ -541,7 +545,8 @@ class WhatsAppClient extends EventEmitter {
 
   loadConfig() {
     try {
-      const configPath = path.join(__dirname, 'data', 'config.json');
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const configPath = path.join(dataDir, 'config.json');
       if (fs.existsSync(configPath)) {
         this.config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       }
@@ -552,7 +557,7 @@ class WhatsAppClient extends EventEmitter {
 
   saveConfig() {
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
