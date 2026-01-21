@@ -143,31 +143,8 @@ router.post('/send', async (req, res) => {
 
         let targetDisplay = null;
         try {
-            // Validación preventiva para grupos si el destino es un grupo
-            if (to.endsWith('@g.us')) {
-                const client = sessionManager.getSessionClient(sessionId);
-                if (client && client.sock) {
-                    try {
-                        const myGroups = await client.sock.groupFetchAllParticipating();
-                        const groupMetadata = myGroups[to];
-                        if (groupMetadata) {
-                            targetDisplay = groupMetadata.subject;
-                            const announce = !!groupMetadata.announce;
-                            const selfJid = client.sock?.user?.id || client.sock?.user?.jid || '';
-                            const selfNumber = selfJid.split('@')[0].split(':')[0];
-                            const isAdmin = !!(groupMetadata.participants || []).find(p =>
-                                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
-                            );
-
-                            if (announce && !isAdmin) {
-                                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
-                            }
-                        }
-                    } catch (e) {
-                        if (e.message.includes('permiso')) throw e;
-                    }
-                }
-            }
+            // Note: Pre-emptive permission check removed.
+            // We rely on the actual send failure from Baileys/WhatsApp to determine permissions.
 
             const cleanTarget = formatTarget(to, targetDisplay);
             const result = await sessionManager.sendMessage(sessionId, to, message || '');
@@ -268,31 +245,8 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
         const userId = req.userId;
         let targetDisplay = null;
         try {
-            // Validación preventiva para grupos
-            if (to.endsWith('@g.us')) {
-                const client = sessionManager.getSessionClient(sessionId);
-                if (client && client.sock) {
-                    try {
-                        const myGroups = await client.sock.groupFetchAllParticipating();
-                        const groupMetadata = myGroups[to];
-                        if (groupMetadata) {
-                            targetDisplay = groupMetadata.subject;
-                            const announce = !!groupMetadata.announce;
-                            const selfJid = client.sock?.user?.id || client.sock?.user?.jid || '';
-                            const selfNumber = selfJid.split('@')[0].split(':')[0];
-                            const isAdmin = !!(groupMetadata.participants || []).find(p =>
-                                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
-                            );
-
-                            if (announce && !isAdmin) {
-                                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
-                            }
-                        }
-                    } catch (e) {
-                        if (e.message.includes('permiso')) throw e;
-                    }
-                }
-            }
+            // Note: Pre-emptive permission check removed.
+            // We rely on the actual send failure from Baileys/WhatsApp to determine permissions.
 
             const cleanTarget = formatTarget(to, targetDisplay);
             const result = await sessionManager.sendMessage(sessionId, to, message || '', mediaPaths, mediaCaptions);

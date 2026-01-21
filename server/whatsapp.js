@@ -1312,23 +1312,8 @@ class WhatsAppClient extends EventEmitter {
         }
         const contact = batch[i];
         try {
-          // Validación preventiva para grupos
-          const jid = this.resolveJid(contact.phone);
-          if (jid.endsWith('@g.us')) {
-            const groupMetadata = myGroups[jid];
-            if (groupMetadata) {
-              const announce = !!groupMetadata.announce;
-              const selfJid = this.sock?.user?.id || this.sock?.user?.jid || '';
-              const selfNumber = selfJid.split('@')[0].split(':')[0];
-              const isAdmin = !!(groupMetadata.participants || []).find(p =>
-                (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
-              );
-
-              if (announce && !isAdmin) {
-                throw new Error('No tienes permiso para enviar mensajes a este grupo (solo administradores)');
-              }
-            }
-          }
+          // Note: Pre-emptive permission check removed to fix admin false negatives.
+          // We rely on actual send failure.
 
           // Replace variables in message y captions
           let personalizedMessage = message || '';

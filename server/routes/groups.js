@@ -135,19 +135,9 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
                     const groupMetadata = myGroups[groupId];
                     const cleanTarget = formatTarget(groupId, groupMetadata?.subject);
 
-                    // Validación de permisos
-                    if (groupMetadata) {
-                        const announce = !!groupMetadata.announce;
-                        const selfJid = client.sock?.user?.id || client.sock?.user?.jid || '';
-                        const selfNumber = selfJid.split('@')[0].split(':')[0];
-                        const isAdmin = !!(groupMetadata.participants || []).find(p =>
-                            (p.id.split('@')[0].split(':')[0] === selfNumber) && !!p.admin
-                        );
+                    // Note: Pre-emptive permission check removed. 
+                    // We rely on the actual send failure from Baileys/WhatsApp to determine permissions.
 
-                        if (announce && !isAdmin) {
-                            throw new Error('Sin permisos (Solo Admins)');
-                        }
-                    }
 
                     await sessionManager.sendMessage(sessionId, groupId, message || '', mediaPaths, mediaCaptions);
                     successCount++;
@@ -167,6 +157,7 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
                     await messageLogService.logMessage(userId, 'group', cleanTarget, 'sent', message || '[Archivo multimedia]', null);
                     if (i < groupIds.length - 1) await new Promise(r => setTimeout(r, 1000));
                 } catch (e) {
+                    console.error(`[Groups] Error sending to group ${groupId}:`, e);
                     const cleanTarget = formatTarget(groupId, myGroups[groupId]?.subject);
                     failedCount++;
                     if (io) {
@@ -182,6 +173,7 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
                         });
                     }
                     await messageLogService.logMessage(userId, 'group', cleanTarget, 'failed', message || '[Archivo multimedia]', null);
+                    if (i < groupIds.length - 1) await new Promise(r => setTimeout(r, 1000));
                 }
             }
 
