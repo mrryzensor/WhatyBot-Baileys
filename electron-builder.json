@@ -53,10 +53,6 @@
       "filter": [
         "**/*"
       ]
-    },
-    {
-      "from": ".env",
-      "to": "server/.env"
     }
   ],
   "mac": {

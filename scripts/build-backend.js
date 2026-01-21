@@ -24,6 +24,20 @@ const dependencies = Object.keys(serverPackageJson.dependencies || {});
 const peerDependencies = Object.keys(serverPackageJson.peerDependencies || {});
 const external = [...dependencies, ...peerDependencies, 'electron'];
 
+// Read .env file to define env vars
+const dotenv = require('dotenv');
+const envPath = path.join(serverDir, '..', '.env');
+const envConfig = dotenv.config({ path: envPath }).parsed || {};
+
+// Filter out sensitive keys if needed, or include all.
+// For standard dotenv behavior replacement, we include all.
+const define = {};
+for (const k in envConfig) {
+    define[`process.env.${k}`] = JSON.stringify(envConfig[k]);
+}
+
+console.log(`🔑 Bundling ${Object.keys(define).length} environment variables...`);
+
 console.log('📦 Bundling backend...');
 
 await esbuild.build({
@@ -36,6 +50,7 @@ await esbuild.build({
     format: 'esm', // ESM for Node.js (since package.json has "type": "module")
     sourcemap: false, // No sourcemaps for production to hide code better
     minify: true, // Minify to further obfuscate and reduce size
+    define: define, // Inlines environment variables
     loader: {
         '.node': 'file', // Handle .node native extensions if any
     },
