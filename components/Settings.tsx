@@ -7,6 +7,7 @@ import { GlobalSessionToggle } from './GlobalSessionToggle';
 import { useGlobalSessions } from '../hooks/useGlobalSessions';
 import { useSession } from '../context/SessionContext';
 import { ConfirmModal } from './ConfirmModal';
+import pkg from '../package.json';
 
 interface SettingsProps {
   config: AppConfig;
@@ -570,7 +571,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
           <div className="space-y-3 mb-4">
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
               <span className="text-sm font-medium text-slate-700">Versión actual</span>
-              <span className="text-sm font-semibold text-slate-900">v1.0.4</span>
+              <span className="text-sm font-semibold text-slate-900">v{pkg.version}</span>
             </div>
 
             <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
