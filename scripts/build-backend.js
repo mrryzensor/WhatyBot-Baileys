@@ -1,6 +1,12 @@
-const esbuild = require('esbuild');
-const path = require('path');
-const fs = require('fs');
+import esbuild from 'esbuild';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const projectRoot = path.resolve(__dirname, '..');
 const serverDir = path.join(projectRoot, 'server');
@@ -20,7 +26,7 @@ const external = [...dependencies, ...peerDependencies, 'electron'];
 
 console.log('📦 Bundling backend...');
 
-esbuild.build({
+await esbuild.build({
     entryPoints: [path.join(serverDir, 'server.js')],
     bundle: true,
     platform: 'node',
@@ -36,14 +42,6 @@ esbuild.build({
     logLevel: 'info',
 }).then(() => {
     console.log('✅ Backend bundled successfully to dist-server/server.js');
-
-    // Copy other necessary files that might not be bundled or are needed
-    // e.g., local database files or config files if they exist in source and aren't generated
-    // But typically DATA_DIR handles runtime data. 
-
-    // We DO need to ensure package.json is there if we were running npm install, 
-    // but since we copy node_modules separately, we mainy need the bundle.
-
 }).catch((err) => {
     console.error('❌ Build failed:', err);
     process.exit(1);
