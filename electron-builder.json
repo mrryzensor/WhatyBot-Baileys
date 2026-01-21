@@ -30,14 +30,29 @@
   ],
   "extraResources": [
     {
-      "from": "server",
+      "from": "dist-server",
       "to": "server",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "server/data",
+      "to": "server/data",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "server/package.json",
+      "to": "server/package.json"
     },
     {
       "from": "server/node_modules",
       "to": "server/node_modules",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": ".env",
@@ -65,4 +80,3 @@
     "uninstallerIcon": "icons/Uninstall.ico"
   }
 }
-
