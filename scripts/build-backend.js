@@ -33,7 +33,7 @@ await esbuild.build({
     target: 'node18',
     outfile: path.join(distServerDir, 'server.js'),
     external: external, // Mark dependencies as external
-    format: 'cjs', // CommonJS for Node.js
+    format: 'esm', // ESM for Node.js (since package.json has "type": "module")
     sourcemap: false, // No sourcemaps for production to hide code better
     minify: true, // Minify to further obfuscate and reduce size
     loader: {
