@@ -4,7 +4,7 @@ import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import { useMessageEditor } from '../hooks/useMessageEditor';
 
 interface MessageEditorToolbarProps {
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>;
   value: string;
   onChange: (value: string) => void;
   variables?: string[];

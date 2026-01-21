@@ -659,6 +659,22 @@ class WhatsAppClient extends EventEmitter {
     }
   }
 
+  async sendPoll(to, name, options, selectableCount = 1) {
+    if (!this.sock) throw new Error('WhatsApp socket not initialized');
+    const jid = this.resolveJid(to);
+
+    // Ensure options is an array of strings
+    const pollOptions = Array.isArray(options) ? options : [];
+
+    return await this.sock.sendMessage(jid, {
+      poll: {
+        name: name,
+        values: pollOptions,
+        selectableCount: selectableCount
+      }
+    });
+  }
+
   async initialize() {
     if (this._initializePromise) {
       return this._initializePromise;

@@ -571,6 +571,39 @@ export const scheduleGroupMessages = async (
   return response.data;
 };
 
+export const sendGroupPoll = async (
+  groupIds: string[],
+  name: string,
+  options: string[],
+  selectableCount: number = 1,
+  files?: File[],
+  captions?: string[],
+  mediaPosition: 'before' | 'after' = 'after'
+) => {
+  const formData = new FormData();
+  formData.append('groupIds', JSON.stringify(groupIds));
+  formData.append('name', name);
+  formData.append('options', JSON.stringify(options));
+  formData.append('selectableCount', selectableCount.toString());
+  formData.append('mediaPosition', mediaPosition);
+
+  if (files && files.length > 0) {
+    files.forEach((file) => {
+      formData.append('media', file);
+    });
+  }
+  if (captions && captions.length > 0) {
+    formData.append('captions', JSON.stringify(captions));
+  }
+
+  const response = await api.post('/groups/send-poll', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
 export const scheduleBulkMessages = async (
   contacts: any[],
   message: string,

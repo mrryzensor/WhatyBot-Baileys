@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 
 interface UseMessageEditorOptions {
-  textareaRef?: React.RefObject<HTMLTextAreaElement>;
+  textareaRef?: React.RefObject<HTMLTextAreaElement | HTMLInputElement>;
   onTextChange?: (text: string) => void;
   variables?: string[];
   value?: string; // Optional: current value for more reliable insertion
@@ -9,7 +9,7 @@ interface UseMessageEditorOptions {
 
 export const useMessageEditor = (options: UseMessageEditorOptions = {}) => {
   const { textareaRef, onTextChange, variables = [], value: propValue } = options;
-  const internalTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const internalTextareaRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
   const getTextarea = useCallback(() => {
     return textareaRef?.current || internalTextareaRef.current;

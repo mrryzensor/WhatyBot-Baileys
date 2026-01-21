@@ -190,6 +190,152 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
     }
 });
 
+// POST /api/groups/send-poll - Send poll to groups
+router.post('/send-poll', upload.array('media', 10), async (req, res) => {
+    try {
+        let groupIds = req.body.groupIds;
+        if (typeof groupIds === 'string') groupIds = JSON.parse(groupIds);
+
+        let options = req.body.options;
+        if (typeof options === 'string') options = JSON.parse(options);
+
+        const { name, selectableCount, mediaPosition = 'after', caption, captions } = req.body;
+
+        if (!name || !options || !Array.isArray(options) || options.length < 2) {
+            return res.status(400).json({ error: 'Poll must have a name and at least 2 options' });
+        }
+
+        const sessionManager = req.app.get('sessionManager');
+        const messageCountService = req.app.get('messageCountService');
+        const messageLogService = req.app.get('messageLogService');
+
+        const sessionId = getSessionId(req);
+        if (!sessionId) return res.status(400).json({ error: 'WhatsApp no conectado' });
+
+        // Handle Media
+        const files = Array.isArray(req.files) ? req.files : [];
+        const mediaPaths = files.map(f => f.path);
+        let mediaCaptions = Array.isArray(captions) ? captions : (captions ? JSON.parse(captions) : []);
+        if (mediaCaptions.length === 0) mediaCaptions = mediaPaths.map(() => caption || '');
+
+        const userId = req.userId;
+        const totalGroups = groupIds.length;
+        const io = req.app.get('io');
+
+        // Fix: logic for selectableCount
+        // If 0, it means "allow multiple" -> effectively equal to number of options
+        let selectable = parseInt(selectableCount);
+        if (selectable === 0) {
+            selectable = options.length;
+        } else if (!selectable) {
+            selectable = 1;
+        }
+
+        // Run in background
+        (async () => {
+            let successCount = 0;
+            let failedCount = 0;
+
+            // Get group info for logs
+            let myGroups = {};
+            const client = sessionManager.getSessionClient(sessionId);
+            if (client && client.sock) {
+                try {
+                    myGroups = await client.sock.groupFetchAllParticipating();
+                } catch (e) { }
+            }
+
+            for (let i = 0; i < groupIds.length; i++) {
+                const groupId = groupIds[i];
+                const cleanTarget = formatTarget(groupId, myGroups[groupId]?.subject);
+
+                try {
+                    const sendMedia = async () => {
+                        if (mediaPaths.length > 0) {
+                            await sessionManager.sendMessage(sessionId, groupId, '', mediaPaths, mediaCaptions);
+                        }
+                    };
+
+                    if (mediaPosition === 'before' && mediaPaths.length > 0) {
+                        await sendMedia();
+                        await new Promise(r => setTimeout(r, 1000)); // Ensure order
+                    }
+
+                    await client.sendPoll(groupId, name, options, selectable);
+
+                    if (mediaPosition === 'after' && mediaPaths.length > 0) {
+                        await new Promise(r => setTimeout(r, 1000)); // Ensure order
+                        await sendMedia();
+                    }
+
+                    successCount++;
+
+                    if (io) {
+                        io.emit('group_progress', {
+                            userId,
+                            current: i + 1,
+                            total: totalGroups,
+                            successCount,
+                            failedCount,
+                            groupId,
+                            status: 'sent',
+                            type: 'poll'
+                        });
+
+                        io.emit('message_log', {
+                            id: uuidv4(),
+                            userId,
+                            target: cleanTarget,
+                            status: 'sent',
+                            timestamp: new Date(),
+                            content: `Encuesta: ${name}`,
+                            messageType: 'group_poll'
+                        });
+                    }
+
+                    await messageCountService.incrementCount(userId, 1);
+                    await messageLogService.logMessage(userId, 'group_poll', cleanTarget, 'sent', `Encuesta: ${name}`, null);
+
+                    if (i < groupIds.length - 1) await new Promise(r => setTimeout(r, 1000));
+
+                } catch (e) {
+                    console.error(`[Groups] Error sending poll to group ${groupId}:`, e);
+                    failedCount++;
+
+                    if (io) {
+                        io.emit('group_progress', {
+                            userId,
+                            current: i + 1,
+                            total: totalGroups,
+                            successCount,
+                            failedCount,
+                            groupId,
+                            status: 'failed',
+                            error: e.message,
+                            type: 'poll'
+                        });
+                    }
+
+                    await messageLogService.logMessage(userId, 'group_poll', cleanTarget, 'failed', `Encuesta: ${name}`, null);
+                    if (i < groupIds.length - 1) await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+
+            // Cleanup media files
+            if (mediaPaths.length > 0) {
+                setTimeout(() => {
+                    for (const p of mediaPaths) if (fs.existsSync(p)) fs.unlinkSync(p);
+                }, 5000);
+            }
+        })();
+
+        res.json({ success: true, message: 'Enviando encuestas a grupos...' });
+    } catch (error) {
+        console.error('Error sending poll:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Group lists logic (remains mostly same as it is DB/File based, not session based)
 const getListsPath = () => path.join(__dirname, '../data/groupLists.json');
 const loadGroupLists = () => {

@@ -9,6 +9,7 @@ import { MediaUpload } from './MediaUpload';
 import { MessageEditorToolbar } from './MessageEditorToolbar';
 import { SubscriptionUpgradeModal } from './SubscriptionUpgradeModal';
 import { GroupMembersViewer } from './GroupMembersViewer';
+import { PollCreator } from './PollCreator';
 import { GroupIcon } from './GroupIcon';
 import { BulkProgressBar } from './BulkProgressBar';
 import { useSchedule } from '../hooks/useSchedule';
@@ -51,6 +52,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
   const [viewingGroupId, setViewingGroupId] = useState<string | null>(null);
   const [viewingGroupName, setViewingGroupName] = useState<string>('');
   const [showMembersViewer, setShowMembersViewer] = useState(false);
+  const [activeTab, setActiveTab] = useState<'message' | 'poll'>('message');
 
   const isAdmin = (currentUser?.subscription_type || '').toString().toLowerCase() === 'administrador';
 
@@ -488,108 +490,142 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
           />
         </div>
 
-        {/* Message Sender for Groups */}
+        {/* Message/Poll Area */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <ScheduleManager
-            scheduleType={schedule.scheduleType}
-            delayMinutes={schedule.delayMinutes}
-            scheduledAt={schedule.scheduledAt}
-            scheduledDate={schedule.scheduledDate}
-            scheduledTime={schedule.scheduledTime}
-            onScheduleChange={schedule.updateSchedule}
-            onDateChange={(date) => {
-              schedule.setScheduledDate(date);
-              schedule.handleDateTimeChange(date, schedule.scheduledTime);
-            }}
-            onTimeChange={(time) => {
-              schedule.setScheduledTime(time);
-              schedule.handleDateTimeChange(schedule.scheduledDate, time);
-            }}
-            disabled={loading}
-          />
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-            <h3 className="font-semibold text-slate-800 mb-4">Mensaje de Difusión</h3>
-            {/* Message Editor Toolbar */}
-            <MessageEditorToolbar
-              textareaRef={messageTextareaRef}
-              value={message}
-              onChange={setMessage}
-              showVariables={false}
-            />
-            <textarea
-              ref={messageTextareaRef}
-              className="flex-1 w-full p-4 border border-slate-200 rounded-lg resize-none mb-4 mt-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Escribe tu mensaje para los grupos seleccionados..."
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-            ></textarea>
-
-            {/* Media Upload */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Archivos Adjuntos (opcional)
-              </label>
-              <MediaUpload
-                mediaItems={media.mediaItems}
-                onMediaChange={media.setMediaItems}
-                maxFiles={50}
-                fileInputRef={media.fileInputRef}
-                onFileSelect={media.handleFileSelect}
-                onDrop={media.handleDrop}
-                onOpenFileSelector={media.openFileSelector}
-                onRemoveMedia={media.removeMedia}
-                onUpdateCaption={media.updateCaption}
-              />
-            </div>
-
-            {/* Inline Preview */}
-            {message && (
-              <div className="mb-4">
-                <MessagePreview
-                  message={message}
-                  contactName="Grupo de Ejemplo"
-                  showContactInfo={false}
-                  inline={true}
-                />
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-slate-500">
-                Seleccionados: <span className="font-bold text-slate-800">{selectedGroups.size}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowPreview(true)}
-                  disabled={!message && media.mediaItems.length === 0}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${!message && media.mediaItems.length === 0
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }`}
-                >
-                  <Eye size={18} />
-                  Vista Previa
-                </button>
-                <button
-                  onClick={handleSendToGroups}
-                  disabled={!isConnected || selectedGroups.size === 0 || loading || (!message && media.mediaItems.length === 0)}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-green-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {schedule.scheduleType === 'now' ? 'Enviando...' : 'Programando...'}
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} /> {schedule.scheduleType === 'now' ? 'Enviar Difusión' : 'Programar Difusión'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+          {/* Tabs for Message/Poll */}
+          <div className="flex bg-slate-100 p-1 rounded-xl self-start">
+            <button
+              onClick={() => setActiveTab('message')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'message'
+                ? 'bg-white text-green-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+                }`}
+            >
+              Mensaje
+            </button>
+            <button
+              onClick={() => setActiveTab('poll')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'poll'
+                ? 'bg-white text-green-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+                }`}
+            >
+              Encuesta
+            </button>
           </div>
+
+          {activeTab === 'message' ? (
+            <>
+              <ScheduleManager
+                scheduleType={schedule.scheduleType}
+                delayMinutes={schedule.delayMinutes}
+                scheduledAt={schedule.scheduledAt}
+                scheduledDate={schedule.scheduledDate}
+                scheduledTime={schedule.scheduledTime}
+                onScheduleChange={schedule.updateSchedule}
+                onDateChange={(date) => {
+                  schedule.setScheduledDate(date);
+                  schedule.handleDateTimeChange(date, schedule.scheduledTime);
+                }}
+                onTimeChange={(time) => {
+                  schedule.setScheduledTime(time);
+                  schedule.handleDateTimeChange(schedule.scheduledDate, time);
+                }}
+                disabled={loading}
+              />
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
+                <h3 className="font-semibold text-slate-800 mb-4">Mensaje de Difusión</h3>
+                {/* Message Editor Toolbar */}
+                <MessageEditorToolbar
+                  textareaRef={messageTextareaRef}
+                  value={message}
+                  onChange={setMessage}
+                  showVariables={false}
+                />
+                <textarea
+                  ref={messageTextareaRef}
+                  className="flex-1 w-full p-4 border border-slate-200 rounded-lg resize-none mb-4 mt-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Escribe tu mensaje para los grupos seleccionados..."
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                ></textarea>
+
+                {/* Media Upload */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Archivos Adjuntos (opcional)
+                  </label>
+                  <MediaUpload
+                    mediaItems={media.mediaItems}
+                    onMediaChange={media.setMediaItems}
+                    maxFiles={50}
+                    fileInputRef={media.fileInputRef}
+                    onFileSelect={media.handleFileSelect}
+                    onDrop={media.handleDrop}
+                    onOpenFileSelector={media.openFileSelector}
+                    onRemoveMedia={media.removeMedia}
+                    onUpdateCaption={media.updateCaption}
+                  />
+                </div>
+
+                {/* Inline Preview */}
+                {message && (
+                  <div className="mb-4">
+                    <MessagePreview
+                      message={message}
+                      contactName="Grupo de Ejemplo"
+                      showContactInfo={false}
+                      inline={true}
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-slate-500">
+                    Seleccionados: <span className="font-bold text-slate-800">{selectedGroups.size}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setShowPreview(true)}
+                      disabled={!message && media.mediaItems.length === 0}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${!message && media.mediaItems.length === 0
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                    >
+                      <Eye size={18} />
+                      Vista Previa
+                    </button>
+                    <button
+                      onClick={handleSendToGroups}
+                      disabled={!isConnected || selectedGroups.size === 0 || loading || (!message && media.mediaItems.length === 0)}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-green-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          {schedule.scheduleType === 'now' ? 'Enviando...' : 'Programando...'}
+                        </>
+                      ) : (
+                        <>
+                          <Send size={18} /> {schedule.scheduleType === 'now' ? 'Enviar Difusión' : 'Programar Difusión'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <PollCreator
+              selectedGroupsCount={selectedGroups.size}
+              selectedGroupIds={selectedGroups}
+              isConnected={isConnected}
+              onSendComplete={() => setSelectedGroups(new Set())}
+              toast={toast}
+            />
+          )}
         </div>
 
         {/* Message Preview Modal */}
