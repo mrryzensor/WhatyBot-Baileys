@@ -630,15 +630,15 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)]">
                 {/* Left Column: Menus List */}
                 <div className="lg:col-span-1 flex flex-col gap-4">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
                         <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                <h3 className="font-semibold text-theme-main flex items-center gap-2">
                                     <MenuIcon size={20} className="text-blue-600" /> Menús Interactivos
                                 </h3>
                                 <GlobalSessionIndicator enabled={globalSessionsEnabled} />
                             </div>
-                            <p className="text-xs text-slate-500 mt-2">
+                            <p className="text-xs text-theme-muted mt-2">
                                 Crea menús con opciones para guiar conversaciones.
                             </p>
 
@@ -664,7 +664,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 </button>
                                 <button
                                     onClick={() => setShowImportModal(true)}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-xs font-medium"
+                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors text-xs font-medium"
                                     title="Importar menús"
                                 >
                                     <Upload size={14} />
@@ -681,10 +681,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <span className="font-medium text-slate-700 text-sm">Lista de Menús</span>
-                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-xs">{menus.length}</span>
+                    <div className="flex-1 bg-theme-card rounded-xl shadow-sm border border-theme overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-theme bg-theme-base flex justify-between items-center">
+                            <span className="font-medium text-theme-main text-sm">Lista de Menús</span>
+                            <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{menus.length}</span>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -694,12 +694,12 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 </div>
                             ) : (
                                 menus.map(menu => (
-                                    <div key={menu.id} className={`p-4 rounded-lg border transition-all ${editingId === menu.id ? 'border-blue-500 bg-blue-50' : menu.isActive ? 'border-slate-100 hover:border-blue-200 bg-white' : 'border-slate-200 bg-slate-50 opacity-75'}`}>
+                                    <div key={menu.id} className={`p-4 rounded-lg border transition-all ${editingId === menu.id ? 'border-blue-500 bg-blue-50' : menu.isActive ? 'border-theme hover:border-blue-200 bg-theme-card' : 'border-theme bg-theme-base opacity-75'}`}>
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-slate-800 text-sm">{menu.name}</h4>
+                                                <h4 className="font-bold text-theme-main text-sm">{menu.name}</h4>
                                                 {!menu.isActive && (
-                                                    <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-600 rounded-full">
+                                                    <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-theme-muted rounded-full">
                                                         Desactivado
                                                     </span>
                                                 )}
@@ -707,7 +707,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => toggleStatus(menu.id)}
-                                                    className={`p-1.5 rounded transition-colors ${menu.isActive ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                                                    className={`p-1.5 rounded transition-colors ${menu.isActive ? 'text-primary-600 hover:bg-primary-50' : 'text-slate-400 hover:bg-slate-100'}`}
                                                     title={menu.isActive ? 'Desactivar' : 'Activar'}
                                                 >
                                                     {menu.isActive ? <CheckCircle size={16} /> : <Circle size={16} />}
@@ -728,7 +728,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                                 </button>
                                             </div>
                                         </div>
-                                        <p className="text-xs text-slate-500 mb-2 line-clamp-2">{menu.message}</p>
+                                        <p className="text-xs text-theme-muted mb-2 line-clamp-2">{menu.message}</p>
                                         <div className="text-xs text-slate-400">
                                             {menu.options.length} opción(es)
                                         </div>
@@ -740,19 +740,19 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                     {/* Active Sessions */}
                     {sessions.length > 0 && (
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                        <div className="bg-theme-card p-4 rounded-xl shadow-sm border border-theme">
                             <div className="flex items-center gap-2 mb-3">
-                                <Users size={16} className="text-green-600" />
-                                <h4 className="font-semibold text-slate-800 text-sm">Sesiones Activas ({sessions.length})</h4>
+                                <Users size={16} className="text-primary-600" />
+                                <h4 className="font-semibold text-theme-main text-sm">Sesiones Activas ({sessions.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-40 overflow-y-auto">
                                 {sessions.map(session => {
                                     const menu = menus.find(m => m.id === session.currentMenuId);
                                     return (
-                                        <div key={session.userId} className="flex items-center justify-between p-2 bg-slate-50 rounded text-xs">
+                                        <div key={session.userId} className="flex items-center justify-between p-2 bg-theme-base rounded text-xs">
                                             <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-slate-700 truncate">{session.userId.split('@')[0]}</div>
-                                                <div className="text-slate-500">{menu?.name || session.currentMenuId}</div>
+                                                <div className="font-medium text-theme-main truncate">{session.userId.split('@')[0]}</div>
+                                                <div className="text-theme-muted">{menu?.name || session.currentMenuId}</div>
                                             </div>
                                             <button
                                                 onClick={() => handleClearSession(session.userId)}
@@ -771,13 +771,13 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                 {/* Right Column: Editor */}
                 <div className="lg:col-span-2">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                            <h3 className="font-semibold text-theme-main flex items-center gap-2">
                                 {editingId ? <><Edit2 size={18} /> Editar Menú</> : <><Plus size={18} /> Nuevo Menú</>}
                             </h3>
                             {editingId && (
-                                <button onClick={resetForm} className="text-xs text-slate-500 flex items-center gap-1 hover:text-red-500">
+                                <button onClick={resetForm} className="text-xs text-theme-muted flex items-center gap-1 hover:text-red-500">
                                     <X size={14} /> Cancelar Edición
                                 </button>
                             )}
@@ -791,10 +791,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                         <div className="space-y-4 flex-1 overflow-y-auto">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre del Menú</label>
+                                <label className="block text-sm font-medium text-theme-main mb-1">Nombre del Menú</label>
                                 <input
                                     type="text"
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-300' : 'border-slate-300'
+                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-300' : 'border-theme'
                                         }`}
                                     placeholder="Ej: Menú Principal"
                                     value={formData.name}
@@ -810,7 +810,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <label className="block text-sm font-medium text-theme-main mb-1">
                                     Mensaje del Menú <span className="text-slate-400 text-xs font-normal">(opcional si hay captions)</span>
                                 </label>
 
@@ -827,7 +827,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 <textarea
                                     ref={menuMessageRef}
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2 ${formErrors.message ? 'border-red-300' : 'border-slate-300'
+                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2 ${formErrors.message ? 'border-red-300' : 'border-theme'
                                         }`}
                                     placeholder="¡Hola! 👋 ¿En qué puedo ayudarte?&#10;&#10;1️⃣ Información&#10;2️⃣ Precios&#10;3️⃣ Soporte"
                                     rows={6}
@@ -847,7 +847,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                             {/* Menu-level Media Upload */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                <label className="block text-sm font-medium text-theme-main mb-2">
                                     Archivos Multimedia del Menú (opcional)
                                 </label>
                                 <MediaUpload
@@ -868,7 +868,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-sm font-medium text-slate-700">Opciones del Menú</label>
+                                    <label className="block text-sm font-medium text-theme-main">Opciones del Menú</label>
                                     <button
                                         onClick={() => openOptionEditor()}
                                         className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium"
@@ -881,7 +881,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 <div className="flex gap-2 mb-3">
                                     <button
                                         onClick={() => addQuickOption('main')}
-                                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-xs font-medium"
+                                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors text-xs font-medium"
                                         title="Agregar opción para volver al menú principal"
                                     >
                                         🏠 Principal
@@ -908,20 +908,20 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 <div className="space-y-2 max-h-60 overflow-y-auto">
                                     {(formData.options || []).length === 0 ? (
-                                        <div className="text-center p-6 text-slate-400 italic text-sm border-2 border-dashed border-slate-200 rounded-lg">
+                                        <div className="text-center p-6 text-slate-400 italic text-sm border-2 border-dashed border-theme rounded-lg">
                                             No hay opciones. Agrega al menos una opción.
                                         </div>
                                     ) : (
                                         (formData.options || []).map((option, index) => (
-                                            <div key={option.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                            <div key={option.id} className="p-3 bg-theme-base rounded-lg border border-theme">
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1">
-                                                        <div className="font-medium text-slate-800 text-sm mb-1">{option.label}</div>
-                                                        <div className="text-xs text-slate-500 mb-1">
+                                                        <div className="font-medium text-theme-main text-sm mb-1">{option.label}</div>
+                                                        <div className="text-xs text-theme-muted mb-1">
                                                             Triggers: {option.triggers.join(', ')}
                                                         </div>
                                                         {option.response && (
-                                                            <div className="text-xs text-slate-600 line-clamp-2 italic">"{option.response}"</div>
+                                                            <div className="text-xs text-theme-muted line-clamp-2 italic">"{option.response}"</div>
                                                         )}
                                                         {option.nextMenuId && (
                                                             <div className="flex items-center gap-1 text-xs text-blue-600 mt-1">
@@ -955,11 +955,11 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             </div>
                         </div>
 
-                        <div className="pt-6 mt-4 border-t border-slate-100 flex justify-end">
+                        <div className="pt-6 mt-4 border-t border-theme flex justify-end">
                             <button
                                 onClick={handleSave}
                                 disabled={isLoading}
-                                className="bg-slate-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2 shadow-lg disabled:opacity-50"
+                                className="bg-theme-sidebar text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2 shadow-lg disabled:opacity-50"
                             >
                                 <Save size={18} /> {editingId ? 'Actualizar Menú' : 'Guardar Menú'}
                             </button>
@@ -971,10 +971,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
             {/* Option Editor Modal */}
             {showOptionEditor && editingOption && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="bg-theme-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-bold text-slate-800">
+                                <h3 className="text-lg font-bold text-theme-main">
                                     {editingOption.label ? 'Editar Opción' : 'Nueva Opción'}
                                 </h3>
                                 <button
@@ -982,7 +982,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                         setShowOptionEditor(false);
                                         setEditingOption(null);
                                     }}
-                                    className="text-slate-400 hover:text-slate-600"
+                                    className="text-slate-400 hover:text-theme-muted"
                                 >
                                     <X size={20} />
                                 </button>
@@ -990,10 +990,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Etiqueta de la Opción</label>
+                                    <label className="block text-sm font-medium text-theme-main mb-1">Etiqueta de la Opción</label>
                                     <input
                                         type="text"
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                                         placeholder="Ej: Información"
                                         value={editingOption.label}
                                         onChange={e => setEditingOption({ ...editingOption, label: e.target.value })}
@@ -1001,10 +1001,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Triggers (separados por coma)</label>
+                                    <label className="block text-sm font-medium text-theme-main mb-1">Triggers (separados por coma)</label>
                                     <input
                                         type="text"
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                                         placeholder="1, info, información"
                                         value={triggersInput}
                                         onChange={e => setTriggersInput(e.target.value)}
@@ -1013,7 +1013,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Respuesta (opcional)</label>
+                                    <label className="block text-sm font-medium text-theme-main mb-1">Respuesta (opcional)</label>
 
                                     {/* Barra de Formato */}
                                     <MessageEditorToolbar
@@ -1025,7 +1025,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                     <textarea
                                         ref={optionResponseRef}
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2"
                                         placeholder="Texto de respuesta cuando se selecciona esta opción"
                                         rows={4}
                                         value={editingOption.response || ''}
@@ -1035,7 +1035,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 {/* Media Upload */}
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    <label className="block text-sm font-medium text-theme-main mb-2">
                                         Archivos Multimedia (opcional)
                                     </label>
                                     <MediaUpload
@@ -1056,7 +1056,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 <div className={editingOption.goBack ? 'opacity-50 pointer-events-none grayscale' : ''}>
                                     <div className="flex items-center justify-between mb-1">
-                                        <label className="block text-sm font-medium text-slate-700">Siguiente Menú (opcional)</label>
+                                        <label className="block text-sm font-medium text-theme-main">Siguiente Menú (opcional)</label>
                                         <button
                                             onClick={async () => {
                                                 const subMenuName = `${editingOption.label} - Submenú`;
@@ -1085,7 +1085,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                         </button>
                                     </div>
                                     <select
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-theme-card"
                                         value={String(editingOption.nextMenuId || '')}
                                         onChange={e => {
                                             const val = e.target.value;
@@ -1115,9 +1115,9 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                                 endConversation: checked ? false : editingOption.endConversation
                                             });
                                         }}
-                                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                                        className="w-4 h-4 text-blue-600 border-theme rounded focus:ring-blue-500"
                                     />
-                                    <label htmlFor="goBack" className="text-sm text-slate-700 font-medium">
+                                    <label htmlFor="goBack" className="text-sm text-theme-main font-medium">
                                         🔙 Esta opción vuelve al menú anterior (Nivel Superior)
                                     </label>
                                 </div>
@@ -1128,22 +1128,22 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                         id="endConversation"
                                         checked={editingOption.endConversation || false}
                                         onChange={e => setEditingOption({ ...editingOption, endConversation: e.target.checked })}
-                                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                                        className="w-4 h-4 text-blue-600 border-theme rounded focus:ring-blue-500"
                                         disabled={editingOption.goBack}
                                     />
-                                    <label htmlFor="endConversation" className="text-sm text-slate-700">
+                                    <label htmlFor="endConversation" className="text-sm text-theme-main">
                                         Terminar conversación después de esta opción
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-slate-100">
+                            <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-theme">
                                 <button
                                     onClick={() => {
                                         setShowOptionEditor(false);
                                         setEditingOption(null);
                                     }}
-                                    className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+                                    className="px-4 py-2 text-theme-muted hover:text-theme-main font-medium"
                                 >
                                     Cancelar
                                 </button>

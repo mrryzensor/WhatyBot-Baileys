@@ -60,8 +60,8 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
 
   if (inline) {
     return (
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-green-500 to-green-600 p-2">
+      <div className="bg-theme-card rounded-lg border border-theme overflow-hidden">
+        <div className="bg-gradient-to-r from-primary-500 to-primary-600 p-2">
           <div className="flex items-center gap-2 text-white text-sm">
             <MessageSquare size={14} />
             <span className="font-medium">Vista Previa</span>
@@ -69,9 +69,9 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
         </div>
 
         <div className="p-3 bg-gray-50">
-          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+          <div className="bg-theme-card rounded-lg p-3 shadow-sm border border-gray-200">
             <div 
-              className="text-slate-800 text-sm whitespace-pre-wrap"
+              className="text-theme-main text-sm whitespace-pre-wrap"
               dangerouslySetInnerHTML={{ __html: formattedMessage }}
             />
           </div>
@@ -81,8 +81,8 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-green-500 to-green-600 p-3">
+    <div className="bg-theme-card rounded-xl shadow-sm border border-theme overflow-hidden">
+      <div className="bg-gradient-to-r from-primary-500 to-primary-600 p-3">
         <div className="flex items-center gap-2 text-white">
           <MessageSquare size={18} />
           <h3 className="font-semibold">Vista Previa del Mensaje</h3>
@@ -93,20 +93,20 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
       <div className="p-4 bg-gray-50">
         {showContactInfo && (
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <User size={20} className="text-green-600" />
+            <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+              <User size={20} className="text-primary-600" />
             </div>
             <div>
-              <div className="font-medium text-slate-800">{contactName}</div>
-              <div className="text-xs text-slate-500">+5491123456789</div>
+              <div className="font-medium text-theme-main">{contactName}</div>
+              <div className="text-xs text-theme-muted">+5491123456789</div>
             </div>
           </div>
         )}
 
         {/* Message bubble */}
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 max-w-lg">
+        <div className="bg-theme-card rounded-lg p-4 shadow-sm border border-gray-200 max-w-lg">
           <div 
-            className="text-slate-800 whitespace-pre-wrap"
+            className="text-theme-main whitespace-pre-wrap"
             dangerouslySetInnerHTML={{ __html: formattedMessage }}
           />
           
@@ -133,8 +133,8 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
                 <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded font-mono">
                   {`{{${key}}}`}
                 </span>
-                <span className="text-slate-600">→</span>
-                <span className="font-medium text-slate-800">{value}</span>
+                <span className="text-theme-muted">→</span>
+                <span className="font-medium text-theme-main">{value}</span>
               </div>
             ))}
           </div>
@@ -142,9 +142,9 @@ export const MessagePreview: React.FC<MessagePreviewProps> = ({
       )}
 
       {/* Formatting guide */}
-      <div className="p-4 bg-slate-50 border-t border-slate-200">
-        <div className="text-sm font-medium text-slate-700 mb-2">Guía de formato WhatsApp:</div>
-        <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+      <div className="p-4 bg-theme-base border-t border-theme">
+        <div className="text-sm font-medium text-theme-main mb-2">Guía de formato WhatsApp:</div>
+        <div className="grid grid-cols-2 gap-2 text-xs text-theme-muted">
           <div><code className="bg-slate-200 px-1 rounded">*texto*</code> → <strong>Negrita</strong></div>
           <div><code className="bg-slate-200 px-1 rounded">_texto_</code> → <em>Cursiva</em></div>
           <div><code className="bg-slate-200 px-1 rounded">~texto~</code> → <del>Tachado</del></div>

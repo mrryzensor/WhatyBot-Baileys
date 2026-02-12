@@ -229,10 +229,10 @@ export const ScheduledMessages: React.FC = () => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
       case 'scheduled': return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'sent': return 'bg-green-100 text-green-800 border-green-300';
+      case 'sent': return 'bg-primary-100 text-primary-800 border-primary-300';
       case 'failed': return 'bg-red-100 text-red-800 border-red-300';
-      case 'cancelled': return 'bg-slate-100 text-slate-800 border-slate-400';
-      default: return 'bg-slate-100 text-slate-800 border-slate-300';
+      case 'cancelled': return 'bg-slate-100 text-theme-main border-slate-400';
+      default: return 'bg-slate-100 text-theme-main border-theme';
     }
   };
 
@@ -240,10 +240,10 @@ export const ScheduledMessages: React.FC = () => {
     switch (status) {
       case 'pending': return 'border-yellow-300';
       case 'scheduled': return 'border-blue-300';
-      case 'sent': return 'border-green-300';
+      case 'sent': return 'border-primary-300';
       case 'failed': return 'border-red-300';
-      case 'cancelled': return 'border-slate-300';
-      default: return 'border-slate-200';
+      case 'cancelled': return 'border-theme';
+      default: return 'border-theme';
     }
   };
 
@@ -267,9 +267,9 @@ export const ScheduledMessages: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-      <div className="p-6 border-b border-slate-100">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+    <div className="bg-theme-card rounded-xl shadow-sm border border-theme">
+      <div className="p-6 border-b border-theme">
+        <h3 className="font-semibold text-theme-main flex items-center gap-2">
           <Clock size={18} />
           Mensajes Programados
         </h3>
@@ -278,7 +278,7 @@ export const ScheduledMessages: React.FC = () => {
       <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto pr-2">
         {loading ? (
           <div className="text-center py-8 text-slate-400">
-            <div className="w-8 h-8 border-2 border-slate-300 border-t-green-600 rounded-full animate-spin mx-auto mb-2"></div>
+            <div className="w-8 h-8 border-2 border-theme border-t-green-600 rounded-full animate-spin mx-auto mb-2"></div>
             <p>Cargando mensajes programados...</p>
           </div>
         ) : scheduledMessages.length === 0 ? (
@@ -298,10 +298,10 @@ export const ScheduledMessages: React.FC = () => {
                 <div 
                   key={message.id} 
                   className={`border-2 ${getCardBorderColor(message.status)} rounded-lg p-4 hover:shadow-md transition-shadow ${
-                    message.status === 'sent' ? 'bg-green-50' :
+                    message.status === 'sent' ? 'bg-primary-50' :
                     message.status === 'failed' ? 'bg-red-50' :
                     message.status === 'scheduled' ? 'bg-blue-50' :
-                    message.status === 'cancelled' ? 'bg-slate-50' :
+                    message.status === 'cancelled' ? 'bg-theme-base' :
                     'bg-yellow-50'
                   }`}
                 >
@@ -315,18 +315,18 @@ export const ScheduledMessages: React.FC = () => {
                           {message.status === 'failed' && 'Fallido'}
                           {message.status === 'cancelled' && 'Cancelado'}
                         </span>
-                        <span className="text-xs text-slate-600 font-medium">
+                        <span className="text-xs text-theme-muted font-medium">
                           {message.type === 'single' && 'Individual'}
                           {message.type === 'bulk' && 'Masivo'}
                           {message.type === 'groups' && 'Grupos'}
                         </span>
                       </div>
                       
-                      <div className="text-sm font-semibold text-slate-800 mb-1">
+                      <div className="text-sm font-semibold text-theme-main mb-1">
                         {message.recipients?.length || 0} destinatarios
                       </div>
                       
-                      <div className="text-sm text-slate-700 mb-3 line-clamp-2">
+                      <div className="text-sm text-theme-main mb-3 line-clamp-2">
                         {message.message}
                       </div>
                       
@@ -350,7 +350,7 @@ export const ScheduledMessages: React.FC = () => {
                         </div>
                       )}
                       
-                      <div className="flex items-center gap-4 text-xs text-slate-600 flex-wrap">
+                      <div className="flex items-center gap-4 text-xs text-theme-muted flex-wrap">
                         <div className="flex items-center gap-1">
                           <Calendar size={12} />
                           <span>Programado: {formatScheduleInfo(message)}</span>
@@ -363,8 +363,8 @@ export const ScheduledMessages: React.FC = () => {
                               </span>
                             ) : message.status === 'sent' ? (
                               <>
-                                <CheckCircle size={12} className="text-green-600" />
-                                <span className="font-medium text-green-600">Enviado</span>
+                                <CheckCircle size={12} className="text-primary-600" />
+                                <span className="font-medium text-primary-600">Enviado</span>
                               </>
                             ) : (
                               <>
@@ -419,7 +419,7 @@ export const ScheduledMessages: React.FC = () => {
                           </div>
                           <button
                             onClick={() => deleteScheduledMessage(message.id)}
-                            className="p-1.5 text-slate-500 hover:bg-slate-100 rounded transition-colors"
+                            className="p-1.5 text-theme-muted hover:bg-slate-100 rounded transition-colors"
                             title="Quitar de la lista"
                           >
                             <Trash2 size={14} />
@@ -429,12 +429,12 @@ export const ScheduledMessages: React.FC = () => {
                     </div>
                   </div>
                   {editingId === message.id && message.scheduleType === 'datetime' && message.scheduledAt && (
-                    <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-md flex flex-col sm:flex-row sm:items-center gap-2">
-                      <label className="text-xs font-medium text-slate-700 flex items-center gap-2">
+                    <div className="mt-3 p-3 bg-theme-base border border-theme rounded-md flex flex-col sm:flex-row sm:items-center gap-2">
+                      <label className="text-xs font-medium text-theme-main flex items-center gap-2">
                         <span>Nueva fecha y hora:</span>
                         <input
                           type="datetime-local"
-                          className="border border-slate-300 rounded px-2 py-1 text-xs"
+                          className="border border-theme rounded px-2 py-1 text-xs"
                           value={editingScheduledAt}
                           onChange={(e) => setEditingScheduledAt(e.target.value)}
                         />
@@ -448,7 +448,7 @@ export const ScheduledMessages: React.FC = () => {
                         </button>
                         <button
                           onClick={cancelEdit}
-                          className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium hover:bg-slate-200"
+                          className="px-3 py-1 rounded-full bg-slate-100 text-theme-main text-xs font-medium hover:bg-slate-200"
                         >
                           Cancelar
                         </button>
@@ -457,7 +457,7 @@ export const ScheduledMessages: React.FC = () => {
                   )}
                   
                   {message.file && (
-                    <div className="mt-2 text-xs text-slate-600 flex items-center gap-1 font-medium">
+                    <div className="mt-2 text-xs text-theme-muted flex items-center gap-1 font-medium">
                       📎 {message.file.name}
                     </div>
                   )}

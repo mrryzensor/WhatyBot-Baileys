@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getApiUrl } from '../services/api';
 
 const STORAGE_KEY = 'globalSessionsEnabled';
 
@@ -13,7 +14,8 @@ export const useGlobalSessions = () => {
     useEffect(() => {
         const loadFromBackend = async () => {
             try {
-                const apiUrl = localStorage.getItem('apiUrl') || 'http://localhost:23456';
+                // Use centralized API URL getter which handles production/dev logic
+                const apiUrl = getApiUrl();
                 const response = await fetch(`${apiUrl}/api/config/global-sessions`);
                 const data = await response.json();
                 if (data.success) {
@@ -34,7 +36,8 @@ export const useGlobalSessions = () => {
         // Sync with backend
         const syncWithBackend = async () => {
             try {
-                const apiUrl = localStorage.getItem('apiUrl') || 'http://localhost:23456';
+                // Use centralized API URL getter
+                const apiUrl = getApiUrl();
                 await fetch(`${apiUrl}/api/config/global-sessions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

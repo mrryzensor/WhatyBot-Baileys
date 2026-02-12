@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       {/* Botón Flotante para Móvil */}
       <button
         onClick={() => setIsMobileMenuOpen(true)}
-        className="fixed bottom-6 left-6 z-50 lg:hidden bg-green-600 text-white p-4 rounded-full shadow-2xl hover:bg-green-700 transition-all hover:scale-110 active:scale-95"
+        className="fixed bottom-6 left-6 z-50 lg:hidden bg-primary-600 text-white p-4 rounded-full shadow-2xl hover:bg-primary-700 transition-all hover:scale-110 active:scale-95"
         aria-label="Abrir menú"
       >
         <MenuIcon size={24} />
@@ -69,23 +69,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
 
       {/* Sidebar */}
       <div className={`
-        w-64 bg-slate-900 text-white flex flex-col h-screen shadow-xl z-50
+        w-64 bg-theme-sidebar text-theme-main flex flex-col h-screen shadow-xl z-50
         fixed left-0 top-0
         transition-transform duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Header */}
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-6 border-b border-theme flex items-center justify-between">
           <div className="flex-1">
             <h1 className="text-xl font-bold flex items-center gap-2">
-              <span className="text-green-500">WhatyBot</span> DxS
+              <span className="text-primary-500">WhatyBot</span> DxS
             </h1>
-            <p className="text-xs text-slate-400 mt-1">Panel de Automatización</p>
+            <p className="text-xs text-theme-muted mt-1">Panel de Automatización</p>
           </div>
           {/* Botón cerrar para móvil */}
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-800 rounded-lg"
+            className="lg:hidden text-theme-muted hover:text-theme-main transition-colors p-2 hover:bg-theme-base rounded-lg"
             aria-label="Cerrar menú"
           >
             <X size={20} />
@@ -95,18 +95,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         {/* Buscador */}
         <div className="px-4 pt-4 pb-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" size={18} />
             <input
               type="text"
               placeholder="Buscar menú..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800 text-white placeholder-slate-400 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+              className="w-full bg-theme-base text-theme-main placeholder-theme-muted rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 6 6 18"></path>
@@ -128,8 +128,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                   key={item.id}
                   onClick={() => handleTabChange(item.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${isActive
-                    ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/20'
+                    : 'text-theme-muted hover:bg-theme-base hover:text-theme-main'
                     }`}
                 >
                   <Icon size={20} />
@@ -138,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
               );
             })
           ) : (
-            <div className="text-center py-8 text-slate-500 text-sm">
+            <div className="text-center py-8 text-theme-muted text-sm">
               <Search size={32} className="mx-auto mb-2 opacity-50" />
               <p>No se encontraron resultados</p>
             </div>
@@ -146,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         </nav>
 
         {/* Footer - Cerrar Sesión */}
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-theme">
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 text-red-400 hover:text-red-300 transition-colors w-full px-4 py-2 rounded-lg hover:bg-slate-800"

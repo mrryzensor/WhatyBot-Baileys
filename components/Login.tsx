@@ -42,32 +42,32 @@ const NewUserModal: React.FC<NewUserModalProps> = ({ email, password, onConfirm,
   }, []);
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-blue-100 rounded-full">
             <Mail className="text-blue-600" size={24} />
           </div>
-          <h3 className="text-xl font-bold text-slate-800">Cuenta no encontrada</h3>
+          <h3 className="text-xl font-bold text-theme-main">Cuenta no encontrada</h3>
         </div>
         
         <div className="mb-6">
-          <p className="text-slate-600 mb-4">
+          <p className="text-theme-muted mb-4">
             No existe una cuenta con el correo <strong>{email}</strong>.
           </p>
-          <p className="text-slate-600 mb-2">
+          <p className="text-theme-muted mb-2">
             Se creará una nueva cuenta con:
           </p>
-          <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+          <div className="bg-theme-base rounded-lg p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Mail size={16} className="text-slate-500" />
-              <span className="text-sm text-slate-700"><strong>Email:</strong> {email}</span>
+              <Mail size={16} className="text-theme-muted" />
+              <span className="text-sm text-theme-main"><strong>Email:</strong> {email}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Lock size={16} className="text-slate-500" />
-              <span className="text-sm text-slate-700"><strong>Contraseña:</strong> {password.replace(/./g, '•')}</span>
+              <Lock size={16} className="text-theme-muted" />
+              <span className="text-sm text-theme-main"><strong>Contraseña:</strong> {password.replace(/./g, '•')}</span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-200">
-              <p className="text-xs text-slate-500">
+            <div className="mt-3 pt-3 border-t border-theme">
+              <p className="text-xs text-theme-muted">
                 <strong>Plan:</strong> {freePlanInfo}
               </p>
             </div>
@@ -77,13 +77,13 @@ const NewUserModal: React.FC<NewUserModalProps> = ({ email, password, onConfirm,
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="flex-1 px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             Crear cuenta
           </button>
@@ -187,7 +187,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
       {showConfetti && (
         <Confetti
           width={window.innerWidth}
@@ -197,18 +197,18 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         />
       )}
       
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+      <div className="bg-theme-card rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-4">
             <Sparkles className="text-white" size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">WhatyBot DxS</h1>
-          <p className="text-slate-600">Inicia sesión para continuar</p>
+          <h1 className="text-3xl font-bold text-theme-main mb-2">WhatyBot DxS</h1>
+          <p className="text-theme-muted">Inicia sesión para continuar</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-theme-main mb-2">
               Correo Electrónico
             </label>
             <div className="relative">
@@ -217,8 +217,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 type="email"
                 value={email}
                 onChange={handleEmailChange}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                  emailError ? 'border-red-300' : 'border-slate-300'
+                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                  emailError ? 'border-red-300' : 'border-theme'
                 }`}
                 placeholder="tu@correo.com"
                 disabled={loading}
@@ -230,7 +230,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-theme-main mb-2">
               Contraseña
             </label>
             <div className="relative">
@@ -242,8 +242,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   setPassword(e.target.value);
                   setPasswordError(''); // Limpiar error al escribir
                 }}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                  passwordError ? 'border-red-300' : 'border-slate-300'
+                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                  passwordError ? 'border-red-300' : 'border-theme'
                 }`}
                 placeholder="••••••••"
                 disabled={loading}
@@ -263,7 +263,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <button
             type="submit"
             disabled={loading || !!emailError}
-            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-primary-600 text-white py-3 rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
@@ -280,7 +280,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-theme-muted">
             Si no tienes cuenta, inicia sesión con tu correo y se creará automáticamente
           </p>
         </div>

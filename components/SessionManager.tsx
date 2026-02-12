@@ -297,7 +297,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
     const getStatusBadge = (session: Session) => {
         if (session.isReady) {
             return (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700">
                     Conectado
                 </span>
             );
@@ -318,7 +318,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                 );
             case 'connected':
                 return (
-                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700">
                         Conectado
                     </span>
                 );
@@ -341,11 +341,11 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
 
     return (
         <>
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-theme-card rounded-xl shadow-sm border border-theme overflow-hidden">
                 <div className="p-6">
                     <div className="space-y-4">
                         <div className="flex items-center justify-between px-1">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                            <h3 className="font-semibold text-theme-main flex items-center gap-2">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
                                     <rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect>
                                     <circle cx="12" cy="12" r="3"></circle>
@@ -357,7 +357,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                             <button
                                 onClick={handleCreateSession}
                                 disabled={loading}
-                                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? '...' : '+ Nueva'}
                             </button>
@@ -367,9 +367,9 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                                 {sessions.map((session) => (
                                     <div
                                         key={session.sessionId}
-                                        className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 hover:shadow-md transition-shadow relative overflow-hidden group"
+                                        className="bg-theme-card rounded-lg shadow-sm border border-theme p-3 hover:shadow-md transition-shadow relative overflow-hidden group"
                                     >
-                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${session.isReady ? 'bg-green-500' :
+                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${session.isReady ? 'bg-primary-500' :
                                             session.status === 'connected' ? 'bg-orange-500' :
                                                 session.status === 'waiting_qr' ? 'bg-yellow-500' :
                                                     'bg-blue-500'
@@ -377,7 +377,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
 
                                         <div className="flex items-center justify-between mb-1.5 pl-1">
                                             <div className="flex flex-col">
-                                                <h4 className="font-bold text-slate-800 text-base leading-tight">
+                                                <h4 className="font-bold text-theme-main text-base leading-tight">
                                                     {session.phoneNumber ? `+${session.phoneNumber.replace('+', '')}` : 'Sin número'}
                                                 </h4>
                                                 <p className="text-xs text-slate-400 font-mono mt-0.5" title={session.sessionId}>
@@ -385,7 +385,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                                                 </p>
                                             </div>
                                             <div className="scale-95 origin-right">
-                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${session.isReady ? 'bg-green-100 text-green-700' :
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${session.isReady ? 'bg-primary-100 text-primary-700' :
                                                     session.status === 'connected' ? 'bg-orange-100 text-orange-700' :
                                                         session.status === 'waiting_qr' ? 'bg-yellow-100 text-yellow-700' :
                                                             'bg-blue-100 text-blue-700'
@@ -399,7 +399,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                                         </div>
 
                                         <div className="flex items-center justify-between pl-1 mb-2">
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                            <div className="flex items-center gap-1.5 text-xs text-theme-muted">
                                                 <Calendar size={14} className="opacity-70" />
                                                 <span>
                                                     {new Date(session.createdAt).toLocaleString('es-ES', {
@@ -440,7 +440,7 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                                                         {(session.status === 'initializing' || session.status === 'connected') && (
                                                             <button
                                                                 onClick={() => handleInitializeSession(session.sessionId)}
-                                                                className="p-2 bg-green-100 text-green-600 rounded-md hover:bg-green-200 transition-colors flex items-center justify-center shrink-0"
+                                                                className="p-2 bg-primary-100 text-primary-600 rounded-md hover:bg-primary-200 transition-colors flex items-center justify-center shrink-0"
                                                                 title={session.status === 'connected' ? 'Forzar inicio de sesión' : 'Iniciar sesión'}
                                                             >
                                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -478,15 +478,15 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
             {/* QR Modal */}
             {showQRModal && qrCode && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                    <div className="bg-theme-card rounded-2xl shadow-2xl max-w-md w-full p-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xl font-bold text-slate-800">Escanea el código QR</h3>
+                            <h3 className="text-xl font-bold text-theme-main">Escanea el código QR</h3>
                             <button
                                 onClick={() => {
                                     setShowQRModal(false);
                                     setQrCode(null);
                                 }}
-                                className="text-slate-400 hover:text-slate-600 transition-colors"
+                                className="text-slate-400 hover:text-theme-muted transition-colors"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -494,25 +494,25 @@ export const SessionManager = React.forwardRef<SessionManagerHandle, SessionMana
                             </button>
                         </div>
 
-                        <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                        <div className="bg-theme-base rounded-xl p-4 mb-4">
                             <img src={qrCode} alt="QR Code" className="w-full h-auto" />
                         </div>
 
-                        <div className="space-y-2 text-sm text-slate-600">
+                        <div className="space-y-2 text-sm text-theme-muted">
                             <p className="flex items-start gap-2">
-                                <span className="text-green-500 mt-1">1.</span>
+                                <span className="text-primary-500 mt-1">1.</span>
                                 Abre WhatsApp en tu teléfono
                             </p>
                             <p className="flex items-start gap-2">
-                                <span className="text-green-500 mt-1">2.</span>
+                                <span className="text-primary-500 mt-1">2.</span>
                                 Ve a <strong>Configuración → Dispositivos vinculados</strong>
                             </p>
                             <p className="flex items-start gap-2">
-                                <span className="text-green-500 mt-1">3.</span>
+                                <span className="text-primary-500 mt-1">3.</span>
                                 Toca <strong>Vincular un dispositivo</strong>
                             </p>
                             <p className="flex items-start gap-2">
-                                <span className="text-green-500 mt-1">4.</span>
+                                <span className="text-primary-500 mt-1">4.</span>
                                 Escanea este código QR
                             </p>
                         </div>

@@ -113,7 +113,7 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
 
         if (rule.type === 'menu' && !rule.menuId) {
             return res.status(400).json({ error: 'Menu-type rules require menuId' });
-        } else if (rule.type !== 'menu' && !rule.response && (!files || files.length === 0)) {
+        } else if (rule.type !== 'menu' && !rule.response && (!files || files.length === 0) && !rule.mediaPaths) {
             return res.status(400).json({ error: 'Missing required field: response or media' });
         }
 
@@ -128,18 +128,38 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
         rule.id = Date.now().toString();
         rule.keywords = keywordsArray;
 
+        if (rule.countries) {
+            try {
+                rule.countries = typeof rule.countries === 'string' ? JSON.parse(rule.countries) : rule.countries;
+            } catch (e) {
+                rule.countries = [];
+            }
+        }
+
         // Convert absolute paths to relative paths (relative to server directory)
-        const mediaPaths = files.map(f => {
+        let mediaPaths = files.map(f => {
             const relativePath = path.relative(process.cwd(), f.path);
             return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
         });
+
         let mediaCaptions = [];
         if (rule.captions) {
             try {
-                const parsed = JSON.parse(rule.captions); // Assuming rule.captions is JSON string
+                const parsed = typeof rule.captions === 'string' ? JSON.parse(rule.captions) : rule.captions;
                 if (Array.isArray(parsed)) mediaCaptions = parsed.map(c => (typeof c === 'string' ? c : ''));
             } catch (e) { }
         }
+
+        // Support for duplicating media (if no new files, use existing paths in rule)
+        if (files.length === 0 && rule.mediaPaths) {
+            try {
+                const existing = typeof rule.mediaPaths === 'string' ? JSON.parse(rule.mediaPaths) : rule.mediaPaths;
+                if (Array.isArray(existing)) {
+                    mediaPaths = existing;
+                }
+            } catch (e) { }
+        }
+
         if (mediaCaptions.length === 0 && mediaPaths.length > 0) {
             mediaCaptions = mediaPaths.map(() => rule.caption || '');
         }
@@ -182,7 +202,7 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
         const { id } = req.params;
         const updatedRule = req.body;
 
-        const index = client.autoReplyRules.findIndex(r => r.id === id);
+        const index = client.autoReplyRules.findIndex(r => String(r.id) === String(id));
         if (index === -1) return res.status(404).json({ error: 'Rule not found' });
 
         if (updatedRule.keywords) {
@@ -198,6 +218,14 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
 
         if (updatedRule.isActive !== undefined) {
             updatedRule.isActive = (String(updatedRule.isActive) === 'true' || updatedRule.isActive === true || updatedRule.isActive === '1');
+        }
+
+        if (updatedRule.countries) {
+            try {
+                updatedRule.countries = typeof updatedRule.countries === 'string' ? JSON.parse(updatedRule.countries) : updatedRule.countries;
+            } catch (e) {
+                updatedRule.countries = [];
+            }
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
@@ -268,7 +296,8 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             mediaPaths: updatedRule.mediaPaths !== undefined ? updatedRule.mediaPaths : existingRule.mediaPaths,
             captions: updatedRule.captions !== undefined ? updatedRule.captions : existingRule.captions,
             type: updatedRule.type !== undefined ? updatedRule.type : (existingRule.type || 'simple'),
-            menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId
+            menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId,
+            countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || [])
         };
 
         client.autoReplyRules[index] = mergedRule;
@@ -302,7 +331,7 @@ router.delete('/rules/:id', (req, res) => {
         if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
 
         const { id } = req.params;
-        const index = client.autoReplyRules.findIndex(r => r.id === id);
+        const index = client.autoReplyRules.findIndex(r => String(r.id) === String(id));
         if (index === -1) return res.status(404).json({ error: 'Rule not found' });
 
         const rule = client.autoReplyRules[index];

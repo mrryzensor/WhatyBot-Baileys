@@ -47,7 +47,8 @@ const persistPortInfo = (info) => {
   const httpServer = createServer(app);
 
   // Backend and frontend base ports (can be overridden by env vars)
-  const envBackendPort = process.env.BACKEND_PORT ? parseInt(process.env.BACKEND_PORT, 10) : null;
+  // CRITICAL: Railway provides PORT, so we must prioritize it
+  const envBackendPort = process.env.PORT ? parseInt(process.env.PORT, 10) : (process.env.BACKEND_PORT ? parseInt(process.env.BACKEND_PORT, 10) : null);
   const envFrontendPort = process.env.FRONTEND_PORT ? parseInt(process.env.FRONTEND_PORT, 10) : null;
   const defaultBackendPort = envBackendPort || 23456;
   const defaultFrontendPort = envFrontendPort || 12345;
@@ -56,17 +57,22 @@ const persistPortInfo = (info) => {
   let io;
 
   try {
-    // Resolve backend port: if explicitly provided, ensure availability, otherwise find one
+    // Resolve backend port: if explicitly provided (or via PORT), ensure availability, otherwise find one
     if (envBackendPort) {
-      const available = await isPortAvailable(envBackendPort);
-      if (!available) {
-        const error = new Error(`Configured BACKEND_PORT ${envBackendPort} is already in use`);
-        error.code = 'CONFIGURED_PORT_IN_USE';
-        error.port = envBackendPort;
-        error.portType = 'backend';
-        throw error;
+      // In production/Railway, we trust the PORT given without checking availability logic (which might be restrictive)
+      if (process.env.NODE_ENV === 'production') {
+        backendPort = envBackendPort;
+      } else {
+        const available = await isPortAvailable(envBackendPort);
+        if (!available) {
+          const error = new Error(`Configured BACKEND_PORT ${envBackendPort} is already in use`);
+          error.code = 'CONFIGURED_PORT_IN_USE';
+          error.port = envBackendPort;
+          error.portType = 'backend';
+          throw error;
+        }
+        backendPort = envBackendPort;
       }
-      backendPort = envBackendPort;
     } else {
       backendPort = await findAvailablePort(defaultBackendPort);
     }
@@ -78,12 +84,13 @@ const persistPortInfo = (info) => {
     const allowedOrigins = [
       `http://localhost:${frontendPort}`,
       `http://localhost:12345`,
-      process.env.FRONTEND_URL
+      process.env.FRONTEND_URL,
+      process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null
     ].filter(Boolean);
 
     io = new Server(httpServer, {
       cors: {
-        origin: allowedOrigins,
+        origin: allowedOrigins.length > 0 ? allowedOrigins : '*', // Fallback for debugging
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
       }
@@ -100,11 +107,17 @@ const persistPortInfo = (info) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        // In production on Railway/Monolith, we often serve frontend from same origin
+        // preventing generic blocking is better.
+        // We check if it matches allowed, OR if we are in production and origin contains our railway app name
+        if (allowedOrigins.indexOf(origin) !== -1 || (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL)) {
+          // If no FRONTEND_URL is strict set, we might be lenient or check substring
           callback(null, true);
         } else {
-          console.log('CORS blocked origin:', origin);
-          callback(null, true); // Allow anyway for development
+          console.log('CORS check (might block):', origin);
+          // For now, allow it to prevent the "CORS blocked" error users are seeing
+          // In a strict security audit this should be tighter.
+          callback(null, true);
         }
       },
       credentials: true
@@ -163,6 +176,26 @@ const persistPortInfo = (info) => {
     app.use('/api/users', usersRouter);
     app.use('/api/auth', authRouter);
     app.use('/api', configRouter);
+
+    // Serve Frontend in Production
+    if (process.env.NODE_ENV === 'production') {
+      const distPath = path.join(__dirname, '..', 'dist');
+      if (fs.existsSync(distPath)) {
+        console.log(`📂 Serving static files from: ${distPath}`);
+        app.use(express.static(distPath));
+
+        // Handle React Routing, return all requests to React app
+        app.get('*', (req, res) => {
+          if (!req.path.startsWith('/api')) {
+            res.sendFile(path.resolve(distPath, 'index.html'));
+          } else {
+            res.status(404).json({ error: 'API route not found' });
+          }
+        });
+      } else {
+        console.warn('⚠️ Frontend build not found in ../dist details. Run "npm run build" first.');
+      }
+    }
 
     // Health check
     app.get('/api/health', (req, res) => {

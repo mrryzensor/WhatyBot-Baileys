@@ -161,9 +161,9 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-theme-card rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="relative bg-gradient-to-r from-green-600 to-blue-600 p-8 rounded-t-2xl">
+        <div className="relative bg-gradient-to-r from-primary-600 to-blue-600 p-8 rounded-t-2xl">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors"
@@ -184,7 +184,7 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
                 Has usado {currentUsed} de {currentLimit} mensajes este mes
               </p>
             )}
-            <div className="mt-4 bg-white/20 rounded-lg p-4 inline-block">
+            <div className="mt-4 bg-theme-card/20 rounded-lg p-4 inline-block">
               <p className="text-sm font-medium">
                 {subscriptionExpired
                   ? 'Actualiza tu plan para volver a enviar mensajes'
@@ -197,8 +197,8 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
         {/* Content */}
         <div className="p-8">
           <div className="mb-6">
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">Planes disponibles</h3>
-            <p className="text-slate-600">Selecciona el plan que mejor se adapte a tus necesidades</p>
+            <h3 className="text-xl font-semibold text-theme-main mb-2">Planes disponibles</h3>
+            <p className="text-theme-muted">Selecciona el plan que mejor se adapte a tus necesidades</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -210,28 +210,28 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
                 <div className="flex items-center gap-3 mb-4">
                   {getPlanIcon(plan.type)}
                   <div>
-                    <h4 className="text-xl font-bold text-slate-800">{getPlanName(plan.type)}</h4>
-                    <p className="text-sm text-slate-600">
+                    <h4 className="text-xl font-bold text-theme-main">{getPlanName(plan.type)}</h4>
+                    <p className="text-sm text-theme-muted">
                       ${plan.price} USD / mes
                     </p>
                   </div>
                 </div>
                 
                 <div className="space-y-2 mb-6">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="flex items-center gap-2 text-theme-main">
+                    <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
                     <span className="text-sm">
                       {plan.messages === -1 || plan.messages === Infinity || plan.messages == null
                         ? 'Mensajes ilimitados'
                         : `${Number(plan.messages).toLocaleString()} mensajes por mes`}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="flex items-center gap-2 text-theme-main">
+                    <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
                     <span className="text-sm">Soporte prioritario</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="flex items-center gap-2 text-theme-main">
+                    <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
                     <span className="text-sm">Renovación mensual automática</span>
                   </div>
                 </div>
@@ -239,7 +239,7 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
                 <button
                   onClick={() => handleUpgrade(plan.type, plan.price)}
                   disabled={sending === plan.type || sent === plan.type}
-                  className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-green-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-primary-600 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-primary-700 hover:to-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sending === plan.type ? (
                     <>
@@ -263,8 +263,8 @@ export const SubscriptionUpgradeModal: React.FC<SubscriptionUpgradeModalProps> =
             ))}
           </div>
 
-          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-            <p className="text-sm text-slate-600 text-center">
+          <div className="bg-theme-base rounded-lg p-4 border border-theme">
+            <p className="text-sm text-theme-muted text-center">
               {isConnected 
                 ? 'Al hacer clic en "Contactar para actualizar", se enviará el mensaje directamente desde la aplicación.'
                 : 'Al hacer clic en "Contactar para actualizar", se abrirá WhatsApp con un mensaje pre-formateado.'

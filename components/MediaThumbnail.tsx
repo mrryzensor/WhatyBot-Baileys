@@ -51,17 +51,17 @@ export const MediaThumbnail: React.FC<MediaThumbnailProps> = ({
     const renderIcon = () => {
         if (normalizedType === 'video') {
             return (
-                <div className="flex flex-col items-center justify-center text-slate-500">
+                <div className="flex flex-col items-center justify-center text-theme-muted">
                     <Video size={32} className="mb-2 text-purple-500" />
                     <span className="text-xs font-medium">Video</span>
                 </div>
             );
         } else {
             return (
-                <div className="flex flex-col items-center justify-center text-slate-500">
+                <div className="flex flex-col items-center justify-center text-theme-muted">
                     {/* Replicating the fallback UI requested by User */}
                     <File size={32} className="text-slate-400 mb-2" />
-                    <span className="text-xs text-slate-500 text-center px-2 truncate max-w-full">
+                    <span className="text-xs text-theme-muted text-center px-2 truncate max-w-full">
                         {fileName || 'Archivo'}
                     </span>
                 </div>
@@ -71,7 +71,7 @@ export const MediaThumbnail: React.FC<MediaThumbnailProps> = ({
 
     return (
         <div
-            className={`relative w-full h-32 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 cursor-pointer ${className}`}
+            className={`relative w-full h-32 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-theme cursor-pointer ${className}`}
             onClick={onClick}
         >
             {normalizedType === 'image' && fullSrc && !imageError ? (

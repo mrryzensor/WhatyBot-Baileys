@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon, Globe, ChevronDown, ChevronUp, Copy, CheckSquare, Square } from 'lucide-react';
 import { AutoReplyRule, InteractiveMenu } from '../types';
+import { countries as countryList } from '../utils/countries';
 import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus, getApiUrl } from '../services/api';
 import { MediaUpload } from './MediaUpload';
 import { MessageEditorToolbar } from './MessageEditorToolbar';
@@ -33,6 +34,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
     const [isExporting, setIsExporting] = useState(false);
     const [menus, setMenus] = useState<InteractiveMenu[]>([]);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showCountrySelector, setShowCountrySelector] = useState(false);
+    const [countrySearch, setCountrySearch] = useState('');
     const { globalSessionsEnabled } = useGlobalSessions();
 
     // Load interactive menus
@@ -76,7 +79,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         matchType: 'contains',
         delay: 2,
         isActive: true,
-        type: 'simple'
+        type: 'simple',
+        countries: []
     });
 
     const [keywordInput, setKeywordInput] = useState('');
@@ -92,7 +96,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             matchType: 'contains',
             delay: 2,
             isActive: true,
-            type: 'simple'
+            type: 'simple',
+            countries: []
         });
         setKeywordInput('');
         media.setMediaItems([]);
@@ -101,7 +106,12 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
     const handleEdit = (rule: AutoReplyRule) => {
         setEditingId(rule.id);
-        setFormData({ ...rule });
+        setFormData({ ...rule, countries: rule.countries || [] });
+        if (rule.countries && rule.countries.length > 0) {
+            setShowCountrySelector(true);
+        } else {
+            setShowCountrySelector(false);
+        }
 
         // Normalize keywords to array before joining
         let keywordsArray: string[] = [];
@@ -233,7 +243,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 caption: captions[0] || '',
                 captions,
                 type: formData.type || 'simple',
-                menuId: formData.menuId
+                menuId: formData.menuId,
+                countries: formData.countries || []
             };
 
             if (editingId) {
@@ -291,6 +302,41 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             setIsLoading(false);
             setShowDeleteModal(false);
             setRuleToDelete(null);
+        }
+    };
+
+    const handleDuplicate = async (rule: AutoReplyRule) => {
+        try {
+            setIsLoading(true);
+            const { id, ...rest } = rule;
+            const duplicateName = `${rule.name} (copia)`;
+
+            // For simple rules with media, we might need the server to support existingMediaPaths in POST
+            // Current createAutoReplyRule in api.ts doesn't send existingMediaPaths
+            // But we can try to send it in the rule object if the server doesn't overwrite it
+            // Or better, we modify api.ts and the server later.
+
+            const ruleData = {
+                ...rest,
+                name: duplicateName,
+                isActive: true
+            };
+
+            // We pass [] for files and try to preserve captions
+            const response = await createAutoReplyRule(ruleData, [], rule.captions);
+            if (response.success) {
+                setRules([...rules, response.rule]);
+                if (toast) {
+                    toast.success(`Regla "${rule.name}" duplicada como "${duplicateName}"`);
+                }
+            }
+        } catch (error: any) {
+            console.error('Error duplicating rule:', error);
+            if (toast) {
+                toast.error('Error al duplicar la regla: ' + error.message);
+            }
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -595,16 +641,16 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)]">
 
                 {/* Left Column: Rules List */}
-                <div className="lg:col-span-1 flex flex-col gap-4">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="lg:col-span-1 flex flex-col gap-4 h-full overflow-hidden">
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
                         <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                                    <Bot size={20} className="text-green-600" /> Reglas Activas
+                                <h3 className="font-semibold text-theme-main flex items-center gap-2">
+                                    <Bot size={20} className="text-primary-600" /> Reglas Activas
                                 </h3>
                                 <GlobalSessionIndicator enabled={globalSessionsEnabled} />
                             </div>
-                            <p className="text-xs text-slate-500 mt-2">
+                            <p className="text-xs text-theme-muted mt-2">
                                 El bot responderá automáticamente cuando detecte estas palabras clave.
                             </p>
                         </div>
@@ -614,7 +660,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             <button
                                 onClick={handleExportRules}
                                 disabled={rules.length === 0 || isExporting}
-                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                                 title="Exportar reglas a archivo JSON"
                             >
                                 {isExporting ? (
@@ -647,23 +693,23 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <span className="font-medium text-slate-700 text-sm">Lista de Reglas</span>
-                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-xs">{rules.length}</span>
+                    <div className="flex-1 bg-theme-card rounded-xl shadow-sm border border-theme overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-theme bg-theme-base flex justify-between items-center">
+                            <span className="font-medium text-theme-main text-sm">Lista de Reglas</span>
+                            <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{rules.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
                             {rules.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic text-sm">
                                     No hay reglas creadas.
                                 </div>
                             ) : (
                                 rules.map(rule => (
-                                    <div key={rule.id} className={`p-4 rounded-lg border transition-all ${editingId === rule.id ? 'border-green-500 bg-green-50' : rule.isActive ? 'border-slate-100 hover:border-green-200 bg-white' : 'border-slate-200 bg-slate-50 opacity-75'}`}>
+                                    <div key={rule.id} className={`p-4 rounded-lg border transition-all ${editingId === rule.id ? 'border-primary-500 bg-primary-50' : rule.isActive ? 'border-theme hover:border-primary-200 bg-theme-card' : 'border-theme bg-theme-base opacity-75'}`}>
                                         <div className="flex justify-between items-center mb-2">
                                             <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-slate-800 text-sm">{rule.name}</h4>
+                                                <h4 className="font-bold text-theme-main text-sm">{rule.name}</h4>
                                                 {rule.type === 'menu' && (
                                                     <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
                                                         <MenuIcon size={12} /> Menú
@@ -674,8 +720,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 <button
                                                     onClick={() => toggleStatus(rule.id)}
                                                     className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${rule.isActive
-                                                        ? "text-green-600 hover:bg-green-50 bg-green-50"
-                                                        : "text-slate-400 hover:bg-slate-100 bg-slate-50"
+                                                        ? "text-primary-600 hover:bg-primary-50 bg-primary-50"
+                                                        : "text-slate-400 hover:bg-slate-100 bg-theme-base"
                                                         }`}
                                                     title={rule.isActive ? "Desactivar regla" : "Activar regla"}
                                                 >
@@ -692,6 +738,13 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                     <Edit2 size={16} />
                                                 </button>
                                                 <button
+                                                    onClick={() => handleDuplicate(rule)}
+                                                    className="p-1.5 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                                                    title="Duplicar regla"
+                                                >
+                                                    <Copy size={16} />
+                                                </button>
+                                                <button
                                                     onClick={() => handleDelete(rule.id)}
                                                     className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                                                     title="Eliminar regla"
@@ -700,6 +753,29 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {/* Country Filter Badge */}
+                                        <div className="flex flex-wrap gap-1 mb-2">
+                                            {rule.countries && rule.countries.length > 0 ? (
+                                                // Identify unique countries based on the codes stored
+                                                Array.from(new Set(rule.countries)).map(code => {
+                                                    const country = countryList.find(c => c.code === code);
+                                                    return (
+                                                        <span key={`${country?.iso || code}-${code}`} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100" title={country?.name}>
+                                                            {country?.iso ? (
+                                                                <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="16" alt={country.name} className="rounded-sm" />
+                                                            ) : <Globe size={10} />}
+                                                            {country?.name || code}
+                                                        </span>
+                                                    );
+                                                })
+                                            ) : (
+                                                <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1 border border-theme">
+                                                    <Globe size={10} /> Todos los países
+                                                </span>
+                                            )}
+                                        </div>
+
                                         <div className="flex flex-wrap gap-1 mb-2">
                                             {(() => {
                                                 // Normalize keywords to array (handle string or array)
@@ -716,7 +792,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                     }
                                                 }
                                                 return keywordsArray.map((k, i) => (
-                                                    <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                                                    <span key={i} className="text-[10px] bg-slate-100 text-theme-muted px-1.5 py-0.5 rounded border border-theme">
                                                         {k}
                                                     </span>
                                                 ));
@@ -738,7 +814,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                             );
                                         })()}
 
-                                        <p className="text-xs text-slate-500 line-clamp-2 italic border-l-2 border-slate-200 pl-2">
+                                        <p className="text-xs text-theme-muted line-clamp-2 italic border-l-2 border-theme pl-2">
                                             "{rule.response}"
                                         </p>
                                     </div>
@@ -750,13 +826,13 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                 {/* Right Column: Editor */}
                 <div className="lg:col-span-2">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                            <h3 className="font-semibold text-theme-main flex items-center gap-2">
                                 {editingId ? <><Edit2 size={18} /> Editar Regla</> : <><Plus size={18} /> Nueva Regla</>}
                             </h3>
                             {editingId && (
-                                <button onClick={resetForm} className="text-xs text-slate-500 flex items-center gap-1 hover:text-red-500">
+                                <button onClick={resetForm} className="text-xs text-theme-muted flex items-center gap-1 hover:text-red-500">
                                     <X size={14} /> Cancelar Edición
                                 </button>
                             )}
@@ -770,10 +846,10 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                         <div className="space-y-4 flex-1">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Regla</label>
+                                <label className="block text-sm font-medium text-theme-main mb-1">Nombre de la Regla</label>
                                 <input
                                     type="text"
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-green-500 focus:border-green-500 ${formErrors.name ? 'border-red-300' : 'border-slate-300'
+                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 ${formErrors.name ? 'border-red-300' : 'border-theme'
                                         }`}
                                     placeholder="Ej: Respuesta Saludo"
                                     value={formData.name}
@@ -789,9 +865,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                             {/* Type Selector */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Respuesta</label>
+                                <label className="block text-sm font-medium text-theme-main mb-1">Tipo de Respuesta</label>
                                 <select
-                                    className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-green-500 focus:border-green-500 bg-white"
+                                    className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 bg-theme-card"
                                     value={formData.type || 'simple'}
                                     onChange={e => {
                                         const newType = e.target.value as 'simple' | 'menu';
@@ -811,21 +887,21 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             {/* Menu Selector (only if type is 'menu') */}
                             {formData.type === 'menu' && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                    <label className="block text-sm font-medium text-theme-main mb-2 flex items-center gap-2">
                                         <MenuIcon size={16} className="text-blue-600" />
                                         Seleccionar Menú
                                     </label>
                                     {menus.length === 0 ? (
-                                        <div className="text-sm text-slate-600 bg-white rounded-lg p-4 border border-slate-200">
+                                        <div className="text-sm text-theme-muted bg-theme-card rounded-lg p-4 border border-theme">
                                             <p className="mb-2">⚠️ No hay menús activos disponibles.</p>
-                                            <p className="text-xs text-slate-500">
+                                            <p className="text-xs text-theme-muted">
                                                 Ve a <strong>Menús Interactivos</strong> para crear un menú primero.
                                             </p>
                                         </div>
                                     ) : (
                                         <>
                                             <select
-                                                className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white ${formErrors.menuId ? 'border-red-300' : 'border-slate-300'
+                                                className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-theme-card ${formErrors.menuId ? 'border-red-300' : 'border-theme'
                                                     }`}
                                                 value={formData.menuId || ''}
                                                 onChange={e => {
@@ -844,7 +920,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 <p className="mt-1 text-sm text-red-600">{formErrors.menuId}</p>
                                             )}
                                             {formData.menuId && (
-                                                <div className="mt-3 text-xs text-slate-600 bg-white rounded p-3 border border-slate-200">
+                                                <div className="mt-3 text-xs text-theme-muted bg-theme-card rounded p-3 border border-theme">
                                                     <p className="font-medium mb-1">📋 Preview del menú:</p>
                                                     <p className="whitespace-pre-wrap">
                                                         {menus.find(m => m.id === formData.menuId)?.message}
@@ -856,11 +932,146 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                 </div>
                             )}
 
+                            {/* Country Selector */}
+                            <div className="bg-theme-base border border-theme rounded-lg p-3">
+                                <button
+                                    onClick={() => setShowCountrySelector(!showCountrySelector)}
+                                    className="flex items-center justify-between w-full text-sm font-medium text-theme-main"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Globe size={16} className="text-primary-600" />
+                                        Filtro por País (opcional)
+                                    </span>
+                                    {showCountrySelector ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </button>
+
+                                {showCountrySelector && (
+                                    <div className="mt-3 space-y-2">
+                                        <div className="relative mb-3">
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar país o prefijo..."
+                                                className="w-full bg-theme-card border border-theme rounded-md py-2 px-3 pl-9 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 transition-all"
+                                                value={countrySearch}
+                                                onChange={(e) => setCountrySearch(e.target.value)}
+                                            />
+                                            <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
+                                        </div>
+                                        <div className="flex items-center justify-between px-1 mb-2">
+                                            <p className="text-xs text-theme-muted">
+                                                Selecciona los países para los cuales esta regla debe activarse.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const filteredList = countryList.filter(country =>
+                                                        country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                        country.code.includes(countrySearch.replace('+', ''))
+                                                    );
+                                                    const filteredCodes = filteredList.map(c => c.code);
+                                                    const currentCountries = formData.countries || [];
+
+                                                    // Determine if all filtered are already selected
+                                                    const allSelected = filteredCodes.every(code => currentCountries.includes(code));
+
+                                                    if (allSelected) {
+                                                        // Deselect all that are in the filtered list
+                                                        setFormData({ ...formData, countries: currentCountries.filter(code => !filteredCodes.includes(code)) });
+                                                    } else {
+                                                        // Select all from filtered list (merge with current)
+                                                        setFormData({ ...formData, countries: Array.from(new Set([...currentCountries, ...filteredCodes])) });
+                                                    }
+                                                }}
+                                                className="text-[10px] font-medium text-primary-600 hover:text-primary-700 hover:underline"
+                                            >
+                                                {(() => {
+                                                    const filteredCodes = countryList.filter(country =>
+                                                        country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                        country.code.includes(countrySearch.replace('+', ''))
+                                                    ).map(c => c.code);
+                                                    const currentCountries = formData.countries || [];
+                                                    return filteredCodes.every(code => currentCountries.includes(code)) ? 'Desmarcar todo' : 'Marcar todo';
+                                                })()}
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                                            {countryList
+                                                .filter(country =>
+                                                    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                    country.code.includes(countrySearch.replace('+', ''))
+                                                )
+                                                .map(country => (
+                                                    <label key={`${country.iso}-${country.code}`} className="flex items-center gap-2 p-2 rounded hover:bg-theme-card cursor-pointer border border-transparent hover:border-theme transition-colors">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="rounded text-primary-600"
+                                                            checked={(formData.countries || []).includes(country.code)}
+                                                            onChange={(e) => {
+                                                                const currentCountries = formData.countries || [];
+                                                                if (e.target.checked) {
+                                                                    setFormData({ ...formData, countries: [...currentCountries, country.code] });
+                                                                } else {
+                                                                    setFormData({ ...formData, countries: currentCountries.filter(c => c !== country.code) });
+                                                                }
+                                                            }}
+                                                        />
+                                                        <span className="text-xs flex items-center gap-2">
+                                                            {country.iso && (
+                                                                <img
+                                                                    src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`}
+                                                                    width="18"
+                                                                    alt={country.name}
+                                                                    className="rounded-sm shadow-sm"
+                                                                />
+                                                            )}
+                                                            <span className="truncate">{country.name} (+{country.code})</span>
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                        </div>
+                                        {formData.countries && formData.countries.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                {formData.countries.map(code => {
+                                                    const country = countryList.find(c => c.code === code);
+                                                    return (
+                                                        <span key={`${country?.iso || code}-${code}`} className="bg-primary-50 text-primary-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-primary-200">
+                                                            {country?.iso && (
+                                                                <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="14" alt={country?.name} className="rounded-xs" />
+                                                            )}
+                                                            {country?.name}
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    // Remove all instances of this code (or just one? if they are different countries with same code)
+                                                                    // Actually, since we want to support multiple countries with same code, we should probably store ISOs.
+                                                                    // But the filter logic uses codes. 
+                                                                    // Let's just filter the first one we find or all.
+                                                                    setFormData({ ...formData, countries: formData.countries?.filter(c => c !== code) });
+                                                                }}
+                                                                className="hover:text-primary-900"
+                                                            >
+                                                                <X size={10} />
+                                                            </button>
+                                                        </span>
+                                                    );
+                                                })}
+                                                <button
+                                                    onClick={(e) => { e.preventDefault(); setFormData({ ...formData, countries: [] }); }}
+                                                    className="text-[10px] text-red-500 hover:text-red-700 font-medium ml-1"
+                                                >
+                                                    Limpiar todos
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Palabras Clave (Triggers)</label>
+                                <label className="block text-sm font-medium text-theme-main mb-1">Palabras Clave (Triggers)</label>
                                 <input
                                     type="text"
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-green-500 focus:border-green-500 ${formErrors.keywords ? 'border-red-300' : 'border-slate-300'
+                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 ${formErrors.keywords ? 'border-red-300' : 'border-theme'
                                         }`}
                                     placeholder="hola, buenos dias, info, precio (separadas por coma)"
                                     value={keywordInput}
@@ -878,9 +1089,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Coincidencia</label>
+                                    <label className="block text-sm font-medium text-theme-main mb-1">Tipo de Coincidencia</label>
                                     <select
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-green-500 focus:border-green-500 bg-white"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 bg-theme-card"
                                         value={formData.matchType}
                                         onChange={e => setFormData({ ...formData, matchType: e.target.value as any })}
                                     >
@@ -889,14 +1100,14 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+                                    <label className="block text-sm font-medium text-theme-main mb-1 flex items-center gap-2">
                                         <Clock size={14} /> Retraso de Respuesta (seg)
                                     </label>
                                     <input
                                         type="number"
                                         min="0"
                                         max="60"
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-green-500 focus:border-green-500"
+                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500"
                                         value={formData.delay}
                                         onChange={e => setFormData({ ...formData, delay: parseInt(e.target.value) })}
                                     />
@@ -907,7 +1118,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             {formData.type !== 'menu' && (
                                 <>
                                     <div className="flex-1 flex flex-col">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Mensaje de Respuesta</label>
+                                        <label className="block text-sm font-medium text-theme-main mb-1">Mensaje de Respuesta</label>
                                         {/* Message Editor Toolbar */}
                                         <MessageEditorToolbar
                                             textareaRef={messageTextareaRef}
@@ -920,7 +1131,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                         />
                                         <textarea
                                             ref={messageTextareaRef}
-                                            className={`flex-1 w-full p-4 border rounded-lg resize-none mt-2 focus:ring-2 focus:ring-green-500 focus:border-transparent font-sans ${formErrors.response ? 'border-red-300' : 'border-slate-300'
+                                            className={`flex-1 w-full p-4 border rounded-lg resize-none mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-sans ${formErrors.response ? 'border-red-300' : 'border-theme'
                                                 }`}
                                             placeholder="Escribe la respuesta automática aquí... (opcional si adjuntas multimedia)"
                                             value={formData.response}
@@ -948,7 +1159,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
 
                                     {/* Media Upload */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        <label className="block text-sm font-medium text-theme-main mb-2">
                                             Archivo Multimedia (opcional)
                                         </label>
                                         <MediaUpload
@@ -970,10 +1181,10 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             )}
                         </div>
 
-                        <div className="pt-6 mt-4 border-t border-slate-100 flex justify-end">
+                        <div className="pt-6 mt-4 border-t border-theme flex justify-end">
                             <button
                                 onClick={handleSave}
-                                className="bg-slate-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2 shadow-lg"
+                                className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3 rounded-lg font-medium hover:bg-black dark:hover:bg-white flex items-center gap-2 shadow-lg transition-all duration-200"
                             >
                                 <Save size={18} /> {editingId ? 'Actualizar Regla' : 'Guardar Regla'}
                             </button>

@@ -94,7 +94,7 @@ export default function EmergencyRestart() {
                     <div className="flex gap-2">
                         <button
                             onClick={() => setShowConfirm(false)}
-                            className="flex-1 px-3 py-2 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
+                            className="flex-1 px-3 py-2 bg-theme-card/20 hover:bg-theme-card/30 rounded text-xs font-medium transition-colors"
                             disabled={isRestarting}
                         >
                             Cancelar
@@ -102,7 +102,7 @@ export default function EmergencyRestart() {
                         <button
                             onClick={handleEmergencyRestart}
                             disabled={isRestarting}
-                            className="flex-1 px-3 py-2 bg-white text-red-600 hover:bg-red-50 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                            className="flex-1 px-3 py-2 bg-theme-card text-red-600 hover:bg-red-50 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                         >
                             {isRestarting ? (
                                 <>

@@ -246,12 +246,26 @@ const discoverBackendPort = async (options: DiscoverOptions = {}) => {
 
 // Try to resolve backend port on initialization
 if (typeof window !== 'undefined') {
-  // In production (Electron), the port is set in localStorage by Electron
-  // In development, try to fetch from .port-info.json
   const isProduction = !import.meta.env.DEV;
+  // Check if we are in a browser environment (not Electron)
+  const isWebEnvironment = !window.navigator.userAgent.includes('Electron');
 
-  if (isProduction) {
+  if (isProduction && isWebEnvironment) {
+    // In Railway/Web monolithic deploy, API is relative
+    console.log('✅ Detected Web Production Environment. Using relative API URL.');
+    // We force the updateApiBaseUrl not to use localhost port but the current origin or relative
+    API_BASE_URL = window.location.origin;
+    api.defaults.baseURL = `${API_BASE_URL}/api`;
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+      initializeSocket();
+    }
+    markBackendPortReady();
+  } else if (isProduction) {
+    // Electron Production logic (localhost discovery/storage)
     const initializePortFromLocalStorage = async () => {
+
       const maxAttempts = 20; // up to ~10s if delayMs=500
       const delayMs = 500;
 
@@ -687,6 +701,12 @@ export const createAutoReplyRule = async (rule: any, files?: File[], captions?: 
   if (rule.caption) {
     formData.append('caption', rule.caption);
   }
+  if (rule.countries && Array.isArray(rule.countries)) {
+    formData.append('countries', JSON.stringify(rule.countries));
+  }
+  if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
+    formData.append('mediaPaths', JSON.stringify(rule.mediaPaths));
+  }
   if (files && files.length > 0) {
     files.forEach((file) => {
       formData.append('media', file);
@@ -715,6 +735,9 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   }
   if (rule.caption) {
     formData.append('caption', rule.caption);
+  }
+  if (rule.countries && Array.isArray(rule.countries)) {
+    formData.append('countries', JSON.stringify(rule.countries));
   }
   if (files && files.length > 0) {
     files.forEach((file) => {

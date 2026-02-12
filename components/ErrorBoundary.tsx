@@ -35,15 +35,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full">
+                <div className="min-h-screen bg-theme-base flex items-center justify-center p-4">
+                    <div className="bg-theme-card rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
                                 <AlertCircle size={24} />
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold text-slate-800">¡Oops! Algo salió mal</h2>
-                                <p className="text-sm text-slate-500">La aplicación encontró un error</p>
+                                <h2 className="text-xl font-bold text-theme-main">¡Oops! Algo salió mal</h2>
+                                <p className="text-sm text-theme-muted">La aplicación encontró un error</p>
                             </div>
                         </div>
 
@@ -58,7 +58,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                         <div className="space-y-2">
                             <button
                                 onClick={this.handleReset}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                                className="w-full bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                             >
                                 Recargar Aplicación
                             </button>

@@ -174,11 +174,11 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Selector de Plan */}
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Plan a asignar</label>
+              <label className="block text-xs font-medium text-theme-muted mb-1">Plan a asignar</label>
               <select
                 value={bulkPlan}
                 onChange={(e) => setBulkPlan(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-theme rounded-lg text-sm"
               >
                 {subscriptionTypes.map(type => (
                   <option key={type} value={type}>{type}</option>
@@ -188,12 +188,12 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
 
             {/* Selector de Fecha */}
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Vigencia hasta</label>
+              <label className="block text-xs font-medium text-theme-muted mb-1">Vigencia hasta</label>
               <input
                 type="date"
                 value={bulkEndDate}
                 onChange={(e) => setBulkEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-theme rounded-lg text-sm"
                 min={new Date().toISOString().split('T')[0]}
               />
             </div>
@@ -213,12 +213,12 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
 
           {/* Botones rápidos de meses */}
           <div className="flex flex-wrap gap-2">
-            <span className="text-xs text-slate-500 self-center">Atajos:</span>
+            <span className="text-xs text-theme-muted self-center">Atajos:</span>
             {[1, 2, 3, 6, 9, 12].map(months => (
               <button
                 key={months}
                 onClick={() => setBulkEndDate(addMonthsToDate(months))}
-                className="px-3 py-1 text-xs bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                className="px-3 py-1 text-xs bg-theme-card border border-theme rounded-lg hover:bg-theme-base transition-colors"
               >
                 +{months} {months === 1 ? 'mes' : 'meses'}
               </button>
@@ -239,10 +239,10 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
       )}
 
       {/* Tabla de comparación */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <div className="border border-theme rounded-lg overflow-hidden">
         <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 sticky top-0 z-10">
+            <thead className="bg-theme-base sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left">
                   <input
@@ -252,16 +252,16 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                       if (input) input.indeterminate = someRowsSelected;
                     }}
                     onChange={(e) => handleSelectAllRows(e.target.checked)}
-                    className="w-4 h-4 text-green-600 border-slate-300 rounded focus:ring-green-500"
+                    className="w-4 h-4 text-primary-600 border-theme rounded focus:ring-primary-500"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Estado</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Email/Usuario</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Plan Actual</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Plan Nuevo</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Vigencia Actual</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Vigencia Nueva</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Diferencias</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Estado</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Email/Usuario</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Plan Actual</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Plan Nuevo</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Vigencia Actual</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Vigencia Nueva</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Diferencias</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -271,7 +271,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                 return (
                   <tr
                     key={index}
-                    className={`hover:bg-slate-50 transition-colors ${isRowSelected ? 'bg-green-50' : ''
+                    className={`hover:bg-theme-base transition-colors ${isRowSelected ? 'bg-primary-50' : ''
                       } ${!comparison.existingUser ? 'bg-blue-50' : ''}`}
                   >
                     <td className="px-4 py-3">
@@ -279,7 +279,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                         type="checkbox"
                         checked={isRowSelected}
                         onChange={(e) => handleSelectRow(index, e.target.checked)}
-                        className="w-4 h-4 text-green-600 border-slate-300 rounded focus:ring-green-500"
+                        className="w-4 h-4 text-primary-600 border-theme rounded focus:ring-primary-500"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -290,7 +290,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                             Actualizar
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-xs">
                             <CheckCircle2 size={12} />
                             Actualizado
                           </span>
@@ -304,11 +304,11 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className="font-medium text-slate-900">
+                        <span className="font-medium text-theme-main">
                           {comparison.excelUser.email || comparison.excelUser.username || 'N/A'}
                         </span>
                         {comparison.matchType !== 'none' && (
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-theme-muted">
                             Coincide por: {comparison.matchType === 'email' ? 'Email' : 'Usuario'}
                           </span>
                         )}
@@ -316,7 +316,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       {comparison.existingUser ? (
-                        <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs">
+                        <span className="px-2 py-1 bg-slate-100 text-theme-main rounded text-xs">
                           {comparison.existingUser.subscription_type}
                         </span>
                       ) : (
@@ -334,7 +334,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       {comparison.existingUser?.subscription_end_date ? (
-                        <span className="text-xs text-slate-600">
+                        <span className="text-xs text-theme-muted">
                           {new Date(comparison.existingUser.subscription_end_date).toLocaleDateString('es-ES')}
                         </span>
                       ) : (
@@ -400,7 +400,7 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
       </div>
 
       {/* Resumen */}
-      <div className="flex items-center justify-between text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+      <div className="flex items-center justify-between text-sm text-theme-muted bg-theme-base p-3 rounded-lg">
         <div className="flex items-center gap-4">
           <span>
             Total: <strong>{comparisons.length}</strong>
@@ -416,13 +416,13 @@ export const UserComparisonTable: React.FC<UserComparisonTableProps> = ({
             </strong>
           </span>
           <span>
-            Sin cambios: <strong className="text-green-600">
+            Sin cambios: <strong className="text-primary-600">
               {comparisons.filter(c => c.existingUser && !c.needsUpdate).length}
             </strong>
           </span>
         </div>
         {selectedIds.size > 0 && (
-          <span className="text-green-600 font-medium">
+          <span className="text-primary-600 font-medium">
             {selectedIds.size} seleccionado(s)
           </span>
         )}

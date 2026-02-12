@@ -25,9 +25,17 @@ import { SubscriptionUpgradeModal } from './components/SubscriptionUpgradeModal'
 import EmergencyRestart from './components/EmergencyRestart';
 import { SessionProvider, useSession } from './context/SessionContext';
 import { SessionSelector } from './components/SessionSelector';
+import { LandingPage } from './components/LandingPage';
+import { loadSavedTheme } from './services/themeService';
 
 function App() {
+  // Initialize theme
+  useEffect(() => {
+    loadSavedTheme();
+  }, []);
+
   const [isAuthenticatedState, setIsAuthenticatedState] = useState<boolean>(checkAuth());
+  const [showLandingPage, setShowLandingPage] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(getCurrentUser());
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -391,6 +399,8 @@ function App() {
         setPhoneLimitModal={setPhoneLimitModal}
         rules={rules}
         setRules={setRules}
+        showLandingPage={showLandingPage}
+        setShowLandingPage={setShowLandingPage}
       />
     </SessionProvider>
   );
@@ -403,7 +413,7 @@ function AppBody({
   showUpgradeModal, setShowUpgradeModal, limitError, setLimitError,
   subscriptionLimits, toasts, removeToast, success, error, warning, info,
   groupsCache, setGroupsCache, phoneLimitModal, setPhoneLimitModal,
-  rules, setRules
+  rules, setRules, showLandingPage, setShowLandingPage
 }: any) {
   const { selectedSession, clearSessions, loadSessions } = useSession();
   const isConnected = selectedSession?.isReady || false;
@@ -433,6 +443,10 @@ function AppBody({
   };
 
   if (!isAuthenticatedState || !currentUser) {
+    if (showLandingPage && process.env.NODE_ENV === 'production') {
+      // En producción (Railway) mostramos landing primero
+      return <LandingPage onLoginClick={() => setShowLandingPage(false)} />;
+    }
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
@@ -505,8 +519,8 @@ function AppBody({
           return (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Acceso Denegado</h3>
-                <p className="text-slate-600">Solo los administradores pueden acceder a la gestión de usuarios.</p>
+                <h3 className="text-xl font-bold text-theme-main mb-2">Acceso Denegado</h3>
+                <p className="text-theme-muted">Solo los administradores pueden acceder a la gestión de usuarios.</p>
               </div>
             </div>
           );
@@ -529,13 +543,14 @@ function AppBody({
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc]">
+    <div className="flex min-h-screen bg-theme-base">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogoutWithSessionClear} currentUser={currentUser} />
       <main className="flex-1 lg:ml-64 p-4 sm:p-6 lg:p-8 overflow-x-hidden pb-24 lg:pb-8">
         {/* Top bar */}
-        <div className="flex justify-between items-center mb-8">
+        {/* Top bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 sm:gap-0">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">
+            <h2 className="text-2xl font-bold text-theme-main">
               {activeTab === Tab.DASHBOARD && 'Panel Principal'}
               {activeTab === Tab.SINGLE_SENDER && 'Envío Individual'}
               {activeTab === Tab.MASS_SENDER && 'Envíos Masivos'}
@@ -547,18 +562,18 @@ function AppBody({
               {activeTab === Tab.USERS && 'Gestión de Usuarios'}
               {activeTab === Tab.SETTINGS && 'Configuración del Sistema'}
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-theme-muted">
               Bienvenido, {currentUser?.username || currentUser?.email || 'Usuario'}
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col-reverse sm:flex-row items-end sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
             <SessionSelector />
 
-            <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-full shadow-sm border border-slate-100">
-              <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-              <span className="text-xs font-bold text-slate-600">
-                {isConnected ? 'WhatsApp Activo' : 'WhatsApp Desconectado'}
+            <div className="flex items-center gap-2 bg-theme-card px-4 py-2.5 rounded-full shadow-sm border border-theme self-end sm:self-auto">
+              <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-primary-500 animate-pulse' : 'bg-red-500'}`}></span>
+              <span className="text-xs font-bold text-theme-muted">
+                {isConnected ? 'Activo' : 'Off'} {/* Shortened for mobile */}
               </span>
             </div>
           </div>
@@ -619,7 +634,7 @@ function AppBody({
 
       {phoneLimitModal.show && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+          <div className="bg-theme-card rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
             <div className="bg-red-600 px-6 py-4">
               <h3 className="text-xl font-bold text-white flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -631,19 +646,19 @@ function AppBody({
               </h3>
             </div>
             <div className="p-6">
-              <p className="text-slate-700 mb-4">
+              <p className="text-theme-main mb-4">
                 {phoneLimitModal.message}
               </p>
               {phoneLimitModal.phone && (
-                <p className="text-sm text-slate-500 mb-4">
+                <p className="text-sm text-theme-muted mb-4">
                   Número: <span className="font-mono font-medium">+{phoneLimitModal.phone}</span>
                 </p>
               )}
-              <p className="text-sm text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-theme-muted bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <strong>Nota:</strong> Si deseas usar este número en esta cuenta, primero debes desvincularlo de una de las otras cuentas donde está registrado.
               </p>
             </div>
-            <div className="bg-slate-50 px-6 py-4 flex justify-end">
+            <div className="bg-theme-base px-6 py-4 flex justify-end">
               <button
                 onClick={async () => {
                   if (phoneLimitModal.sessionId) {

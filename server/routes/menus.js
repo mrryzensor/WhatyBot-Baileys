@@ -148,7 +148,7 @@ router.put('/:id', upload.array('media', 50), (req, res) => {
         const { id } = req.params;
         const files = req.files || [];
 
-        const index = client.interactiveMenus.findIndex(m => m.id === id);
+        const index = client.interactiveMenus.findIndex(m => String(m.id) === String(id));
         if (index === -1) return res.status(404).json({ error: 'Menu not found' });
 
         const existingMenu = client.interactiveMenus[index];
@@ -259,7 +259,7 @@ router.delete('/:id', (req, res) => {
         if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
 
         const { id } = req.params;
-        const index = client.interactiveMenus.findIndex(m => m.id === id);
+        const index = client.interactiveMenus.findIndex(m => String(m.id) === String(id));
         if (index === -1) return res.status(404).json({ error: 'Menu not found' });
 
         const menu = client.interactiveMenus[index];

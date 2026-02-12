@@ -364,9 +364,9 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-slate-800">Crear Usuarios por Volumen</h3>
+          <h3 className="text-xl font-bold text-theme-main">Crear Usuarios por Volumen</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownloadExample}
@@ -390,13 +390,13 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
             <>
               {/* Upload Section */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-theme-main mb-2">
                   Tipo de Suscripción por Defecto
                 </label>
                 <select
                   value={defaultSubscriptionType}
                   onChange={(e) => setDefaultSubscriptionType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg mb-4"
+                  className="w-full px-3 py-2 border border-theme rounded-lg mb-4"
                 >
                   {subscriptionLimits
                     .filter(limit => limit.type !== 'administrador')
@@ -425,7 +425,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                 {/* File Upload */}
                 <div className="mb-2">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-slate-700">
+                    <label className="block text-sm font-medium text-theme-main">
                       Subir Archivo Excel
                     </label>
                     <button
@@ -442,14 +442,14 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragging ? 'border-green-500 bg-green-50' : 'border-slate-300'
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragging ? 'border-primary-500 bg-primary-50' : 'border-theme'
                       }`}
                   >
                     <Upload size={32} className="mx-auto mb-2 text-slate-400" />
-                    <p className="text-sm text-slate-600 mb-2">
+                    <p className="text-sm text-theme-muted mb-2">
                       Arrastra archivos aquí o haz clic para seleccionar
                     </p>
-                    <p className="text-xs text-slate-500 mb-4">
+                    <p className="text-xs text-theme-muted mb-4">
                       Formatos soportados: Excel (.xls, .xlsx), CSV, TXT, JSON
                     </p>
                     <input
@@ -461,7 +461,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                       disabled={isProcessing}
                     >
                       {isProcessing ? (
@@ -478,13 +478,13 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
 
                 {/* Paste Text */}
                 <div className="mt-4">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     O pega texto (uno por línea, formato: username,email,subscriptionType)
                   </label>
                   <textarea
                     ref={pasteTextareaRef}
                     placeholder="usuario1,email1@example.com,gratuito&#10;usuario2,email2@example.com,pro&#10;..."
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg h-32 font-mono text-sm"
+                    className="w-full px-3 py-2 border border-theme rounded-lg h-32 font-mono text-sm"
                     onPaste={(e) => {
                       const target = e.currentTarget;
                       setTimeout(() => {
@@ -523,7 +523,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     setExcelUsers([]);
                     setSelectedIds(new Set());
                   }}
-                  className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  className="px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors"
                 >
                   Cargar Otro Archivo
                 </button>
@@ -559,7 +559,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                     onSuccess();
                     onClose();
                   }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   Finalizar
                 </button>

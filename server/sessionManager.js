@@ -384,6 +384,23 @@ class SessionManager {
   }
 
   /**
+   * Obtiene contactos usando una sesión específica.
+   */
+  async getContacts(sessionId, groupIds) {
+    let targetSessionId = sessionId;
+    if (!targetSessionId) {
+      // Fallback to active session
+      targetSessionId = this.getAnyActiveSession();
+    }
+
+    const client = this.getSessionClient(targetSessionId);
+    if (!client || !client.isReady) {
+      throw new Error('La sesión de WhatsApp no está lista o no existe');
+    }
+    return await client.getContacts(groupIds);
+  }
+
+  /**
    * Desconecta y elimina una sesión
    */
   async destroySession(sessionId) {
@@ -607,6 +624,25 @@ class SessionManager {
     } catch (error) {
       console.error('[SessionManager] Error restoring sessions:', error);
     }
+  }
+  /**
+   * Cierra todas las sesiones activas (para apagado del sistema)
+   */
+  async destroy() {
+    console.log(`[SessionManager] Destroying all ${this.sessions.size} sessions...`);
+    const sessionIds = Array.from(this.sessions.keys());
+    for (const sessionId of sessionIds) {
+      try {
+        const sessionData = this.sessions.get(sessionId);
+        if (sessionData && sessionData.client) {
+          await sessionData.client.destroy();
+        }
+      } catch (error) {
+        console.error(`[SessionManager] Error destroying session ${sessionId}:`, error);
+      }
+    }
+    this.sessions.clear();
+    this.userSessions.clear();
   }
 }
 

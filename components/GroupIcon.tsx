@@ -22,7 +22,7 @@ export const GroupIcon: React.FC<GroupIconProps> = ({
 
   const colors = [
     'from-blue-500 to-blue-600',
-    'from-green-500 to-green-600',
+    'from-primary-500 to-primary-600',
     'from-purple-500 to-purple-600',
     'from-pink-500 to-pink-600',
     'from-orange-500 to-orange-600',

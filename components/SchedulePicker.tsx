@@ -80,23 +80,23 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-      <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
+      <h3 className="font-semibold text-theme-main mb-4 flex items-center gap-2">
         <Clock size={18} /> Programación de Envío
       </h3>
 
       <div className="space-y-4">
         {/* Schedule Type Selection */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">¿Cuándo enviar?</label>
+          <label className="text-sm font-medium text-theme-main">¿Cuándo enviar?</label>
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => handleTypeChange('now')}
               disabled={disabled}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 scheduleType === 'now'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-100 text-theme-main hover:bg-slate-200'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Ahora
@@ -106,8 +106,8 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
               disabled={disabled}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 scheduleType === 'delay'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-100 text-theme-main hover:bg-slate-200'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               En X minutos
@@ -117,8 +117,8 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
               disabled={disabled}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 scheduleType === 'datetime'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-100 text-theme-main hover:bg-slate-200'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Fecha y hora
@@ -129,7 +129,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
         {/* Delay Options */}
         {scheduleType === 'delay' && (
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Minutos de espera</label>
+            <label className="text-sm font-medium text-theme-main">Minutos de espera</label>
             <div className="flex items-center gap-4">
               <input
                 type="range"
@@ -148,12 +148,12 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
                   value={delayMinutes}
                   onChange={(e) => handleDelayChange(parseInt(e.target.value))}
                   disabled={disabled}
-                  className="w-20 px-2 py-1 border border-slate-200 rounded text-center"
+                  className="w-20 px-2 py-1 border border-theme rounded text-center"
                 />
-                <span className="text-sm text-slate-600">minutos</span>
+                <span className="text-sm text-theme-muted">minutos</span>
               </div>
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-theme-muted">
               {delayMinutes < 60
                 ? `En ${delayMinutes} minutos`
                 : delayMinutes === 60
@@ -166,7 +166,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
         {/* DateTime Options */}
         {scheduleType === 'datetime' && (
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <label className="text-sm font-medium text-theme-main flex items-center gap-2">
               <Calendar size={16} /> Fecha y hora exacta
             </label>
             <div className="grid grid-cols-2 gap-4">
@@ -179,7 +179,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
                 }}
                 min={new Date().toISOString().split('T')[0]}
                 disabled={disabled}
-                className="px-3 py-2 border border-slate-200 rounded-lg"
+                className="px-3 py-2 border border-theme rounded-lg"
               />
               <input
                 type="time"
@@ -190,7 +190,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
                 }}
                 min={getMinTime()}
                 disabled={disabled}
-                className="px-3 py-2 border border-slate-200 rounded-lg"
+                className="px-3 py-2 border border-theme rounded-lg"
               />
             </div>
             {scheduledDate && scheduledTime && (() => {
@@ -205,7 +205,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({ onScheduleChange
               const offsetStr = timezoneOffset >= 0 ? `UTC+${timezoneOffset}` : `UTC${timezoneOffset}`;
               
               return (
-                <div className="text-xs flex flex-col gap-1 text-slate-500">
+                <div className="text-xs flex flex-col gap-1 text-theme-muted">
                   <div className="flex items-center gap-2">
                     <Calendar size={12} />
                     <span>

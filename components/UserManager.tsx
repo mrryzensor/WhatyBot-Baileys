@@ -585,7 +585,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       case 'pro': return <Zap className="text-blue-600" size={20} />;
       case 'elite': return <TrendingUp className="text-purple-600" size={20} />;
       case 'platino': return <Crown className="text-amber-600" size={20} />;
-      default: return <Gift className="text-green-600" size={20} />;
+      default: return <Gift className="text-primary-600" size={20} />;
     }
   };
 
@@ -595,7 +595,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       case 'pro': return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'elite': return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'platino': return 'bg-amber-100 text-amber-800 border-amber-300';
-      default: return 'bg-green-100 text-green-800 border-green-300';
+      default: return 'bg-primary-100 text-primary-800 border-primary-300';
     }
   };
 
@@ -665,8 +665,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Gestión de Usuarios</h2>
-          <p className="text-slate-500">Administra usuarios y suscripciones</p>
+          <h2 className="text-2xl font-bold text-theme-main">Gestión de Usuarios</h2>
+          <p className="text-theme-muted">Administra usuarios y suscripciones</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -678,7 +678,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
           </button>
           <button
             onClick={handleOpenCreateUser}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             <Plus size={18} />
             Crear Usuario
@@ -687,10 +687,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       </div>
 
       {/* Subscription Limits Info */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div className="bg-theme-card rounded-xl shadow-sm border border-theme p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="font-semibold text-slate-800">Límites de Suscripción</h3>
-          <div className="text-xs text-slate-500">
+          <h3 className="font-semibold text-theme-main">Límites de Suscripción</h3>
+          <div className="text-xs text-theme-muted">
             💡 Haz clic en los íconos para editar límites (azul) o enlaces de contacto (verde)
           </div>
         </div>
@@ -698,7 +698,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
           {subscriptionLimits.map((limit) => {
             const contactLink = contactLinks.find(l => l.subscriptionType === limit.type);
             return (
-              <div key={limit.type} className="border border-slate-200 rounded-lg p-4 relative">
+              <div key={limit.type} className="border border-theme rounded-lg p-4 relative">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     {getSubscriptionIcon(limit.type)}
@@ -715,7 +715,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       </button>
                       <button
                         onClick={() => handleEditContactLink(limit)}
-                        className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors border border-green-200"
+                        className="p-1.5 text-primary-600 hover:bg-primary-50 rounded transition-colors border border-primary-200"
                         title="Editar enlace de contacto para el modal de suscripción"
                       >
                         <MessageCircle size={16} />
@@ -723,13 +723,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-slate-600">
+                <div className="text-sm text-theme-muted">
                   <div>Mensajes: {limit.messages === Infinity || limit.messages === null || limit.messages === undefined ? 'Ilimitados' : limit.messages.toLocaleString()}</div>
                   <div>Duración: {limit.duration ? `${limit.duration} día(s)` : 'Permanente'}</div>
                   <div>Precio: ${limit.price || 0} USD/mes</div>
                   {contactLink && (
-                    <div className="mt-2 pt-2 border-t border-slate-200 text-xs">
-                      <div className="text-slate-500">Contacto:</div>
+                    <div className="mt-2 pt-2 border-t border-theme text-xs">
+                      <div className="text-theme-muted">Contacto:</div>
                       <div className="font-medium">
                         {contactLink.contactType === 'whatsapp_number' && '📱 WhatsApp'}
                         {contactLink.contactType === 'wa_link' && '🔗 Wa.link'}
@@ -745,16 +745,16 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="p-6 border-b border-slate-100">
+      <div className="bg-theme-card rounded-xl shadow-sm border border-theme">
+        <div className="p-6 border-b border-theme">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+            <h3 className="font-semibold text-theme-main flex items-center gap-2">
               <Users size={18} />
               Usuarios ({filteredAndSortedUsers.length} de {users.length})
             </h3>
             {selectedUsers.size > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">{selectedUsers.size} seleccionado(s)</span>
+                <span className="text-sm text-theme-muted">{selectedUsers.size} seleccionado(s)</span>
                 <button
                   onClick={() => setShowBulkEditModal(true)}
                   className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-1"
@@ -779,7 +779,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
               placeholder="Buscar por nombre, email o tipo de suscripción..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full pl-10 pr-4 py-2 border border-theme rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
         </div>
@@ -787,7 +787,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="text-center py-8 text-slate-400">
-              <div className="w-8 h-8 border-2 border-slate-300 border-t-green-600 rounded-full animate-spin mx-auto mb-2"></div>
+              <div className="w-8 h-8 border-2 border-theme border-t-green-600 rounded-full animate-spin mx-auto mb-2"></div>
               <p>Cargando usuarios...</p>
             </div>
           ) : filteredAndSortedUsers.length === 0 ? (
@@ -798,18 +798,18 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
           ) : (
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                <thead className="bg-theme-base border-b border-theme sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-3 text-left">
                       <input
                         type="checkbox"
                         checked={selectedUsers.size === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0}
                         onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                        className="rounded border-theme text-primary-600 focus:ring-primary-500"
                       />
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-4 py-3 text-left text-xs font-medium text-theme-muted cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('username')}
                     >
                       <div className="flex items-center gap-1">
@@ -818,7 +818,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       </div>
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-4 py-3 text-left text-xs font-medium text-theme-muted cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('email')}
                     >
                       <div className="flex items-center gap-1">
@@ -827,7 +827,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       </div>
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-4 py-3 text-left text-xs font-medium text-theme-muted cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('subscription_type')}
                     >
                       <div className="flex items-center gap-1">
@@ -836,7 +836,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       </div>
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-4 py-3 text-left text-xs font-medium text-theme-muted cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('subscription_start_date')}
                     >
                       <div className="flex items-center gap-1">
@@ -845,7 +845,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       </div>
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                      className="px-4 py-3 text-left text-xs font-medium text-theme-muted cursor-pointer hover:bg-slate-100 transition-colors"
                       onClick={() => handleSort('subscription_end_date')}
                     >
                       <div className="flex items-center gap-1">
@@ -853,7 +853,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                         <SortIcon field="subscription_end_date" />
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Acciones</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-theme-muted">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -863,23 +863,23 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     return (
                       <tr
                         key={user.id}
-                        className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''} ${isExpired ? 'bg-red-50' : ''}`}
+                        className={`hover:bg-theme-base transition-colors ${isSelected ? 'bg-blue-50' : ''} ${isExpired ? 'bg-red-50' : ''}`}
                       >
                         <td className="px-4 py-3">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={(e) => handleSelectUser(user.id, e.target.checked)}
-                            className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                            className="rounded border-theme text-primary-600 focus:ring-primary-500"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             {getSubscriptionIcon(user.subscription_type)}
-                            <span className="font-medium text-slate-800">{user.username}</span>
+                            <span className="font-medium text-theme-main">{user.username}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-theme-muted">
                           {user.email || '-'}
                         </td>
                         <td className="px-4 py-3">
@@ -892,10 +892,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-theme-muted">
                           {formatDate(user.subscription_start_date)}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-theme-muted">
                           {user.subscription_end_date ? formatDate(user.subscription_end_date) : '-'}
                         </td>
                         <td className="px-4 py-3">
@@ -931,15 +931,15 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {/* Edit/Create User Modal */}
       {(editingUser || isCreatingUser) && createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-[95vw] h-[90vh] flex flex-col relative overflow-hidden">
+          <div className="bg-theme-card rounded-xl shadow-lg w-full max-w-[95vw] h-[90vh] flex flex-col relative overflow-hidden">
             {/* Header Fijo */}
-            <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-white z-10">
-              <h3 className="font-semibold text-slate-800 text-lg">
+            <div className="flex justify-between items-center p-6 border-b border-theme bg-theme-card z-10">
+              <h3 className="font-semibold text-theme-main text-lg">
                 {isCreatingUser ? 'Crear Nuevo Usuario' : `Editar Usuario - ${editingUser?.username}`}
               </h3>
               <button
                 onClick={handleCloseUserModal}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
+                className="p-2 text-slate-400 hover:text-theme-muted rounded-full hover:bg-slate-100 transition-colors"
                 title="Cerrar"
               >
                 <X size={24} />
@@ -952,47 +952,47 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
                 {/* Columna 1: Datos Básicos */}
                 <div className="space-y-4">
-                  <h4 className="font-medium text-slate-700 border-b pb-2 mb-3">Datos de Cuenta</h4>
+                  <h4 className="font-medium text-theme-main border-b pb-2 mb-3">Datos de Cuenta</h4>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-theme-main mb-1">
                       Email {isCreatingUser && '*'}
                     </label>
                     <input
                       type="email"
                       value={editEmail}
                       onChange={(e) => handleEmailChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="usuario@ejemplo.com"
                       required={isCreatingUser}
                     />
                     {isCreatingUser && (
-                      <p className="text-xs text-slate-500 mt-1">El nombre de usuario se generará automáticamente</p>
+                      <p className="text-xs text-theme-muted mt-1">El nombre de usuario se generará automáticamente</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-theme-main mb-1">
                       Nombre de Usuario
                     </label>
                     <input
                       type="text"
                       value={editUsername}
                       onChange={(e) => setEditUsername(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder={isCreatingUser ? "Generado autom." : "usuario123"}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-theme-main mb-1">
                       {isCreatingUser ? 'Contraseña' : 'Nueva Contraseña'}
                     </label>
                     <input
                       type="password"
                       value={editPassword}
                       onChange={(e) => setEditPassword(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder={isCreatingUser ? "Opcional (default)" : "Dejar vacío para mantener"}
                     />
                   </div>
@@ -1000,17 +1000,17 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
                 {/* Columna 2: Suscripción y Fechas */}
                 <div className="space-y-4 md:col-span-2">
-                  <h4 className="font-medium text-slate-700 border-b pb-2 mb-3">Suscripción y Vigencia</h4>
+                  <h4 className="font-medium text-theme-main border-b pb-2 mb-3">Suscripción y Vigencia</h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-theme-main mb-1">
                         Tipo de Suscripción
                       </label>
                       <select
                         value={editSubscriptionType}
                         onChange={(e) => setEditSubscriptionType(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-theme rounded-lg bg-theme-card focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="gratuito">Gratuito</option>
                         <option value="pro">Pro</option>
@@ -1024,7 +1024,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                     {/* Fecha Inicio */}
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-theme-main mb-1">
                         Fecha Inicio
                       </label>
                       <div className="flex flex-col gap-2">
@@ -1032,7 +1032,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                           type="date"
                           value={editStartDate}
                           onChange={(e) => setEditStartDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                          className="w-full px-3 py-2 border border-theme rounded-lg"
                         />
                         <div className="flex gap-1 flex-wrap">
                           {[1, 3, 6, 9].map(m => (
@@ -1052,7 +1052,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
                     {/* Fecha Fin */}
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-theme-main mb-1">
                         Fecha Fin
                       </label>
                       <div className="flex flex-col gap-2">
@@ -1060,7 +1060,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                           type="date"
                           value={editEndDate}
                           onChange={(e) => setEditEndDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                          className="w-full px-3 py-2 border border-theme rounded-lg"
                         />
                         <div className="flex gap-1 flex-wrap">
                           {[1, 3, 6, 9].map(m => (
@@ -1068,7 +1068,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                               key={m}
                               type="button"
                               onClick={() => handleEndDateIncrement(m)}
-                              className="px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors border border-green-100 font-medium"
+                              className="px-2 py-1 text-xs bg-primary-50 text-primary-600 rounded hover:bg-primary-100 transition-colors border border-primary-100 font-medium"
                               title={`Extender fin +${m} meses`}
                             >
                               +{m}M
@@ -1083,24 +1083,24 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
                 {/* Sección de Sesiones - Ocupa todo el ancho si hay espacio */}
                 {!isCreatingUser && (
-                  <div className="col-span-1 md:col-span-2 lg:col-span-3 border-t border-slate-100 pt-6 mt-2">
-                    <h4 className="font-medium text-slate-800 mb-4 flex items-center gap-2">
+                  <div className="col-span-1 md:col-span-2 lg:col-span-3 border-t border-theme pt-6 mt-2">
+                    <h4 className="font-medium text-theme-main mb-4 flex items-center gap-2">
                       <MessageCircle size={18} />
                       Gestión de Sesiones WhatsApp
                     </h4>
 
                     {userSessions.length === 0 ? (
-                      <div className="text-center py-6 bg-slate-50 rounded-lg text-slate-500 text-sm border border-dashed border-slate-200">
+                      <div className="text-center py-6 bg-theme-base rounded-lg text-theme-muted text-sm border border-dashed border-theme">
                         Este usuario no tiene sesiones activas
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {userSessions.map((session) => (
-                          <div key={session.sessionId} className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm flex flex-col gap-3">
+                          <div key={session.sessionId} className="bg-theme-card rounded-lg p-4 border border-theme shadow-sm flex flex-col gap-3">
                             <div className="flex justify-between items-start">
                               <div>
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${session.isReady ? 'bg-green-100 text-green-700' :
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${session.isReady ? 'bg-primary-100 text-primary-700' :
                                     session.status === 'connected' ? 'bg-orange-100 text-orange-700' :
                                       session.status === 'waiting_qr' ? 'bg-yellow-100 text-yellow-700' :
                                         'bg-blue-100 text-blue-700'
@@ -1114,7 +1114,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                                   ID: {session.sessionId.substring(0, 15)}...
                                 </div>
                                 {session.phoneNumber && (
-                                  <div className="text-sm font-medium text-slate-700 mt-1">
+                                  <div className="text-sm font-medium text-theme-main mt-1">
                                     {session.phoneNumber}
                                   </div>
                                 )}
@@ -1148,18 +1148,18 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
             </div>
 
             {/* Footer Fijo con Botones */}
-            <div className="p-6 border-t border-slate-100 bg-white z-10 flex gap-3 justify-end">
+            <div className="p-6 border-t border-theme bg-theme-card z-10 flex gap-3 justify-end">
               <button
                 onClick={handleCloseUserModal}
                 disabled={isSaving}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveUser}
                 disabled={isSaving}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isSaving ? (
                   <>
@@ -1182,9 +1182,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {
         editingContactLink && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="bg-theme-card rounded-xl shadow-xl max-w-md w-full p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold text-slate-800">
+                <h3 className="text-xl font-semibold text-theme-main">
                   Editar Enlace de Contacto - {editingContactLink.type.toUpperCase()}
                 </h3>
                 <button
@@ -1193,7 +1193,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     setLinkContactType('whatsapp_number');
                     setLinkContactValue('');
                   }}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                  className="text-slate-400 hover:text-theme-muted transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -1201,13 +1201,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Tipo de Contacto
                   </label>
                   <select
                     value={linkContactType}
                     onChange={(e) => setLinkContactType(e.target.value as 'whatsapp_number' | 'wa_link' | 'payment_link')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="whatsapp_number">Número de WhatsApp</option>
                     <option value="wa_link">Enlace Wa.link</option>
@@ -1216,7 +1216,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     {linkContactType === 'whatsapp_number' && 'Número de WhatsApp (ej: 51977638887)'}
                     {linkContactType === 'wa_link' && 'URL de Wa.link (ej: https://wa.link/xxxxx)'}
                     {linkContactType === 'payment_link' && 'URL de Enlace de Pago (ej: https://paypal.me/...)'}
@@ -1230,14 +1230,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                         linkContactType === 'wa_link' ? 'https://wa.link/xxxxx' :
                           'https://...'
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <button
                     onClick={handleSaveContactLink}
-                    className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                    className="flex-1 bg-primary-600 text-white py-2 rounded-lg font-semibold hover:bg-primary-700 transition-colors"
                   >
                     Guardar
                   </button>
@@ -1247,7 +1247,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       setLinkContactType('whatsapp_number');
                       setLinkContactValue('');
                     }}
-                    className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
+                    className="flex-1 bg-slate-200 text-theme-main py-2 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
                   >
                     Cancelar
                   </button>
@@ -1263,14 +1263,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {
         editingLimit && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-              <h3 className="font-semibold text-slate-800 mb-4">
+            <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="font-semibold text-theme-main mb-4">
                 Editar Límites - {editingLimit.type.charAt(0).toUpperCase() + editingLimit.type.slice(1)}
               </h3>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Mensajes por mes
                   </label>
                   <input
@@ -1280,31 +1280,31 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       const val = parseInt(e.target.value) || 0;
                       setLimitMessages(val);
                     }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full px-3 py-2 border border-theme rounded-lg"
                     placeholder={editingLimit.type === 'administrador' ? 'Ilimitados' : '0'}
                     disabled={editingLimit.type === 'administrador'}
                   />
                   {editingLimit.type === 'administrador' && (
-                    <p className="text-xs text-slate-500 mt-1">Los administradores tienen mensajes ilimitados</p>
+                    <p className="text-xs text-theme-muted mt-1">Los administradores tienen mensajes ilimitados</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Duración (días)
                   </label>
                   <input
                     type="number"
                     value={limitDuration || ''}
                     onChange={(e) => setLimitDuration(parseInt(e.target.value) || null)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full px-3 py-2 border border-theme rounded-lg"
                     placeholder="30"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Dejar vacío para permanente</p>
+                  <p className="text-xs text-theme-muted mt-1">Dejar vacío para permanente</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Precio (USD/mes)
                   </label>
                   <input
@@ -1312,7 +1312,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     step="0.01"
                     value={limitPrice}
                     onChange={(e) => setLimitPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full px-3 py-2 border border-theme rounded-lg"
                     placeholder="0.00"
                   />
                 </div>
@@ -1326,13 +1326,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     setLimitDuration(null);
                     setLimitPrice(0);
                   }}
-                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveLimit}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   Guardar
                 </button>
@@ -1347,20 +1347,20 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {
         showBulkEditModal && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-              <h3 className="font-semibold text-slate-800 mb-4">
+            <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="font-semibold text-theme-main mb-4">
                 Editar {selectedUsers.size} Usuario(s) Masivamente
               </h3>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Tipo de Suscripción (opcional)
                   </label>
                   <select
                     value={bulkSubscriptionType}
                     onChange={(e) => setBulkSubscriptionType(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full px-3 py-2 border border-theme rounded-lg"
                   >
                     <option value="">No cambiar</option>
                     <option value="gratuito">Gratuito</option>
@@ -1371,17 +1371,17 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Nueva Contraseña (opcional)
                   </label>
                   <input
                     type="password"
                     value={bulkPassword}
                     onChange={(e) => setBulkPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full px-3 py-2 border border-theme rounded-lg"
                     placeholder="2748curso (por defecto si se deja vacío)"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-theme-muted mt-1">
                     Si se deja vacío, se usará la contraseña por defecto: 2748curso
                   </p>
                 </div>
@@ -1394,13 +1394,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     setBulkSubscriptionType('');
                     setBulkPassword('');
                   }}
-                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleBulkUpdate}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   Actualizar {selectedUsers.size} Usuario(s)
                 </button>
@@ -1428,9 +1428,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {
         showDeleteModal && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Eliminar Usuario</h3>
-              <p className="text-slate-600 mb-6">
+            <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-theme-main mb-4">Eliminar Usuario</h3>
+              <p className="text-theme-muted mb-6">
                 ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
               </p>
               <div className="flex gap-3 justify-end">
@@ -1440,7 +1440,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                     setUserToDelete(null);
                   }}
                   disabled={isDeleting}
-                  className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -1469,14 +1469,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
       {
         showBulkDeleteModal && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">
+            <div className="bg-theme-card rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-theme-main mb-4">
                 {deleteProgress.isDeleting ? 'Eliminando Usuarios...' : 'Eliminar Usuarios'}
               </h3>
 
               {deleteProgress.isDeleting ? (
                 <div className="space-y-4">
-                  <p className="text-slate-600">
+                  <p className="text-theme-muted">
                     Eliminando {deleteProgress.current} de {deleteProgress.total} usuarios...
                   </p>
                   <div className="w-full bg-slate-200 rounded-full h-3">
@@ -1485,19 +1485,19 @@ export const UserManager: React.FC<UserManagerProps> = ({ toast }) => {
                       style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
                     />
                   </div>
-                  <p className="text-sm text-slate-500 text-center">
+                  <p className="text-sm text-theme-muted text-center">
                     {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% completado
                   </p>
                 </div>
               ) : (
                 <>
-                  <p className="text-slate-600 mb-6">
+                  <p className="text-theme-muted mb-6">
                     ¿Estás seguro de que deseas eliminar {selectedUsers.size} usuario(s)? Esta acción no se puede deshacer.
                   </p>
                   <div className="flex gap-3 justify-end">
                     <button
                       onClick={() => setShowBulkDeleteModal(false)}
-                      className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                      className="px-4 py-2 border border-theme rounded-lg hover:bg-theme-base transition-colors"
                     >
                       Cancelar
                     </button>

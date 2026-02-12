@@ -79,19 +79,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full transform transition-all animate-in fade-in zoom-in duration-200">
+      <div className="bg-theme-card rounded-xl shadow-2xl max-w-md w-full transform transition-all animate-in fade-in zoom-in duration-200">
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div className={`flex-shrink-0 ${getIconBg()} p-3 rounded-full`}>
               {getIcon()}
             </div>
             <div className="flex-1 pt-1">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">{message}</p>
+              <h3 className="text-lg font-semibold text-theme-main mb-2">{title}</h3>
+              <p className="text-theme-muted text-sm leading-relaxed">{message}</p>
             </div>
             <button
               onClick={onClose}
-              className="flex-shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
+              className="flex-shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-theme-muted"
               aria-label="Cerrar"
             >
               <X size={20} />
@@ -99,11 +99,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
         </div>
         
-        <div className="px-6 pb-6 border-t border-slate-100">
+        <div className="px-6 pb-6 border-t border-theme">
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="px-4 py-2 text-theme-main hover:text-theme-main hover:bg-slate-100 rounded-lg transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
               {cancelText}
             </button>

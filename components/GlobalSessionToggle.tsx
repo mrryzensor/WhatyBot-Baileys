@@ -22,10 +22,10 @@ export const GlobalSessionToggle: React.FC<GlobalSessionToggleProps> = ({
                         {enabled ? (
                             <Globe className="w-5 h-5 text-blue-600" />
                         ) : (
-                            <User className="w-5 h-5 text-slate-600" />
+                            <User className="w-5 h-5 text-theme-muted" />
                         )}
                     </div>
-                    <h4 className="font-semibold text-slate-800 text-sm">{label}</h4>
+                    <h4 className="font-semibold text-theme-main text-sm">{label}</h4>
                 </div>
                 <button
                     onClick={() => onChange(!enabled)}
@@ -35,16 +35,16 @@ export const GlobalSessionToggle: React.FC<GlobalSessionToggleProps> = ({
                     aria-checked={enabled}
                 >
                     <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'
+                        className={`inline-block h-4 w-4 transform rounded-full bg-theme-card transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'
                             }`}
                     />
                 </button>
             </div>
-            <p className="text-xs text-slate-600 mb-2 ml-8">{description}</p>
+            <p className="text-xs text-theme-muted mb-2 ml-8">{description}</p>
             <div className="ml-8">
                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${enabled
                         ? 'bg-blue-100 text-blue-700'
-                        : 'bg-slate-100 text-slate-700'
+                        : 'bg-slate-100 text-theme-main'
                     }`}>
                     {enabled ? (
                         <>
@@ -68,7 +68,7 @@ export const GlobalSessionIndicator: React.FC<{ enabled: boolean }> = ({ enabled
     return (
         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${enabled
             ? 'bg-blue-100 text-blue-700 border border-blue-200'
-            : 'bg-slate-100 text-slate-700 border border-slate-200'
+            : 'bg-slate-100 text-theme-main border border-theme'
             }`}>
             {enabled ? (
                 <>

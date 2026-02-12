@@ -334,7 +334,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-lg transition-colors ${isDragging
             ? 'border-blue-500 bg-blue-50'
-            : 'border-slate-200 hover:border-blue-300'
+            : 'border-theme hover:border-blue-300'
             } cursor-pointer`}
         >
           {mediaItems.length === 0 ? (
@@ -344,7 +344,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
               <p className="text-xs mt-1">o haz clic para seleccionar archivos</p>
             </div>
           ) : (
-            <div className="p-4 text-center text-sm text-slate-500">
+            <div className="p-4 text-center text-sm text-theme-muted">
               <p className="font-medium">Arrastra más archivos aquí o haz clic para agregar</p>
               <p className="text-xs mt-1 opacity-75">
                 {maxFiles - mediaItems.length} espacios disponibles
@@ -358,7 +358,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
       {mediaItems.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {mediaItems.map((item, index) => (
-            <div key={index} className="bg-white border border-slate-200 rounded-lg p-3 space-y-3 relative">
+            <div key={index} className="bg-theme-card border border-theme rounded-lg p-3 space-y-3 relative">
               {/* Preview with delete button in top-right corner */}
               <div className="relative">
                 <MediaThumbnail
@@ -383,7 +383,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
               </div>
 
               {/* Header */}
-              <div className="flex items-center gap-2 text-sm text-slate-600">
+              <div className="flex items-center gap-2 text-sm text-theme-muted">
                 {getMediaIcon(item.type)}
                 <span className="truncate flex-1">{item.file?.name || item.fileName || 'Archivo'}</span>
                 {item.mediaPath && !item.file && (
@@ -394,7 +394,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
               {/* Caption Input */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-slate-700">
+                  <label className="block text-xs font-medium text-theme-main">
                     Caption (opcional)
                   </label>
                   <button
@@ -407,13 +407,13 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                 </div>
 
                 {/* Formatting Toolbar - Similar to MessageEditorToolbar */}
-                <div className="flex flex-wrap gap-1 mb-1 p-1 bg-slate-50 rounded border border-slate-200">
+                <div className="flex flex-wrap gap-1 mb-1 p-1 bg-theme-base rounded border border-theme">
                   {/* Emoji Picker Button */}
-                  <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+                  <div className="flex items-center gap-1 pr-2 border-r border-theme">
                     <button
                       ref={(el) => { if (el) emojiButtonRefs.current[index] = el; }}
                       onClick={() => toggleEmojiPicker(index)}
-                      className={`p-1.5 rounded transition-colors ${showEmojiPicker && emojiPickerIndex === index ? 'bg-slate-200 text-yellow-600' : 'hover:bg-slate-200 text-slate-600'}`}
+                      className={`p-1.5 rounded transition-colors ${showEmojiPicker && emojiPickerIndex === index ? 'bg-slate-200 text-yellow-600' : 'hover:bg-slate-200 text-theme-muted'}`}
                       title="Insertar Emoji"
                       type="button"
                     >
@@ -422,34 +422,34 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                   </div>
 
                   {/* Formatting Buttons */}
-                  <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+                  <div className="flex items-center gap-1 pr-2 border-r border-theme">
                     <button
                       onClick={() => insertFormatting(index, 'bold')}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Negrita (*texto*)"
                     >
-                      <Bold size={16} className="text-slate-600" />
+                      <Bold size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertFormatting(index, 'italic')}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Cursiva (_texto_)"
                     >
-                      <Italic size={16} className="text-slate-600" />
+                      <Italic size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertFormatting(index, 'strikethrough')}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Tachado (~texto~)"
                     >
-                      <Type size={16} className="text-slate-600" />
+                      <Type size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertFormatting(index, 'code')}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Código alineado (`texto`)"
                     >
-                      <Code size={16} className="text-slate-600" />
+                      <Code size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertFormatting(index, 'monospace')}
@@ -461,39 +461,39 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                   </div>
 
                   {/* List Buttons */}
-                  <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+                  <div className="flex items-center gap-1 pr-2 border-r border-theme">
                     <button
                       onClick={() => insertBulletList(index)}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Lista con viñetas (* texto)"
                     >
-                      <List size={16} className="text-slate-600" />
+                      <List size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertNumberedList(index)}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Lista numerada (1. texto)"
                     >
-                      <Hash size={16} className="text-slate-600" />
+                      <Hash size={16} className="text-theme-muted" />
                     </button>
                     <button
                       onClick={() => insertQuote(index)}
                       className="p-1.5 hover:bg-slate-200 rounded transition-colors"
                       title="Cita (> texto)"
                     >
-                      <Quote size={16} className="text-slate-600" />
+                      <Quote size={16} className="text-theme-muted" />
                     </button>
                   </div>
 
                   {/* Variables */}
                   {variables.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-xs text-slate-500 self-center px-1">Variables:</span>
+                      <span className="text-xs text-theme-muted self-center px-1">Variables:</span>
                       {variables.map(v => (
                         <button
                           key={v}
                           onClick={() => insertVariable(index, v)}
-                          className="text-xs bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-100 text-slate-700 font-mono"
+                          className="text-xs bg-theme-card border border-theme px-2 py-1 rounded hover:bg-slate-100 text-theme-main font-mono"
                           title={`Insertar {{${v}}}`}
                         >
                           {`{{${v}}}`}
@@ -509,17 +509,17 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                   value={item.caption}
                   onChange={(e) => updateCaption(index, e.target.value)}
                   placeholder="Añade una descripción para este archivo... Usa *negrita*, _cursiva_, ~tachado~, `código` o {{variables}}"
-                  className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded resize-none h-20 focus:outline-none focus:border-blue-500 font-mono"
+                  className="w-full px-2 py-1.5 text-sm border border-theme rounded resize-none h-20 focus:outline-none focus:border-blue-500 font-mono"
                   maxLength={1024}
                 />
                 <div className="flex items-center justify-between text-xs text-slate-400 mt-1">
                   <span>{item.caption.length}/1024</span>
-                  <span className="text-slate-500">Formatos: *negrita* _cursiva_ ~tachado~ `código`</span>
+                  <span className="text-theme-muted">Formatos: *negrita* _cursiva_ ~tachado~ `código`</span>
                 </div>
 
                 {/* Preview */}
                 {expandedCaptionIndex === index && item.caption && (
-                  <div className="mt-2 border-t border-slate-200 pt-2">
+                  <div className="mt-2 border-t border-theme pt-2">
                     <MessagePreview
                       message={item.caption}
                       variables={sampleVariables}
@@ -538,7 +538,7 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
       {showEmojiPicker && emojiPickerIndex !== null && emojiPickerPosition && (
         <div
           ref={emojiContainerRef}
-          className="fixed z-[9999] shadow-xl border border-slate-200 rounded-lg"
+          className="fixed z-[9999] shadow-xl border border-theme rounded-lg"
           style={{
             bottom: `${window.innerHeight - emojiPickerPosition.top + 4}px`,
             left: `${emojiPickerPosition.left}px`

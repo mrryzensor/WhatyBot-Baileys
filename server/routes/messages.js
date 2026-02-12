@@ -56,7 +56,11 @@ router.get('/logs', async (req, res) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        // En Railway y otros entornos, asegurar ruta absoluta para evitar ambigüedades
+        const uploadDir = process.env.UPLOAD_DIR
+            ? path.resolve(process.env.UPLOAD_DIR)
+            : path.join(__dirname, '../../uploads');
+
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }

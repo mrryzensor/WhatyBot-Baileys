@@ -88,15 +88,15 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
   };
 
   return (
-    <div className="flex flex-wrap gap-1 p-2 bg-slate-50 rounded-lg border border-slate-200 relative">
+    <div className="flex flex-wrap gap-1 p-2 bg-theme-base rounded-lg border border-theme relative">
 
       {/* Emoji Picker Button & Popup */}
-      <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+      <div className="flex items-center gap-1 pr-2 border-r border-theme">
         <button
           ref={emojiButtonRef}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className={`p-1.5 rounded transition-colors ${showEmojiPicker ? 'bg-slate-200 text-yellow-600' : 'hover:bg-slate-200 text-slate-600'}`}
+          className={`p-1.5 rounded transition-colors ${showEmojiPicker ? 'bg-slate-200 text-yellow-600' : 'hover:bg-slate-200 text-theme-muted'}`}
           title="Insertar Emoji"
           type="button"
         >
@@ -108,7 +108,7 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
       {showEmojiPicker && emojiPickerPosition && (
         <div
           ref={emojiContainerRef}
-          className="fixed z-[9999] shadow-xl border border-slate-200 rounded-lg"
+          className="fixed z-[9999] shadow-xl border border-theme rounded-lg"
           style={
             showEmojiPickerBelow
               ? {
@@ -159,14 +159,14 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
       )}
 
       {/* Formatting Buttons */}
-      <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+      <div className="flex items-center gap-1 pr-2 border-r border-theme">
         <button
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editor.insertFormatting('bold')}
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Negrita (*texto*)"
         >
-          <Bold size={16} className="text-slate-600" />
+          <Bold size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -174,7 +174,7 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Cursiva (_texto_)"
         >
-          <Italic size={16} className="text-slate-600" />
+          <Italic size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -182,7 +182,7 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Tachado (~texto~)"
         >
-          <Type size={16} className="text-slate-600" />
+          <Type size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -190,7 +190,7 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Código alineado (`texto`)"
         >
-          <Code size={16} className="text-slate-600" />
+          <Code size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -203,14 +203,14 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
       </div>
 
       {/* List Buttons */}
-      <div className="flex items-center gap-1 pr-2 border-r border-slate-300">
+      <div className="flex items-center gap-1 pr-2 border-r border-theme">
         <button
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editor.insertBulletList()}
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Lista con viñetas (* texto)"
         >
-          <List size={16} className="text-slate-600" />
+          <List size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -218,7 +218,7 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Lista numerada (1. texto)"
         >
-          <Hash size={16} className="text-slate-600" />
+          <Hash size={16} className="text-theme-muted" />
         </button>
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -226,20 +226,20 @@ export const MessageEditorToolbar: React.FC<MessageEditorToolbarProps> = ({
           className="p-1.5 hover:bg-slate-200 rounded transition-colors"
           title="Cita (> texto)"
         >
-          <Quote size={16} className="text-slate-600" />
+          <Quote size={16} className="text-theme-muted" />
         </button>
       </div>
 
       {/* Variables */}
       {showVariables && variables.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-xs text-slate-500 self-center px-1">Variables:</span>
+          <span className="text-xs text-theme-muted self-center px-1">Variables:</span>
           {variables.map(v => (
             <button
               key={v}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => editor.insertVariable(v)}
-              className="text-xs bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-100 text-slate-700 font-mono"
+              className="text-xs bg-theme-card border border-theme px-2 py-1 rounded hover:bg-slate-100 text-theme-main font-mono"
               title={`Insertar {{${v}}}`}
             >
               {`{{${v}}}`}

@@ -124,7 +124,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col h-full overflow-hidden">
+        <div className="bg-theme-card rounded-xl shadow-sm border border-theme flex-1 flex flex-col h-full overflow-hidden">
             {/* Media Upload Progress Bar */}
             {media.uploadProgress && (
                 <div className="absolute top-0 left-0 right-0 z-10">
@@ -138,8 +138,8 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                 </div>
             )}
 
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="font-semibold text-slate-800">Crear Encuesta</h3>
+            <div className="p-4 border-b border-theme flex items-center justify-between bg-theme-base">
+                <h3 className="font-semibold text-theme-main">Crear Encuesta</h3>
                 <div className="group relative">
                     <HelpCircle size={18} className="text-slate-400 cursor-help" />
                     <div className="absolute right-0 w-64 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 top-full mt-2">
@@ -151,7 +151,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
                 {/* Formatting Toolbar */}
-                <div className="sticky top-0 z-20 bg-white shadow-sm rounded-lg mb-2">
+                <div className="sticky top-0 z-20 bg-theme-card shadow-sm rounded-lg mb-2">
                     <MessageEditorToolbar
                         textareaRef={proxyRef}
                         value="" // Not strictly needed as we update specific inputs
@@ -173,13 +173,13 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                         }}
                         showVariables={false}
                     />
-                    <div className="text-[10px] text-slate-400 text-center py-0.5 bg-slate-50 border-t border-slate-100">
+                    <div className="text-[10px] text-slate-400 text-center py-0.5 bg-theme-base border-t border-theme">
                         {activeField ? 'Editando: ' + (activeField === 'title' ? 'Pregunta' : 'Opción ' + (parseInt(activeField.split('-')[1]) + 1)) : 'Selecciona un campo para editar'}
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-theme-main mb-2">
                         Pregunta o Título
                     </label>
                     <div className="relative">
@@ -188,7 +188,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                             value={pollName}
                             onChange={(e) => setPollName(e.target.value)}
                             onFocus={(e) => handleInputFocus(e, 'title')}
-                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ring-0 active:outline-none"
+                            className="w-full px-4 py-2 border border-theme rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none ring-0 active:outline-none"
                             placeholder="¿Qué opinan sobre...?"
                             disabled={loading}
                         />
@@ -196,7 +196,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-theme-main mb-2">
                         Opciones
                     </label>
                     <div className="space-y-2">
@@ -207,7 +207,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                                     value={option}
                                     onChange={(e) => handleOptionChange(index, e.target.value)}
                                     onFocus={(e) => handleInputFocus(e, `option-${index}`)}
-                                    className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ring-0"
+                                    className="flex-1 px-4 py-2 border border-theme rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none ring-0"
                                     placeholder={`Opción ${index + 1}`}
                                     disabled={loading}
                                 />
@@ -227,7 +227,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                     {options.length < 12 && (
                         <button
                             onClick={handleAddOption}
-                            className="mt-3 flex items-center gap-2 text-sm text-green-600 hover:text-green-700 font-medium"
+                            className="mt-3 flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
                             disabled={loading}
                         >
                             <Plus size={16} /> Agregar Opción
@@ -237,27 +237,27 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Settings */}
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider">
+                    <div className="bg-theme-base p-3 rounded-lg border border-theme">
+                        <label className="block text-xs font-semibold text-theme-muted mb-2 uppercase tracking-wider">
                             Configuración
                         </label>
                         <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-700">Permitir selección múltiple</span>
+                            <span className="text-sm text-theme-main">Permitir selección múltiple</span>
 
                             <button
                                 type="button"
                                 onClick={() => setSelectableCount(current => current === 1 ? 0 : 1)}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 ${selectableCount === 0 ? 'bg-green-600' : 'bg-slate-300'}`}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2 ${selectableCount === 0 ? 'bg-primary-600' : 'bg-slate-300'}`}
                                 role="switch"
                                 aria-checked={selectableCount === 0}
                             >
                                 <span
                                     aria-hidden="true"
-                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${selectableCount === 0 ? 'translate-x-5' : 'translate-x-0'}`}
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-theme-card shadow ring-0 transition duration-200 ease-in-out ${selectableCount === 0 ? 'translate-x-5' : 'translate-x-0'}`}
                                 />
                             </button>
                         </div>
-                        <p className="text-[10px] text-slate-500 mt-2">
+                        <p className="text-[10px] text-theme-muted mt-2">
                             {selectableCount === 1
                                 ? 'Los usuarios solo podrán elegir una respuesta.'
                                 : 'Los usuarios podrán elegir todas las respuestas que quieran.'}
@@ -265,13 +265,13 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                     </div>
 
                     {/* Media Toggle */}
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider">
+                    <div className="bg-theme-base p-3 rounded-lg border border-theme">
+                        <label className="block text-xs font-semibold text-theme-muted mb-2 uppercase tracking-wider">
                             Archivos Adjuntos
                         </label>
                         <button
                             onClick={() => setShowMedia(!showMedia)}
-                            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${showMedia ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${showMedia ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-theme-card border-theme text-theme-muted hover:bg-slate-100'}`}
                         >
                             <Paperclip size={16} />
                             {showMedia ? 'Ocultar Archivos' : 'Adjuntar Archivos'}
@@ -281,21 +281,21 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
 
                 {/* Media Section */}
                 {showMedia && (
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 animate-fadeIn">
+                    <div className="bg-theme-base p-4 rounded-lg border border-theme animate-fadeIn">
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm font-medium text-slate-700">Archivos Multimedia</span>
+                            <span className="text-sm font-medium text-theme-main">Archivos Multimedia</span>
 
-                            <div className="flex items-center bg-white rounded-lg border border-slate-200 p-0.5">
+                            <div className="flex items-center bg-theme-card rounded-lg border border-theme p-0.5">
                                 <button
                                     onClick={() => setMediaPosition('before')}
-                                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mediaPosition === 'before' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mediaPosition === 'before' ? 'bg-blue-100 text-blue-700' : 'text-theme-muted hover:text-theme-main'}`}
                                     title="Enviar antes de la encuesta"
                                 >
                                     <ArrowUp size={12} /> Antes
                                 </button>
                                 <button
                                     onClick={() => setMediaPosition('after')}
-                                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mediaPosition === 'after' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mediaPosition === 'after' ? 'bg-blue-100 text-blue-700' : 'text-theme-muted hover:text-theme-main'}`}
                                     title="Enviar después de la encuesta"
                                 >
                                     <ArrowDown size={12} /> Después
@@ -319,14 +319,14 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
 
             </div>
 
-            <div className="pt-4 mt-auto border-t border-slate-100 flex justify-between items-center bg-white sticky bottom-0 p-4">
-                <div className="text-sm text-slate-500">
-                    Seleccionados: <span className="font-bold text-slate-800">{selectedGroupsCount}</span>
+            <div className="pt-4 mt-auto border-t border-theme flex justify-between items-center bg-theme-card sticky bottom-0 p-4">
+                <div className="text-sm text-theme-muted">
+                    Seleccionados: <span className="font-bold text-theme-main">{selectedGroupsCount}</span>
                 </div>
                 <button
                     onClick={handleSendPoll}
                     disabled={!isConnected || selectedGroupsCount === 0 || loading || !pollName || options.filter(o => o.trim()).length < 2}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-green-900/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-primary-900/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                     {loading ? (
                         <>

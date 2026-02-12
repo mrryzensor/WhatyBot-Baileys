@@ -48,6 +48,7 @@ export interface AutoReplyRule {
   captions?: string[]; // Captions for multiple media files
   type?: 'simple' | 'menu'; // Type of auto-reply
   menuId?: string; // ID of menu if type is 'menu'
+  countries?: string[]; // Optional: List of countries to match (based on phone prefix)
 }
 
 // Interactive Menu System

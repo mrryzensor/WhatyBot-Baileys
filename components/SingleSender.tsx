@@ -235,13 +235,13 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
             )}
 
             <div className="max-w-7xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 bg-slate-50">
-                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                            <Phone size={20} className="text-green-600" />
+                <div className="bg-theme-card rounded-xl shadow-sm border border-theme overflow-hidden">
+                    <div className="p-6 border-b border-theme bg-theme-base">
+                        <h3 className="font-semibold text-theme-main flex items-center gap-2">
+                            <Phone size={20} className="text-primary-600" />
                             Enviar Mensaje Individual
                         </h3>
-                        <p className="text-sm text-slate-500 mt-1">
+                        <p className="text-sm text-theme-muted mt-1">
                             Envía un mensaje rápido a un número específico sin guardarlo en contactos.
                         </p>
                     </div>
@@ -249,28 +249,28 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                     <div className="p-6 space-y-6 md:space-y-0 md:grid md:grid-cols-2 md:gap-6">
                         {/* Phone Input */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-theme-main mb-2">
                                 Número de Teléfono
                             </label>
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <div className="sm:w-40">
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">País</label>
+                                    <label className="block text-xs font-medium text-theme-muted mb-1">País</label>
                                     <input
                                         type="text"
                                         placeholder="Ej: +51, +54, +1"
-                                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                                        className="w-full px-3 py-2.5 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                                         value={countryCode}
                                         onChange={(e) => setCountryCode(e.target.value)}
                                     />
                                 </div>
                                 <div className="flex-1">
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Número</label>
+                                    <label className="block text-xs font-medium text-theme-muted mb-1">Número</label>
                                     <div className="relative">
                                         <Phone size={18} className="absolute left-3 top-2.5 text-slate-400" />
                                         <input
                                             type="text"
                                             placeholder="Ej: 987654321"
-                                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                                            className="w-full pl-10 pr-4 py-2.5 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
                                             value={localNumber}
                                             onChange={(e) => setLocalNumber(e.target.value)}
                                         />
@@ -284,7 +284,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
 
                         {/* Message Input */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-theme-main mb-2">
                                 Mensaje
                             </label>
                             {/* Message Editor Toolbar */}
@@ -297,7 +297,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                             />
                             <textarea
                                 ref={messageTextareaRef}
-                                className="w-full h-32 p-4 border border-slate-200 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent mt-2"
+                                className="w-full h-32 p-4 border border-theme rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-transparent mt-2"
                                 placeholder="Escribe tu mensaje aquí..."
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
@@ -317,7 +317,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
 
                         {/* Media Upload */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-theme-main mb-2">
                                 Archivos Adjuntos
                             </label>
                             <MediaUpload
@@ -354,7 +354,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                         </div>
 
                         {/* Send Button */}
-                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between md:col-span-2">
+                        <div className="pt-4 border-t border-theme flex items-center justify-between md:col-span-2">
                             <div className="flex items-center gap-2 text-yellow-600 text-xs">
                                 {!isConnected && (
                                     <>
@@ -368,7 +368,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                                 disabled={!isConnected || isSending || (!message && media.mediaItems.length === 0) || !phone}
                                 className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all ${!isConnected || isSending || (!message && media.mediaItems.length === 0) || !phone
                                     ? 'bg-slate-300 cursor-not-allowed'
-                                    : 'bg-green-600 hover:bg-green-700 shadow-lg shadow-green-900/20'
+                                    : 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-900/20'
                                     }`}
                             >
                                 {isSending ? (

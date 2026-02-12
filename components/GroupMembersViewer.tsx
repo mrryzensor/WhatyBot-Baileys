@@ -139,35 +139,35 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-theme-card rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50">
+        <div className="flex justify-between items-center p-4 border-b border-theme bg-theme-base">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Users size={20} className="text-green-600" />
+            <div className="p-2 bg-primary-100 rounded-lg">
+              <Users size={20} className="text-primary-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-800">Miembros del Grupo</h3>
-              <p className="text-sm text-slate-500">{groupName}</p>
+              <h3 className="text-lg font-semibold text-theme-main">Miembros del Grupo</h3>
+              <p className="text-sm text-theme-muted">{groupName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
           >
-            <X size={20} className="text-slate-600" />
+            <X size={20} className="text-theme-muted" />
           </button>
         </div>
 
         {/* Search and Actions */}
-        <div className="p-4 border-b border-slate-200 bg-white">
+        <div className="p-4 border-b border-theme bg-theme-card">
           <div className="flex gap-3 items-center">
             <div className="relative flex-1">
               <Search size={18} className="absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Buscar miembros por nombre o teléfono..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-theme rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -175,23 +175,23 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={selectAll}
-                className="px-3 py-2 text-sm font-medium text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                className="px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
               >
                 Seleccionar Todos
               </button>
               <button
                 onClick={deselectAll}
-                className="px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                className="px-3 py-2 text-sm font-medium text-theme-muted hover:bg-theme-base rounded-lg transition-colors"
               >
                 Deseleccionar
               </button>
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between text-sm">
-            <span className="text-slate-600">
+            <span className="text-theme-muted">
               {filteredMembers.length} miembro(s) encontrado(s)
             </span>
-            <span className="text-green-600 font-medium">
+            <span className="text-primary-600 font-medium">
               {selectedMembers.size} seleccionado(s)
             </span>
           </div>
@@ -201,7 +201,7 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+              <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-3"></div>
               <p>Cargando miembros...</p>
             </div>
           ) : filteredMembers.length === 0 ? (
@@ -227,25 +227,25 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
                     onClick={() => toggleMember(member.id)}
                     className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-all ${
                       isSelected
-                        ? 'bg-green-50 border-2 border-green-200'
-                        : 'hover:bg-slate-50 border-2 border-transparent'
+                        ? 'bg-primary-50 border-2 border-primary-200'
+                        : 'hover:bg-theme-base border-2 border-transparent'
                     }`}
                   >
                     <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
                       isSelected
-                        ? 'bg-green-600 border-green-600'
-                        : 'border-slate-300'
+                        ? 'bg-primary-600 border-primary-600'
+                        : 'border-theme'
                     }`}>
                       {isSelected && <Check size={14} className="text-white" />}
                     </div>
                     <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-semibold text-sm">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-semibold text-sm">
                         {member.name.charAt(0).toUpperCase()}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium text-slate-800 truncate">
+                        <h4 className="text-sm font-medium text-theme-main truncate">
                           {displayPhone}
                         </h4>
                         {member.isAdmin && (
@@ -254,7 +254,7 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 truncate">{member.id || 'Sin identificador'}</p>
+                      <p className="text-xs text-theme-muted truncate">{member.id || 'Sin identificador'}</p>
                     </div>
                   </div>
                 );
@@ -264,14 +264,14 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
-          <div className="text-sm text-slate-600">
+        <div className="p-4 border-t border-theme bg-theme-base flex justify-between items-center">
+          <div className="text-sm text-theme-muted">
             <span className="font-medium">{selectedMembers.size}</span> contacto(s) seleccionado(s)
           </div>
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm font-medium text-theme-muted hover:bg-slate-100 rounded-lg transition-colors"
             >
               Cancelar
             </button>
@@ -281,7 +281,7 @@ export const GroupMembersViewer: React.FC<GroupMembersViewerProps> = ({
               className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
                 selectedMembers.size === 0
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-primary-600 hover:bg-primary-700 text-white'
               }`}
             >
               <Send size={16} />

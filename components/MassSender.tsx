@@ -872,8 +872,8 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-4rem)]">
       {/* Left Column: Data Input */}
       <div className="lg:col-span-1 space-y-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+        <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
+          <h3 className="font-semibold text-theme-main mb-4 flex items-center gap-2">
             <Upload size={18} /> Cargar Contactos (CSV)
           </h3>
           
@@ -896,7 +896,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                 </button>
                 <button
                   onClick={openInstructions}
-                  className="flex items-center gap-1 text-xs bg-white text-blue-600 border border-blue-300 px-3 py-1.5 rounded hover:bg-blue-50"
+                  className="flex items-center gap-1 text-xs bg-theme-card text-blue-600 border border-blue-300 px-3 py-1.5 rounded hover:bg-blue-50"
                 >
                   <HelpCircle size={12} />
                   Ver Instructivo
@@ -905,14 +905,14 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
             </div>
 
             <div>
-              <p className="text-xs text-slate-500 mb-2">
+              <p className="text-xs text-theme-muted mb-2">
                 Sube un archivo CSV, TXT, JSON o Excel (XLSX/XLS). La primera fila debe contener los encabezados. Para Excel, se detectará automáticamente la columna de teléfono.
                 Requerido: 'phone'. Opcional: 'name' + otras variables.
               </p>
               
               {/* Country Code Input */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-theme-main mb-2">
                   Código de País (opcional)
                 </label>
                 <input
@@ -920,7 +920,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                   placeholder="Ej: +51, +54, +1"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value.trim())}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                  className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 />
                 <p className="text-xs text-slate-400 mt-1">
                   Se aplicará automáticamente a todos los números que no tengan código de país (+)
@@ -935,18 +935,18 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                 onDrop={handleCSVDrop}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
                   isDraggingCSV
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-slate-200 hover:border-green-300 bg-slate-50'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-theme hover:border-primary-300 bg-theme-base'
                 }`}
                 onClick={() => csvInputRef.current?.click()}
               >
                 <Upload size={32} className="mx-auto mb-2 text-slate-400" />
-                <p className="text-sm text-slate-600 font-medium mb-1">
+                <p className="text-sm text-theme-muted font-medium mb-1">
                   Arrastra y suelta tu archivo XLSX, CSV, TXT o JSON aquí
                   <br />
                   <span className="text-xs text-slate-400 mt-1">O pega números directamente en el área de texto</span>
                 </p>
-                <p className="text-xs text-slate-500 mb-3">
+                <p className="text-xs text-theme-muted mb-3">
                   o haz clic para seleccionar un archivo
                 </p>
                 <input
@@ -958,7 +958,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                 />
                 {contacts.length > 0 && (
                   <div className="mt-3 flex items-center justify-between">
-                    <div className="text-xs text-green-600 font-medium">
+                    <div className="text-xs text-primary-600 font-medium">
                     ✓ {contacts.length} contactos cargados
                     </div>
                     <button
@@ -984,12 +984,12 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
               
               {/* Paste numbers textarea */}
               <div className="mt-4">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-theme-main mb-2">
                   O pega números directamente (uno por línea o separados por coma/tab)
                 </label>
                 <textarea
                   placeholder="51977638887&#10;51977638888, Juan Pérez&#10;51977638889	María García"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 min-h-[100px] font-mono text-sm"
+                  className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-h-[100px] font-mono text-sm"
                   onPaste={(e) => {
                     const pastedText = e.clipboardData.getData('text');
                     if (pastedText.trim()) {
@@ -1013,10 +1013,10 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
         </div>
 
         {contacts.length > 0 && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-slate-800">Vista Previa</h3>
-              <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">
+              <h3 className="font-semibold text-theme-main">Vista Previa</h3>
+              <span className="bg-slate-100 text-theme-muted px-2 py-1 rounded text-xs font-bold">
                 {contacts.length} Contactos
               </span>
             </div>
@@ -1024,17 +1024,17 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
               {contacts.slice(0, 10).map((c, idx) => (
                 <div key={idx} className={`text-sm p-3 rounded border ${
                   c.phone && c.phone.length >= 8 
-                    ? 'bg-slate-50 border-slate-100' 
+                    ? 'bg-theme-base border-theme' 
                     : 'bg-yellow-50 border-yellow-200'
                 }`}>
                   <div className="flex items-start gap-2">
                     <div className="flex-1">
-                      <div className="font-semibold text-slate-800 mb-1">
+                      <div className="font-semibold text-theme-main mb-1">
                         {c.name || 'Sin nombre'}
                       </div>
                       {c.phone && c.phone.length >= 8 ? (
                         <div className="space-y-1">
-                          <div className="font-mono text-slate-600 text-xs">
+                          <div className="font-mono text-theme-muted text-xs">
                             {c.phone}
                           </div>
                           {countryCode && (
@@ -1081,8 +1081,8 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
           }}
           disabled={isSending}
         />
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-          <h3 className="font-semibold text-slate-800 mb-4">Redactor de Mensajes</h3>
+        <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme flex flex-col">
+          <h3 className="font-semibold text-theme-main mb-4">Redactor de Mensajes</h3>
 
           <div className="flex-1 flex flex-col gap-4">
             {/* Message Editor Toolbar */}
@@ -1096,7 +1096,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
 
             <textarea
               ref={messageTextareaRef}
-              className="w-full h-48 p-4 border border-slate-200 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="w-full h-48 p-4 border border-theme rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Escribe tu mensaje aquí... Usa variables como {{name}}"
               value={messageTemplate}
               onChange={(e) => setMessageTemplate(e.target.value)}
@@ -1114,8 +1114,8 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
             )}
 
             {/* Attachments */}
-            <div className="py-4 border-t border-slate-100">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+            <div className="py-4 border-t border-theme">
+              <label className="block text-sm font-medium text-theme-main mb-2">
                 Archivos Adjuntos (opcional)
               </label>
               <MediaUpload 
@@ -1136,7 +1136,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
               </p>
             </div>
 
-            <div className="pt-3 flex items-center justify-between border-t border-slate-100">
+            <div className="pt-3 flex items-center justify-between border-t border-theme">
               <div className="flex items-center gap-2 text-yellow-600 text-xs">
                 {!isConnected && (
                   <>
@@ -1163,7 +1163,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                   disabled={!isConnected || isSending || (contacts.length === 0)}
                   className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all ${!isConnected || isSending || contacts.length === 0
                       ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 shadow-lg shadow-green-900/20'
+                      : 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-900/20'
                     }`}
                 >
                   <Send size={18} />
@@ -1267,14 +1267,14 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
       {/* Message Preview Modal */}
       {showPreview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-800">Vista Previa del Mensaje</h3>
+          <div className="bg-theme-card rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-theme">
+              <h3 className="text-lg font-semibold text-theme-main">Vista Previa del Mensaje</h3>
               <button
                 onClick={() => setShowPreview(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X size={20} className="text-slate-600" />
+                <X size={20} className="text-theme-muted" />
               </button>
             </div>
             <div className="p-4 overflow-y-auto">
@@ -1290,9 +1290,9 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
       {/* Column Selector Modal */}
       {showColumnSelector && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-slate-200 flex-shrink-0">
-              <h3 className="text-lg font-semibold text-slate-800">Seleccionar Columna de Teléfono</h3>
+          <div className="bg-theme-card rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-theme flex-shrink-0">
+              <h3 className="text-lg font-semibold text-theme-main">Seleccionar Columna de Teléfono</h3>
               <button
                 onClick={() => {
                   setShowColumnSelector(false);
@@ -1300,7 +1300,7 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
                 }}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X size={20} className="text-slate-600" />
+                <X size={20} className="text-theme-muted" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
@@ -1315,7 +1315,7 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-600 mb-4">
+                <p className="text-sm text-theme-muted mb-4">
                   No se pudo detectar automáticamente la columna de teléfono. Por favor, selecciona manualmente la columna que contiene los números de WhatsApp.
                 </p>
               )}
@@ -1329,19 +1329,19 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
                       onClick={() => setSelectedPhoneColumn(index)}
                       className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
                         selectedPhoneColumn === index
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-slate-200 hover:border-green-300 hover:bg-slate-50'
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-theme hover:border-primary-300 hover:bg-theme-base'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-slate-800">{header}</p>
+                          <p className="font-medium text-theme-main">{header}</p>
                           {sampleValue && (
-                            <p className="text-xs text-slate-500 mt-1">Ejemplo: {sampleValue}</p>
+                            <p className="text-xs text-theme-muted mt-1">Ejemplo: {sampleValue}</p>
                           )}
                         </div>
                         {selectedPhoneColumn === index && (
-                          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                          <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
                             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
@@ -1353,13 +1353,13 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
                 })}
               </div>
             </div>
-            <div className="flex gap-3 justify-end p-4 border-t border-slate-200 flex-shrink-0">
+            <div className="flex gap-3 justify-end p-4 border-t border-theme flex-shrink-0">
               <button
                 onClick={() => {
                   setShowColumnSelector(false);
                   setSelectedPhoneColumn(-1);
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-theme-main bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -1369,7 +1369,7 @@ Puedes descargar el archivo ejemplo desde el botón "Descargar Ejemplo" en la in
                 className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
                   selectedPhoneColumn === -1
                     ? 'bg-slate-300 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700'
+                    : 'bg-primary-600 hover:bg-primary-700'
                 }`}
               >
                 Confirmar

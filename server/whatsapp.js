@@ -48,6 +48,7 @@ class WhatsAppClient extends EventEmitter {
     };
     this.bulkControllers = new Map();
     this.globalSessionsEnabled = true; // Default to true
+    this._isDestroying = false;
 
     this._initializePromise = null;
     this._reconnectTimer = null;
@@ -215,6 +216,21 @@ class WhatsAppClient extends EventEmitter {
           if (!Array.isArray(rule.keywords)) {
             rule.keywords = [];
           }
+          // Ensure ID is always a string
+          if (rule.id) {
+            rule.id = String(rule.id);
+          }
+          // Ensure countries is always an array
+          if (rule.countries && typeof rule.countries === 'string') {
+            try {
+              rule.countries = JSON.parse(rule.countries);
+            } catch {
+              rule.countries = [];
+            }
+          }
+          if (!Array.isArray(rule.countries)) {
+            rule.countries = [];
+          }
           return rule;
         });
       } else {
@@ -276,7 +292,11 @@ class WhatsAppClient extends EventEmitter {
       }
 
       if (fs.existsSync(menusPath)) {
-        this.interactiveMenus = JSON.parse(fs.readFileSync(menusPath, 'utf8'));
+        const rawMenus = JSON.parse(fs.readFileSync(menusPath, 'utf8'));
+        this.interactiveMenus = Array.isArray(rawMenus) ? rawMenus.map(menu => ({
+          ...menu,
+          id: menu.id ? String(menu.id) : menu.id
+        })) : [];
         console.log(`[WhatsApp] Loaded ${this.interactiveMenus.length} interactive menus`);
       } else {
         // Create example menu
@@ -703,6 +723,8 @@ class WhatsAppClient extends EventEmitter {
         printQRInTerminal: false,
         browser: ['WhatyBot', 'Chrome', '1.0.0'],
         markOnlineOnConnect: false,
+        syncFullHistory: false, // Save RAM by not syncing full history
+        generateHighQualityLinkPreview: false, // Save bandwidth/RAM
         shouldIgnoreJid: (jid) => {
           if (!jid) return false;
           if (jid === 'status@broadcast') return true;
@@ -781,6 +803,10 @@ class WhatsAppClient extends EventEmitter {
           this.io?.emit('authenticated', { sessionId: this.sessionId, phone: phoneNumber });
           this.io?.emit('ready', { sessionId: this.sessionId, status: 'connected', phone: phoneNumber });
         } else if (connection === 'close') {
+          if (this._isDestroying) {
+            console.log(`[WhatsApp] Connection closed for session ${this.sessionId} (planned shutdown)`);
+            return;
+          }
           this.isReady = false;
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const loggedOut = statusCode === DisconnectReason.loggedOut;
@@ -937,6 +963,17 @@ class WhatsAppClient extends EventEmitter {
           for (const rule of this.autoReplyRules) {
             if (!rule.isActive || rule.type !== 'menu') continue;
 
+            const phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+            // Country filter check
+            if (rule.countries && rule.countries.length > 0) {
+              const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
+              if (!matchedCountry) {
+                console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
+                continue;
+              }
+            }
+
             const messageText = body.trim();
             let shouldReply = false;
 
@@ -997,6 +1034,17 @@ class WhatsAppClient extends EventEmitter {
           // Then, check for simple auto-reply rules
           for (const rule of this.autoReplyRules) {
             if (!rule.isActive || rule.type === 'menu') continue;
+
+            const phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+            // Country filter check
+            if (rule.countries && rule.countries.length > 0) {
+              const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
+              if (!matchedCountry) {
+                console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
+                continue;
+              }
+            }
             const messageText = body;
             let shouldReply = false;
             if (rule.matchType === 'exact') {
@@ -1013,9 +1061,24 @@ class WhatsAppClient extends EventEmitter {
                 ? rule.mediaPaths.filter(Boolean)
                 : (rule.mediaPath ? [rule.mediaPath] : []);
 
-              let captions = Array.isArray(rule.captions)
-                ? rule.captions
-                : mediaPaths.map(() => (rule.caption || ''));
+              // Fix: Parse captions if it comes as a stringified JSON (common in imports)
+              let parsedCaptions = rule.captions;
+              if (typeof rule.captions === 'string' && rule.captions.trim().startsWith('[')) {
+                try {
+                  parsedCaptions = JSON.parse(rule.captions);
+                } catch (e) {
+                  console.warn('[WhatsAppClient] Auto-reply caption parse failed, using as string:', e);
+                }
+              } else if (typeof rule.caption === 'string' && rule.caption.trim().startsWith('[')) {
+                // Fallback to checking singular caption if it holds the array
+                try {
+                  parsedCaptions = JSON.parse(rule.caption);
+                } catch (e) { }
+              }
+
+              let captions = Array.isArray(parsedCaptions)
+                ? parsedCaptions
+                : (parsedCaptions ? [parsedCaptions] : mediaPaths.map(() => (rule.caption || '')));
 
               console.log('[WhatsAppClient] Auto-reply matched rule:', {
                 id: rule.id,
@@ -1203,12 +1266,37 @@ class WhatsAppClient extends EventEmitter {
         const currentCaption = captions[i] || '';
 
         // Normalize path separators (handle both / and \)
-        const normalizedPath = currentPath.replace(/\\/g, '/');
+        let normalizedPath = currentPath.replace(/\\/g, '/');
+
+        // Fix duplicate uploads prefix if present (e.g. uploads/uploads/file.png -> uploads/file.png)
+        if (normalizedPath.includes('uploads/uploads/')) {
+          normalizedPath = normalizedPath.replace('uploads/uploads/', 'uploads/');
+        }
 
         // Convert relative paths to absolute paths
-        const absolutePath = path.isAbsolute(normalizedPath)
-          ? normalizedPath
-          : path.join(__dirname, normalizedPath);
+        // Assuming structure: /app/server (CWD) -> /app/uploads or /app/server/uploads
+        // Railway structure typically sets CWD to /app/server due to "cd server && npm install"
+        let absolutePath;
+        if (path.isAbsolute(normalizedPath)) {
+          absolutePath = normalizedPath;
+        } else {
+          // If path starts with uploads/, try to find it in project root
+          if (normalizedPath.startsWith('uploads/')) {
+            // Try relative to current dir first
+            absolutePath = path.join(__dirname, normalizedPath);
+            if (!fs.existsSync(absolutePath)) {
+              // Try one level up (project root)
+              absolutePath = path.join(__dirname, '..', normalizedPath);
+            }
+            if (!fs.existsSync(absolutePath)) {
+              // Try two levels up (in case structure is deeper)
+              absolutePath = path.join(__dirname, '../..', normalizedPath);
+            }
+          } else {
+            // No prefix, assume it is in default uploads folder relative to __dirname
+            absolutePath = path.join(__dirname, 'uploads', normalizedPath);
+          }
+        }
 
         console.log('[sendMessage] Media file debug:', {
           currentPath,
@@ -1285,6 +1373,21 @@ class WhatsAppClient extends EventEmitter {
     const waitMinutes = waitTimeBetweenBatches || this.config.waitTimeBetweenBatches || 15;
     const maxDelaySeconds = delay || this.config.messageDelay || 2;
 
+    // Ensure captions are parsed if passed as JSON string
+    let parsedCaptions = caption;
+    if (typeof caption === 'string' && caption.trim().startsWith('[')) {
+      try {
+        parsedCaptions = JSON.parse(caption);
+      } catch (e) {
+        console.warn('[WhatsApp] Failed to parse captions JSON, using as string:', e);
+        // If failed to parse but looks like JSON, it might just be a string that starts with [
+        // parsedCaptions remains as string
+      }
+    }
+    // Normalization: Ensure parsedCaptions is consistent throughout
+    // If it's a single string (not JSON), treat it as the caption for ALL media files or the first one
+    // sendMessage handles `captions` array.
+
     const results = [];
     const totalContacts = contacts.length;
     let processedCount = 0;
@@ -1339,32 +1442,36 @@ class WhatsAppClient extends EventEmitter {
           // Replace variables in message y captions
           let personalizedMessage = message || '';
 
-          // caption puede ser string o array de strings
-          let personalizedCaption = caption;
-          let personalizedCaptionsArray = null;
+          // Prepare caption for this contact
+          let effectiveCaption = '';
 
           Object.keys(contact).forEach(key => {
             const regex = new RegExp(`{{${key}}}`, 'g');
             personalizedMessage = personalizedMessage.replace(regex, contact[key]);
-
-            if (typeof personalizedCaption === 'string') {
-              personalizedCaption = personalizedCaption.replace(regex, contact[key]);
-            }
           });
 
-          // Si caption es array, personalizar cada elemento
-          if (Array.isArray(caption)) {
-            personalizedCaptionsArray = caption.map(c => {
-              let result = c || '';
+          // Handle captions (single string or array)
+          if (Array.isArray(parsedCaptions)) {
+            // It's an array of captions (one per media file)
+            effectiveCaption = parsedCaptions.map(c => {
+              let captionStr = c || '';
+              // Personalize each caption string in the array
               Object.keys(contact).forEach(key => {
                 const regex = new RegExp(`{{${key}}}`, 'g');
-                result = result.replace(regex, contact[key]);
+                captionStr = captionStr.replace(regex, contact[key]);
               });
-              return result;
+              return captionStr;
             });
+          } else {
+            // It's a single string caption
+            effectiveCaption = parsedCaptions || '';
+            if (typeof effectiveCaption === 'string') {
+              Object.keys(contact).forEach(key => {
+                const regex = new RegExp(`{{${key}}}`, 'g');
+                effectiveCaption = effectiveCaption.replace(regex, contact[key]);
+              });
+            }
           }
-
-          const effectiveCaption = Array.isArray(caption) ? personalizedCaptionsArray : personalizedCaption;
 
           await this.sendMessage(contact.phone, personalizedMessage, mediaPath, effectiveCaption);
 
@@ -1774,6 +1881,7 @@ class WhatsAppClient extends EventEmitter {
   }
 
   async destroy() {
+    this._isDestroying = true;
     try {
       if (this.sock) {
         try { this.sock.ws?.close?.(); } catch { }

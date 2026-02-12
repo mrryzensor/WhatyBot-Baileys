@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { UserCircle, Download, Upload, Send, CheckSquare, Square, Search, RefreshCw, AlertCircle, Users, Trash2 } from 'lucide-react';
+import { UserCircle, Download, Upload, Send, CheckSquare, Square, Search, RefreshCw, AlertCircle, Users, Trash2, FileImage } from 'lucide-react';
 import { Contact, Group, Tab } from '../types';
-import { getContacts, getGroups, getSocket } from '../services/api';
+import { getContacts, getGroups, getSocket, getApiUrl } from '../services/api';
+import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
@@ -406,6 +407,61 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
         toast.success(`${contactsToExport.length} contactos exportados a JSON`);
     };
 
+    // Export profile pictures to ZIP
+    const exportProfilePhotos = async () => {
+        const contactsToExport = contacts.filter(c => selectedContacts.has(c.id));
+        const contactsWithImages = contactsToExport.filter(c => c.profilePicUrl);
+
+        if (contactsWithImages.length === 0) {
+            toast.warning('No hay contactos seleccionados con imagen de perfil');
+            return;
+        }
+
+        try {
+            toast.info(`Preparando descarga de ${contactsWithImages.length} fotos de perfil...`);
+
+            const apiUrl = getApiUrl();
+            // Fallback base URL for the API
+            const baseUrl = (apiUrl && !apiUrl.includes('5173') && !apiUrl.includes('12345')) ? apiUrl : window.location.origin;
+
+            console.log('[ExportPhotos] Using Base URL:', baseUrl);
+
+            const response = await axios({
+                url: `${baseUrl}/api/contacts/export-photos`,
+                method: 'POST',
+                data: { contacts: contactsWithImages },
+                responseType: 'blob',
+                headers: {
+                    'x-user-id': localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).id : '',
+                    'x-session-id': localStorage.getItem('selectedSessionId') || ''
+                }
+            });
+
+            // Create download link for the blob
+            const downloadUrl = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.setAttribute('download', `fotos_perfil_${new Date().getTime()}.zip`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+
+            toast.success('Descarga iniciada con éxito');
+        } catch (error: any) {
+            console.error('Error al exportar fotos:', error);
+            let errorMessage = error.message;
+            if (error.response?.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text();
+                    const json = JSON.parse(text);
+                    errorMessage = json.error || errorMessage;
+                } catch (e) { /* ignore */ }
+            }
+            toast.error('Error al exportar fotos: ' + errorMessage);
+        }
+    };
+
     // Send selected contacts to Mass Sender
     const sendToMassSender = () => {
         const contactsToSend = contacts.filter(c => selectedContacts.has(c.id));
@@ -454,13 +510,13 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
 
             {/* Saved Contacts Selector */}
             {savedContactSets.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-                    <div className="border-b border-slate-200 p-4 bg-gradient-to-r from-green-50 to-emerald-50">
+                <div className="bg-theme-card rounded-lg shadow-sm border border-theme">
+                    <div className="border-b border-theme p-4 bg-gradient-to-r from-primary-50 to-emerald-50">
                         <div className="flex items-center gap-3">
-                            <Download size={24} className="text-green-600" />
+                            <Download size={24} className="text-primary-600" />
                             <div>
-                                <h3 className="font-bold text-slate-900">Contactos Guardados</h3>
-                                <p className="text-sm text-slate-600">
+                                <h3 className="font-bold text-theme-main">Contactos Guardados</h3>
+                                <p className="text-sm text-theme-muted">
                                     {savedContactSets.length} conjunto(s) de contactos guardados
                                 </p>
                             </div>
@@ -471,14 +527,14 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                             {savedContactSets.map(set => (
                                 <div
                                     key={set.id}
-                                    className="flex items-center justify-between p-3 border-2 border-slate-200 rounded-lg hover:border-green-300 hover:bg-green-50 cursor-pointer transition-all"
+                                    className="flex items-center justify-between p-3 border-2 border-theme rounded-lg hover:border-primary-300 hover:bg-primary-50 cursor-pointer transition-all"
                                     onClick={() => loadSavedContactSet(set.id)}
                                 >
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-slate-900">
+                                        <p className="font-medium text-theme-main">
                                             {set.count} contactos
                                         </p>
-                                        <p className="text-xs text-slate-500">
+                                        <p className="text-xs text-theme-muted">
                                             {formatDate(set.timestamp)} · {set.groupIds.length} grupo(s)
                                         </p>
                                     </div>
@@ -500,14 +556,14 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
             )}
 
             {/* Group Selector */}
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-                <div className="border-b border-slate-200 p-4 bg-gradient-to-r from-purple-50 to-blue-50">
+            <div className="bg-theme-card rounded-lg shadow-sm border border-theme">
+                <div className="border-b border-theme p-4 bg-gradient-to-r from-purple-50 to-blue-50">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <Users size={24} className="text-purple-600" />
                             <div>
-                                <h3 className="font-bold text-slate-900">Paso 1: Selecciona Grupos</h3>
-                                <p className="text-sm text-slate-600">
+                                <h3 className="font-bold text-theme-main">Paso 1: Selecciona Grupos</h3>
+                                <p className="text-sm text-theme-muted">
                                     Elige los grupos desde donde extraer contactos ({selectedGroups.size} seleccionados)
                                 </p>
                             </div>
@@ -527,7 +583,7 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                     {groups.length === 0 ? (
                         <div className="text-center py-8">
                             <Users size={48} className="mx-auto text-slate-300 mb-3" />
-                            <p className="text-slate-500 font-medium">No hay grupos cargados</p>
+                            <p className="text-theme-muted font-medium">No hay grupos cargados</p>
                             {isConnected && (
                                 <button
                                     onClick={loadGroups}
@@ -548,7 +604,7 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                                         placeholder="Buscar grupos..."
                                         value={groupSearchTerm}
                                         onChange={(e) => setGroupSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                                        className="w-full pl-10 pr-4 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
                                     />
                                 </div>
                             </div>
@@ -561,7 +617,7 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                                     {filteredGroups.every(g => selectedGroups.has(g.id)) ? <CheckSquare size={20} /> : <Square size={20} />}
                                     {filteredGroups.every(g => selectedGroups.has(g.id)) ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
                                 </button>
-                                <span className="text-sm text-slate-600">
+                                <span className="text-sm text-theme-muted">
                                     {filteredGroups.length} de {groups.length} grupos
                                 </span>
                             </div>
@@ -572,7 +628,7 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                                         onClick={() => toggleGroup(group.id)}
                                         className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedGroups.has(group.id)
                                             ? 'border-purple-500 bg-purple-50'
-                                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                            : 'border-theme hover:border-theme hover:bg-theme-base'
                                             }`}
                                     >
                                         <div className="flex-shrink-0">
@@ -600,8 +656,8 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-slate-900 truncate">{group.name}</p>
-                                            <p className="text-sm text-slate-500">{group.participants} miembros</p>
+                                            <p className="font-medium text-theme-main truncate">{group.name}</p>
+                                            <p className="text-sm text-theme-muted">{group.participants} miembros</p>
                                         </div>
                                     </div>
                                 ))}
@@ -611,23 +667,198 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                 </div>
             </div>
 
-            {/* Extract Contacts Button */}
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+            {/* Extract Contacts Button & Search Filter */}
+            <div className="bg-theme-card rounded-lg shadow-sm border border-theme p-4">
                 <button
                     onClick={loadContacts}
                     disabled={!isConnected || isLoading || selectedGroups.size === 0}
-                    className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-lg"
+                    className={`w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-lg ${contacts.length > 0 ? 'mb-4' : ''}`}
                 >
                     <UserCircle size={24} className={isLoading ? 'animate-pulse' : ''} />
                     {isLoading ? 'Extrayendo Contactos...' : `Paso 2: Extraer Contactos de ${selectedGroups.size} Grupo(s)`}
                 </button>
+
+                {/* Integrated Search and Selection Controls */}
+                {contacts.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-theme">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+                            <input
+                                type="text"
+                                placeholder="Buscar por teléfono, nombre o grupo..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between bg-theme-base p-3 rounded-lg border border-theme">
+                            <button
+                                onClick={toggleSelectAll}
+                                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm"
+                            >
+                                {selectAll ? <CheckSquare size={20} /> : <Square size={20} />}
+                                {selectAll ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
+                            </button>
+                            <span className="text-xs font-semibold text-theme-muted">
+                                ({selectedContacts.size} de {filteredContacts.length} seleccionados)
+                            </span>
+                        </div>
+                    </div>
+                )}
+                {/* Contacts Section - Only show if contacts are loaded */}
+                {contacts.length > 0 && (
+                    <div className="space-y-6">
+                        {/* Contacts List Grid */}
+                        <div ref={contactsListRef} className="bg-theme-card rounded-lg shadow-sm border border-theme overflow-hidden">
+                            <div className="p-4">
+                                {filteredContacts.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <UserCircle size={48} className="mx-auto text-slate-300 mb-3" />
+                                        <p className="text-theme-muted font-medium">
+                                            No se encontraron contactos con ese criterio de búsqueda
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2">
+                                        {filteredContacts.map((contact) => (
+                                            <div
+                                                key={contact.id}
+                                                onClick={() => toggleContact(contact.id)}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedContacts.has(contact.id)
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-theme hover:border-theme hover:bg-theme-base'
+                                                    }`}
+                                            >
+                                                <div className="flex-shrink-0">
+                                                    {selectedContacts.has(contact.id) ? (
+                                                        <CheckSquare size={20} className="text-blue-600" />
+                                                    ) : (
+                                                        <Square size={20} className="text-slate-400" />
+                                                    )}
+                                                </div>
+                                                {/* Contact Image */}
+                                                <div className="flex-shrink-0">
+                                                    {contact.profilePicUrl ? (
+                                                        <img
+                                                            src={contact.profilePicUrl}
+                                                            alt={contact.name}
+                                                            className="w-12 h-12 rounded-full object-cover"
+                                                            onError={(e) => {
+                                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                                                            {contact.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-theme-main truncate">{contact.phone}</p>
+                                                    <p className="text-sm text-theme-muted truncate mb-2">{contact.name}</p>
+                                                    {/* Group Badges */}
+                                                    {contact.groups && contact.groups.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {contact.groups.map((group, idx) => (
+                                                                <span
+                                                                    key={`${group.id}-${idx}`}
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium"
+                                                                    title={group.name}
+                                                                >
+                                                                    {group.image && (
+                                                                        <img
+                                                                            src={group.image}
+                                                                            alt=""
+                                                                            className="w-3 h-3 rounded-full object-cover"
+                                                                            onError={(e) => {
+                                                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                                            }}
+                                                                        />
+                                                                    )}
+                                                                    <span className="truncate max-w-[120px]">{group.name}</span>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Stats Footer */}
+                        <div className="bg-theme-base rounded-lg p-4 border border-theme">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <p className="text-2xl font-bold text-theme-main">{contacts.length}</p>
+                                    <p className="text-sm text-theme-muted">Total Contactos</p>
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-blue-600">{selectedContacts.size}</p>
+                                    <p className="text-sm text-theme-muted">Seleccionados</p>
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-purple-600">{selectedGroups.size}</p>
+                                    <p className="text-sm text-theme-muted">Grupos Activos</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions Bar */}
+                        <div className="bg-theme-card rounded-lg shadow-sm border border-theme p-4">
+                            <div className="flex flex-wrap gap-3 items-center justify-center sm:justify-between">
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                    <button
+                                        onClick={exportContacts}
+                                        disabled={selectedContacts.size === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                    >
+                                        <Download size={18} />
+                                        Exportar Excel ({selectedContacts.size})
+                                    </button>
+
+                                    <button
+                                        onClick={exportToJSON}
+                                        disabled={selectedContacts.size === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                    >
+                                        <Download size={18} />
+                                        Exportar JSON ({selectedContacts.size})
+                                    </button>
+
+                                    <button
+                                        onClick={exportProfilePhotos}
+                                        disabled={selectedContacts.size === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                        title="Descargar fotos de perfil en un archivo ZIP"
+                                    >
+                                        <FileImage size={18} />
+                                        Exportar Fotos ({contacts.filter(c => selectedContacts.has(c.id) && c.profilePicUrl).length})
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={sendToMassSender}
+                                    disabled={selectedContacts.size === 0}
+                                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                >
+                                    <Send size={18} />
+                                    Enviar a Masivos ({selectedContacts.size})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Progress Bar */}
             {extractionProgress && (
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+                <div className="bg-theme-card rounded-lg shadow-sm border border-theme p-4">
                     <div className="mb-2 flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-700">
+                        <span className="text-sm font-medium text-theme-main">
                             Extrayendo contactos...
                         </span>
                         <span className="text-sm font-semibold text-blue-600">
@@ -642,181 +873,14 @@ export const ContactsManager: React.FC<ContactsManagerProps> = ({ isConnected, o
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                        <p className="text-xs text-slate-600 truncate">
+                        <p className="text-xs text-theme-muted truncate">
                             Procesando: <span className="font-medium">{extractionProgress.groupName}</span>
                         </p>
                     </div>
                 </div>
             )}
 
-            {/* Contacts Section - Only show if contacts are loaded */}
-            {contacts.length > 0 && (
-                <>
-                    {/* Actions Bar */}
-                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                        <div className="flex flex-wrap gap-3 items-center justify-between">
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    onClick={exportContacts}
-                                    disabled={selectedContacts.size === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Download size={18} />
-                                    Exportar Excel ({selectedContacts.size})
-                                </button>
 
-                                <button
-                                    onClick={exportToJSON}
-                                    disabled={selectedContacts.size === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Download size={18} />
-                                    Exportar JSON ({selectedContacts.size})
-                                </button>
-                            </div>
-
-                            <button
-                                onClick={sendToMassSender}
-                                disabled={selectedContacts.size === 0}
-                                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <Send size={18} />
-                                Enviar a Masivos ({selectedContacts.size})
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Search Bar */}
-                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-                            <input
-                                type="text"
-                                placeholder="Buscar por teléfono, nombre o grupo..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Contacts List */}
-                    <div ref={contactsListRef} className="bg-white rounded-lg shadow-sm border border-slate-200">
-                        {/* Header with Select All */}
-                        <div className="border-b border-slate-200 p-4 bg-slate-50">
-                            <div className="flex items-center gap-3">
-                                <button
-                                    onClick={toggleSelectAll}
-                                    className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-                                >
-                                    {selectAll ? <CheckSquare size={20} /> : <Square size={20} />}
-                                    {selectAll ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
-                                </button>
-                                <span className="text-slate-600">
-                                    ({selectedContacts.size} de {filteredContacts.length} seleccionados)
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Contacts Grid */}
-                        <div className="p-4">
-                            {filteredContacts.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <UserCircle size={48} className="mx-auto text-slate-300 mb-3" />
-                                    <p className="text-slate-500 font-medium">
-                                        No se encontraron contactos con ese criterio de búsqueda
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
-                                    {filteredContacts.map((contact) => (
-                                        <div
-                                            key={contact.id}
-                                            onClick={() => toggleContact(contact.id)}
-                                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedContacts.has(contact.id)
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                                }`}
-                                        >
-                                            <div className="flex-shrink-0">
-                                                {selectedContacts.has(contact.id) ? (
-                                                    <CheckSquare size={20} className="text-blue-600" />
-                                                ) : (
-                                                    <Square size={20} className="text-slate-400" />
-                                                )}
-                                            </div>
-                                            {/* Contact Image */}
-                                            <div className="flex-shrink-0">
-                                                {contact.profilePicUrl ? (
-                                                    <img
-                                                        src={contact.profilePicUrl}
-                                                        alt={contact.name}
-                                                        className="w-12 h-12 rounded-full object-cover"
-                                                        onError={(e) => {
-                                                            (e.target as HTMLImageElement).style.display = 'none';
-                                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                                                        {contact.name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-slate-900 truncate">{contact.phone}</p>
-                                                <p className="text-sm text-slate-600 truncate mb-2">{contact.name}</p>
-                                                {/* Group Badges */}
-                                                {contact.groups && contact.groups.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {contact.groups.map((group, idx) => (
-                                                            <span
-                                                                key={`${group.id}-${idx}`}
-                                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium"
-                                                                title={group.name}
-                                                            >
-                                                                {group.image && (
-                                                                    <img
-                                                                        src={group.image}
-                                                                        alt=""
-                                                                        className="w-3 h-3 rounded-full object-cover"
-                                                                        onError={(e) => {
-                                                                            (e.target as HTMLImageElement).style.display = 'none';
-                                                                        }}
-                                                                    />
-                                                                )}
-                                                                <span className="truncate max-w-[120px]">{group.name}</span>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Stats Footer */}
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                            <div>
-                                <p className="text-2xl font-bold text-slate-900">{contacts.length}</p>
-                                <p className="text-sm text-slate-600">Total Contactos</p>
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-blue-600">{selectedContacts.size}</p>
-                                <p className="text-sm text-slate-600">Seleccionados</p>
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-purple-600">{selectedGroups.size}</p>
-                                <p className="text-sm text-slate-600">Grupos Activos</p>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
         </div>
     );
 };

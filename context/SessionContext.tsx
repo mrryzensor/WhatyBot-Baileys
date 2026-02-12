@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { getSessions, initializeSession as apiInitializeSession, getSessionQR, destroySession as apiDestroySession } from '../services/sessionsApi';
-import { getSocket } from '../services/api';
+import { getSocket, getApiUrl } from '../services/api';
 import { toast } from 'sonner';
 
 interface Session {
@@ -48,14 +48,16 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             // Sync with backend as active session
             const syncActiveSession = async () => {
                 try {
-                    const apiUrl = localStorage.getItem('apiUrl') || 'http://localhost:23456';
+                    // Use centralized API URL getter
+                    const apiUrl = getApiUrl();
                     await fetch(`${apiUrl}/api/config/global-sessions`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ activeSessionId: selectedSessionId })
+                        body: JSON.stringify({ activeSessionId: selectedSessionId }) // Only send activeSessionId to update it without toggling enabled
                     });
                 } catch (error) {
-                    console.error('Error syncing active session:', error);
+                    // Silent fail is better here as it's just a sync preference
+                    console.warn('Sync active session warning:', error);
                 }
             };
             syncActiveSession();

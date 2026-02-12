@@ -1,13 +1,15 @@
 {
   "name": "whatybot-dxs",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "main": "public/electron.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "node server/server.js",
+    "postinstall": "cd server && npm install",
     "server": "cd server && node server.js",
     "electron": "npx electron .",
     "electron:dev": "node scripts/electron-dev.js",

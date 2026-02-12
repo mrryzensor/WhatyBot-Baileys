@@ -101,9 +101,9 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
 
   return (
     <div className="fixed top-4 right-4 z-[9999] w-full max-w-sm px-2">
-      <div className="bg-white/95 backdrop-blur rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
-        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-start gap-3">
-          <div className={`p-2 rounded-lg ${isComplete ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+      <div className="bg-theme-card/95 backdrop-blur rounded-xl shadow-lg border border-theme overflow-hidden animate-slide-up">
+        <div className="px-4 py-3 border-b border-theme bg-theme-base flex items-start gap-3">
+          <div className={`p-2 rounded-lg ${isComplete ? 'bg-primary-100 text-primary-600' : 'bg-blue-100 text-blue-600'}`}>
             {isComplete ? (
               <CheckCircle size={18} />
             ) : isWaiting ? (
@@ -114,19 +114,19 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
           </div>
           <div className="flex-1 space-y-0.5">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cola de procesos</p>
-              <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isComplete ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-theme-muted">Cola de procesos</p>
+              <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isComplete ? 'bg-primary-50 text-primary-700' : 'bg-blue-50 text-blue-700'}`}>
                 {queueBadge}
               </div>
             </div>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-slate-800">{displayTitle}</p>
-                <p className="text-xs text-slate-500">{displaySubtitle}</p>
+                <p className="text-sm font-semibold text-theme-main">{displayTitle}</p>
+                <p className="text-xs text-theme-muted">{displaySubtitle}</p>
               </div>
               <div className="text-right">
-                <p className="text-lg font-bold text-slate-900">{percentage}%</p>
-                <p className="text-[11px] text-slate-500">{current}/{total}</p>
+                <p className="text-lg font-bold text-theme-main">{percentage}%</p>
+                <p className="text-[11px] text-theme-muted">{current}/{total}</p>
               </div>
             </div>
           </div>
@@ -134,7 +134,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
             {canPause && (
               <button
                 onClick={onPause}
-                className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className="text-xs px-2 py-1 rounded-full bg-slate-100 text-theme-main hover:bg-slate-200 transition-colors"
               >
                 Pausar
               </button>
@@ -158,7 +158,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
             {onClose && isComplete && (
               <button
                 onClick={onClose}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 hover:text-theme-muted transition-colors"
                 aria-label="Cerrar progreso"
               >
                 <XCircle size={18} />
@@ -168,16 +168,16 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
         </div>
 
         <div className="px-4 py-3">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+          <div className="flex items-center justify-between text-xs text-theme-muted mb-2">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
-                <CheckCircle size={14} className="text-green-500" />
-                <span className="text-slate-700 font-medium">{successCount}</span>
+                <CheckCircle size={14} className="text-primary-500" />
+                <span className="text-theme-main font-medium">{successCount}</span>
                 <span className="text-[10px] text-slate-400">Éxito</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <XCircle size={14} className="text-red-500" />
-                <span className="text-slate-700 font-medium">{failedCount}</span>
+                <span className="text-theme-main font-medium">{failedCount}</span>
                 <span className="text-[10px] text-slate-400">Fallidos</span>
               </div>
             </div>
@@ -188,7 +188,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
             )}
           </div>
           {canCancel && confirmingCancel && (
-            <div className="flex items-center justify-end gap-2 mb-2 text-[11px] text-slate-600">
+            <div className="flex items-center justify-end gap-2 mb-2 text-[11px] text-theme-muted">
               <span>¿Cancelar envío masivo?</span>
               <button
                 onClick={() => {
@@ -203,7 +203,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
               </button>
               <button
                 onClick={() => setConfirmingCancel(false)}
-                className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 text-[11px]"
+                className="px-2 py-1 rounded-full bg-slate-100 text-theme-main hover:bg-slate-200 text-[11px]"
               >
                 No
               </button>
@@ -221,7 +221,7 @@ export const BulkProgressBar: React.FC<BulkProgressBarProps> = ({
           ) : (
             <div className="relative w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 via-green-500 to-green-600 transition-all duration-500 ease-out ${isComplete ? 'animate-pulse' : ''
+                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-primary-400 via-primary-500 to-primary-600 transition-all duration-500 ease-out ${isComplete ? 'animate-pulse' : ''
                   }`}
                 style={{ width: `${percentage}%` }}
               >

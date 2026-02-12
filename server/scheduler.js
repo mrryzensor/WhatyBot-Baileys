@@ -23,7 +23,12 @@ class MessageScheduler {
         const job = schedule.scheduleJob(scheduledDate, async () => {
             try {
                 console.log(`Executing scheduled message to ${to}`);
-                await this.whatsappClient.sendMessage(to, message || '', mediaPath, caption || '');
+                const sessionManager = this.whatsappClient;
+                const sessionId = sessionManager.getFirstActiveSession(userId);
+                if (!sessionId) {
+                    throw new Error('La sesión de WhatsApp no está lista o no existe (No active session found for user)');
+                }
+                await this.whatsappClient.sendMessage(sessionId, to, message || '', mediaPath, caption || '');
                 console.log(`Scheduled message sent to ${to}`);
 
                 const cleanTarget = this.formatTarget(to);
@@ -114,46 +119,67 @@ class MessageScheduler {
         const job = schedule.scheduleJob(scheduledDate, async () => {
             try {
                 console.log(`Executing scheduled bulk messages`);
-                // sendBulkMessages already emits bulk_progress events, which are handled in App.tsx
-                // Those events will automatically add logs to the dashboard
-                const results = await this.whatsappClient.sendBulkMessages(contacts, message || '', mediaPath, caption || '', delay, userId, maxContactsPerBatch, waitTimeBetweenBatches);
+                const sessionManager = this.whatsappClient;
+                const sessionId = sessionManager.getFirstActiveSession(userId);
 
-                // Increment message count for successful sends (only if userId is provided)
-                if (userId) {
-                    const successCount = results.filter(r => r.status === 'sent').length;
-                    if (successCount > 0) {
-                        await messageCountService.incrementCount(userId, successCount);
-                        console.log(`Incremented message count for user ${userId}: +${successCount} messages (scheduled bulk)`);
-                    }
-
-                    // Log individual results to database
-                    for (const result of results) {
-                        const cleanTarget = this.formatTarget(result.contact);
-                        await messageLogService.logMessage(
-                            userId,
-                            'bulk',
-                            cleanTarget,
-                            result.status === 'sent' ? 'sent' : 'failed',
-                            message || '[Archivo multimedia]',
-                            scheduledDate
-                        );
-                    }
-                } else {
-                    console.warn('Cannot increment message count: userId is missing for scheduled bulk messages');
+                if (!sessionId) {
+                    throw new Error('La sesión de WhatsApp no está lista o no existe (No active session found for user)');
                 }
 
-                // Also emit a summary log event for the scheduled bulk send with userId
-                if (this.io) {
-                    const successCount = results.filter(r => r.status === 'sent').length;
-                    this.io.emit('message_log', {
-                        id: `scheduled-bulk-${jobId}`,
-                        userId: userId || null,
-                        target: `${contacts.length} contactos`,
-                        status: successCount === contacts.length ? 'sent' : (successCount > 0 ? 'sent' : 'failed'),
-                        timestamp: new Date(),
-                        content: `Envío masivo programado completado (${successCount}/${contacts.length} mensajes)`,
-                        messageType: 'bulk'
-                    });
+                // sendBulkMessages already emits bulk_progress events, which are handled in App.tsx
+                // Those events will automatically add logs to the dashboard
+                // Assuming SessionManager.sendBulkMessages takes sessionId as first arg, similar to sendMessage
+                // If not, we might need: sessionManager.sessions.get(sessionId).client.sendBulkMessages(...)
+                // But let's try consistent signature first.
+                // Actually, earlier logs showed WhatsAppClient.sendBulkMessages inside whatsapp.js.
+                // If SessionManager wraps it, it likely needs sessionId.
+
+                // If SessionManager has sendBulkMessages:
+                if (typeof this.whatsappClient.sendBulkMessages === 'function') {
+                    const results = await this.whatsappClient.sendBulkMessages(sessionId, contacts, message || '', mediaPath, caption || '', delay, userId, maxContactsPerBatch, waitTimeBetweenBatches);
+
+                    // ... rest of logic
+                    // Since I am replacing the whole block, I need to include the rest of the success/fail logic inside this try block
+
+                    // Increment message count for successful sends (only if userId is provided)
+                    if (userId) {
+                        const successCount = results.filter(r => r.status === 'sent').length;
+                        if (successCount > 0) {
+                            await messageCountService.incrementCount(userId, successCount);
+                            console.log(`Incremented message count for user ${userId}: +${successCount} messages (scheduled bulk)`);
+                        }
+
+                        // Log individual results to database
+                        for (const result of results) {
+                            const cleanTarget = this.formatTarget(result.contact);
+                            await messageLogService.logMessage(
+                                userId,
+                                'bulk',
+                                cleanTarget,
+                                result.status === 'sent' ? 'sent' : 'failed',
+                                message || '[Archivo multimedia]',
+                                scheduledDate
+                            );
+                        }
+                    } else {
+                        console.warn('Cannot increment message count: userId is missing for scheduled bulk messages');
+                    }
+
+                    // Also emit a summary log event for the scheduled bulk send with userId
+                    if (this.io) {
+                        const successCount = results.filter(r => r.status === 'sent').length;
+                        this.io.emit('message_log', {
+                            id: `scheduled-bulk-${jobId}`,
+                            userId: userId || null,
+                            target: `${contacts.length} contactos`,
+                            status: successCount === contacts.length ? 'sent' : (successCount > 0 ? 'sent' : 'failed'),
+                            timestamp: new Date(),
+                            content: `Envío masivo programado completado (${successCount}/${contacts.length} mensajes)`,
+                            messageType: 'bulk'
+                        });
+                    }
+                } else {
+                    throw new Error('sendBulkMessages method not found on SessionManager');
                 }
             } catch (error) {
                 console.error(`Failed to execute scheduled bulk messages:`, error);
@@ -219,7 +245,15 @@ class MessageScheduler {
 
                 for (const groupId of groupIds) {
                     try {
-                        await this.whatsappClient.sendMessage(groupId, message || '', mediaPath, caption || '');
+                        const sessionManager = this.whatsappClient;
+                        const sessionId = sessionManager.getFirstActiveSession(userId);
+
+                        if (!sessionId) {
+                            throw new Error('La sesión de WhatsApp no está lista o no existe (No active session found for user)');
+                        }
+
+                        // Pass sessionId as the first argument
+                        await this.whatsappClient.sendMessage(sessionId, groupId, message || '', mediaPath, caption || '');
 
                         // Increment message count for each successful group send (only if userId is provided)
                         if (userId) {
@@ -257,6 +291,15 @@ class MessageScheduler {
                                 content: message || '[Archivo multimedia]',
                                 messageType: 'group' // Include message type
                             });
+
+                            // Emit progress for progress bar
+                            this.io.emit('group_progress', {
+                                current: successCount, // successCount was already incremented
+                                total: groupIds.length,
+                                successCount: successCount,
+                                failedCount: groupIds.length - (groupIds.length - (groupIds.indexOf(groupId) + 1)) - successCount, // Calc failed
+                                status: 'sent'
+                            });
                         }
                     } catch (error) {
                         console.error(`Failed to send to group ${groupId}:`, error);
@@ -286,6 +329,18 @@ class MessageScheduler {
                                 timestamp: new Date(),
                                 content: message || '[Archivo multimedia]',
                                 messageType: 'group' // Include message type
+                            });
+
+                            // Emit progress for progress bar (failure case)
+                            // We need to know current index to calculate total processed
+                            const currentProcessed = groupIds.indexOf(groupId) + 1;
+
+                            this.io.emit('group_progress', {
+                                current: currentProcessed,
+                                total: groupIds.length,
+                                successCount: successCount,
+                                failedCount: currentProcessed - successCount,
+                                status: 'failed'
                             });
                         }
                     }

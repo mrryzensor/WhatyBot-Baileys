@@ -182,9 +182,9 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
   return (
     <div className="space-y-4">
       {/* Current Selection Info */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+      <div className="bg-theme-card p-4 rounded-xl shadow-sm border border-theme">
         <div className="flex justify-between items-center mb-3">
-          <h4 className="font-semibold text-slate-800">Selección Actual</h4>
+          <h4 className="font-semibold text-theme-main">Selección Actual</h4>
           <div className="flex gap-2">
             <button
               onClick={() => setSelectionName('new-selection')}
@@ -201,7 +201,7 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
           </div>
         </div>
         
-        <div className="text-sm text-slate-600">
+        <div className="text-sm text-theme-muted">
           <span className="font-bold">{currentSelectionInfo.count}</span> grupos seleccionados
           <span className="ml-4">
             <span className="font-bold">{currentSelectionInfo.participants.toLocaleString()}</span> participantes totales
@@ -209,7 +209,7 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
         </div>
         
         {currentSelectionInfo.names.length > 0 && (
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-2 text-xs text-theme-muted">
             Grupos: {currentSelectionInfo.names.join(', ')}
             {currentSelectionInfo.count > 3 && ` y ${currentSelectionInfo.count - 3} más`}
           </div>
@@ -217,8 +217,8 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
       </div>
 
       {/* Saved Selections */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+      <div className="bg-theme-card p-4 rounded-xl shadow-sm border border-theme">
+        <h4 className="font-semibold text-theme-main mb-3 flex items-center gap-2">
           <FolderOpen size={16} />
           Selecciones Guardadas
         </h4>
@@ -235,14 +235,14 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
               return (
                 <div
                   key={selection.id}
-                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                  className="flex items-center justify-between p-3 bg-theme-base rounded-lg hover:bg-slate-100 transition-colors"
                 >
                   <div className="flex-1">
-                    <h5 className="font-medium text-slate-800">{selection.name}</h5>
+                    <h5 className="font-medium text-theme-main">{selection.name}</h5>
                     {selection.description && (
-                      <p className="text-xs text-slate-500 mb-1">{selection.description}</p>
+                      <p className="text-xs text-theme-muted mb-1">{selection.description}</p>
                     )}
-                    <div className="text-xs text-slate-600">
+                    <div className="text-xs text-theme-muted">
                       {info.count} grupos • {info.participants.toLocaleString()} participantes
                       {info.missingCount > 0 && (
                         <span className="text-yellow-600 ml-2">
@@ -260,7 +260,7 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => loadSelection(selection)}
-                      className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                      className="p-1.5 text-primary-600 hover:bg-primary-50 rounded"
                       title="Cargar selección"
                     >
                       <FolderOpen size={14} />
@@ -283,12 +283,12 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
       {/* Save Dialog */}
       {selectionName && selectionName !== '' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
-            <h3 className="font-semibold text-slate-800 mb-4">Guardar Selección de Grupos</h3>
+          <div className="bg-theme-card p-6 rounded-xl shadow-xl max-w-md w-full mx-4">
+            <h3 className="font-semibold text-theme-main mb-4">Guardar Selección de Grupos</h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-theme-main mb-1">
                   Nombre de la selección *
                 </label>
                 <input
@@ -296,27 +296,27 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
                   value={selectionName === 'new-selection' ? '' : selectionName}
                   onChange={(e) => setSelectionName(e.target.value)}
                   placeholder="Ej: Clientes VIP, Grupos de marketing, etc."
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-green-500"
+                  className="w-full px-3 py-2 border border-theme rounded-lg focus:outline-none focus:border-primary-500"
                   maxLength={50}
                   autoFocus
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-theme-main mb-1">
                   Descripción (opcional)
                 </label>
                 <textarea
                   value={selectionDescription}
                   onChange={(e) => setSelectionDescription(e.target.value)}
                   placeholder="Describe el propósito de esta selección..."
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none h-20 focus:outline-none focus:border-green-500"
+                  className="w-full px-3 py-2 border border-theme rounded-lg resize-none h-20 focus:outline-none focus:border-primary-500"
                   maxLength={200}
                 />
               </div>
               
-              <div className="bg-slate-50 p-3 rounded-lg">
-                <div className="text-sm text-slate-600">
+              <div className="bg-theme-base p-3 rounded-lg">
+                <div className="text-sm text-theme-muted">
                   Se guardarán {currentSelectionInfo.count} grupos con {currentSelectionInfo.participants.toLocaleString()} participantes
                 </div>
               </div>
@@ -328,14 +328,14 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
                   setSelectionName('');
                   setSelectionDescription('');
                 }}
-                className="px-4 py-2 text-slate-600 hover:text-slate-800"
+                className="px-4 py-2 text-theme-muted hover:text-theme-main"
               >
                 Cancelar
               </button>
               <button
                 onClick={saveSelection}
                 disabled={!selectionName.trim() || selectionName === 'new-selection'}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Guardar
               </button>

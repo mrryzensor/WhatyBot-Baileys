@@ -326,11 +326,11 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
 
         {/* Group List */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-theme-card rounded-xl shadow-sm border border-theme flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-theme flex justify-between items-center bg-theme-base">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-slate-800">Grupos Disponibles</h3>
-                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{groups.length}</span>
+                <h3 className="font-semibold text-theme-main">Grupos Disponibles</h3>
+                <span className="bg-primary-100 text-primary-700 text-xs px-2 py-0.5 rounded-full">{groups.length}</span>
               </div>
               <button
                 onClick={extractGroups}
@@ -343,35 +343,35 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
             </div>
 
             {/* Search */}
-            <div className="p-2 border-b border-slate-100">
+            <div className="p-2 border-b border-theme">
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Buscar grupos..."
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-green-500"
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-theme rounded-lg focus:outline-none focus:border-primary-500"
                   value={filter}
                   onChange={e => setFilter(e.target.value)}
                 />
               </div>
 
               {/* Filters */}
-              <div className="p-3 border-b border-slate-100 space-y-3">
+              <div className="p-3 border-b border-theme space-y-3">
                 {/* Allowed Groups Filter */}
                 <div className="flex items-center justify-between gap-2 p-2.5 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-xs font-medium text-slate-700 truncate">Solo grupos permitidos</span>
+                    <span className="text-xs font-medium text-theme-main truncate">Solo grupos permitidos</span>
                     <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">{allowedGroupsCount}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowOnlyAllowedGroups((v) => !v)}
-                    className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${showOnlyAllowedGroups ? 'bg-green-600' : 'bg-slate-300'}`}
+                    className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${showOnlyAllowedGroups ? 'bg-primary-600' : 'bg-slate-300'}`}
                     aria-pressed={showOnlyAllowedGroups}
                     aria-label="Solo grupos permitidos para enviar"
                   >
                     <span
-                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showOnlyAllowedGroups ? 'translate-x-4' : 'translate-x-0.5'}`}
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-theme-card transition-transform ${showOnlyAllowedGroups ? 'translate-x-4' : 'translate-x-0.5'}`}
                     />
                   </button>
                 </div>
@@ -379,25 +379,25 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 {/* Admin Filter and Sort */}
                 <div className="grid grid-cols-2 gap-2">
                   {/* Admin Filter */}
-                  <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                    <span className="text-xs font-medium text-slate-700 truncate">Soy admin</span>
+                  <div className="flex items-center justify-between gap-2 p-2.5 bg-theme-base rounded-lg border border-theme">
+                    <span className="text-xs font-medium text-theme-main truncate">Soy admin</span>
                     <button
                       type="button"
                       onClick={() => setShowOnlyAdminGroups((v) => !v)}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${showOnlyAdminGroups ? 'bg-green-600' : 'bg-slate-300'}`}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${showOnlyAdminGroups ? 'bg-primary-600' : 'bg-slate-300'}`}
                       aria-pressed={showOnlyAdminGroups}
                       aria-label="Solo donde soy admin"
                     >
                       <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showOnlyAdminGroups ? 'translate-x-4' : 'translate-x-0.5'}`}
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-theme-card transition-transform ${showOnlyAdminGroups ? 'translate-x-4' : 'translate-x-0.5'}`}
                       />
                     </button>
                   </div>
 
                   {/* Sort Options */}
-                  <div className="flex items-center gap-1.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1.5 p-2.5 bg-theme-base rounded-lg border border-theme">
                     <select
-                      className="flex-1 text-xs font-medium text-slate-700 bg-transparent focus:outline-none min-w-0"
+                      className="flex-1 text-xs font-medium text-theme-main bg-transparent focus:outline-none min-w-0"
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as 'name' | 'participants')}
                       aria-label="Ordenar grupos"
@@ -408,7 +408,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                     <button
                       type="button"
                       onClick={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-1.5 py-0.5 bg-white rounded border border-slate-200 flex-shrink-0"
+                      className="text-xs font-semibold text-theme-muted hover:text-theme-main px-1.5 py-0.5 bg-theme-card rounded border border-theme flex-shrink-0"
                       aria-label="Cambiar dirección de orden"
                     >
                       {sortDirection === 'asc' ? '↑' : '↓'}
@@ -426,9 +426,9 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between px-3 py-2 border border-slate-200 rounded-lg bg-white sticky top-0 z-10">
+                  <div className="flex items-center justify-between px-3 py-2 border border-theme rounded-lg bg-theme-card sticky top-0 z-10">
                     <label
-                      className="flex items-center gap-2 text-xs text-slate-700 select-none"
+                      className="flex items-center gap-2 text-xs text-theme-main select-none"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -436,25 +436,25 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                         type="checkbox"
                         checked={allVisibleSelected}
                         onChange={toggleSelectAllVisible}
-                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                       />
                       {allVisibleSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
                     </label>
-                    <span className="text-xs text-slate-500">{selectedVisibleCount}/{visibleGroupIds.length}</span>
+                    <span className="text-xs text-theme-muted">{selectedVisibleCount}/{visibleGroupIds.length}</span>
                   </div>
 
                   {sortedGroups.map(group => (
                     <div
                       key={group.id}
                       onClick={() => toggleGroup(group.id)}
-                      className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors ${selectedGroups.has(group.id) ? 'bg-green-50 border border-green-200' : 'hover:bg-slate-50 border border-transparent'
+                      className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors ${selectedGroups.has(group.id) ? 'bg-primary-50 border border-primary-200' : 'hover:bg-theme-base border border-transparent'
                         }`}
                     >
                       <input
                         type="checkbox"
                         checked={selectedGroups.has(group.id)}
                         readOnly
-                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                       />
                       <GroupIcon
                         image={group.image}
@@ -463,12 +463,12 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                         className="flex-shrink-0"
                       />
                       <div className="flex-1">
-                        <h4 className="text-sm font-medium text-slate-800">{group.name}</h4>
-                        <p className="text-xs text-slate-500">{group.participants} participantes</p>
+                        <h4 className="text-sm font-medium text-theme-main">{group.name}</h4>
+                        <p className="text-xs text-theme-muted">{group.participants} participantes</p>
                       </div>
                       <button
                         onClick={(e) => handleViewMembers(group.id, group.name, e)}
-                        className="p-2 hover:bg-green-100 rounded-lg transition-colors text-green-600 hover:text-green-700"
+                        className="p-2 hover:bg-primary-100 rounded-lg transition-colors text-primary-600 hover:text-primary-700"
                         title="Ver miembros del grupo"
                       >
                         <UserCheck size={18} />
@@ -497,8 +497,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
             <button
               onClick={() => setActiveTab('message')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'message'
-                ? 'bg-white text-green-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-theme-card text-primary-700 shadow-sm'
+                : 'text-theme-muted hover:text-theme-main'
                 }`}
             >
               Mensaje
@@ -506,8 +506,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
             <button
               onClick={() => setActiveTab('poll')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'poll'
-                ? 'bg-white text-green-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-theme-card text-primary-700 shadow-sm'
+                : 'text-theme-muted hover:text-theme-main'
                 }`}
             >
               Encuesta
@@ -534,8 +534,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 disabled={loading}
               />
 
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-                <h3 className="font-semibold text-slate-800 mb-4">Mensaje de Difusión</h3>
+              <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme flex-1 flex flex-col">
+                <h3 className="font-semibold text-theme-main mb-4">Mensaje de Difusión</h3>
                 {/* Message Editor Toolbar */}
                 <MessageEditorToolbar
                   textareaRef={messageTextareaRef}
@@ -545,7 +545,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 />
                 <textarea
                   ref={messageTextareaRef}
-                  className="flex-1 w-full p-4 border border-slate-200 rounded-lg resize-none mb-4 mt-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="flex-1 w-full p-4 border border-theme rounded-lg resize-none mb-4 mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Escribe tu mensaje para los grupos seleccionados..."
                   value={message}
                   onChange={e => setMessage(e.target.value)}
@@ -553,7 +553,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
 
                 {/* Media Upload */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-theme-main mb-2">
                     Archivos Adjuntos (opcional)
                   </label>
                   <MediaUpload
@@ -582,8 +582,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 )}
 
                 <div className="flex justify-between items-center">
-                  <div className="text-sm text-slate-500">
-                    Seleccionados: <span className="font-bold text-slate-800">{selectedGroups.size}</span>
+                  <div className="text-sm text-theme-muted">
+                    Seleccionados: <span className="font-bold text-theme-main">{selectedGroups.size}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
@@ -600,7 +600,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                     <button
                       onClick={handleSendToGroups}
                       disabled={!isConnected || selectedGroups.size === 0 || loading || (!message && media.mediaItems.length === 0)}
-                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-green-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-primary-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? (
                         <>
@@ -631,14 +631,14 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
         {/* Message Preview Modal */}
         {showPreview && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-              <div className="flex justify-between items-center p-4 border-b border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-800">Vista Previa del Mensaje</h3>
+            <div className="bg-theme-card rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+              <div className="flex justify-between items-center p-4 border-b border-theme">
+                <h3 className="text-lg font-semibold text-theme-main">Vista Previa del Mensaje</h3>
                 <button
                   onClick={() => setShowPreview(false)}
                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                  <X size={20} className="text-slate-600" />
+                  <X size={20} className="text-theme-muted" />
                 </button>
               </div>
               <div className="p-4 overflow-y-auto">
