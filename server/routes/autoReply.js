@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { deleteItemMediaFiles, cleanSessionOrphanedFiles } from '../utils/mediaCleanup.js';
+import { UPLOAD_DIR } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,7 +28,7 @@ const getSessionId = (req) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -136,10 +137,24 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
             }
         }
 
+        if (rule.excludeCountries) {
+            try {
+                rule.excludeCountries = typeof rule.excludeCountries === 'string' ? JSON.parse(rule.excludeCountries) : rule.excludeCountries;
+            } catch (e) {
+                rule.excludeCountries = [];
+            }
+        }
+
+        if (rule.allowUnknownCountries !== undefined) {
+            rule.allowUnknownCountries = (String(rule.allowUnknownCountries) === 'true' || rule.allowUnknownCountries === true || rule.allowUnknownCountries === '1');
+        } else {
+            rule.allowUnknownCountries = false;
+        }
+
         // Convert absolute paths to relative paths (relative to server directory)
         let mediaPaths = files.map(f => {
-            const relativePath = path.relative(process.cwd(), f.path);
-            return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+            const relativePath = path.relative(UPLOAD_DIR, f.path);
+            return `uploads/${relativePath.replace(/\\/g, '/')}`; // Keep uploads/ prefix for DB consistency if needed, but relative to UPLOAD_DIR
         });
 
         let mediaCaptions = [];
@@ -228,6 +243,18 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             }
         }
 
+        if (updatedRule.excludeCountries) {
+            try {
+                updatedRule.excludeCountries = typeof updatedRule.excludeCountries === 'string' ? JSON.parse(updatedRule.excludeCountries) : updatedRule.excludeCountries;
+            } catch (e) {
+                updatedRule.excludeCountries = [];
+            }
+        }
+
+        if (updatedRule.allowUnknownCountries !== undefined) {
+            updatedRule.allowUnknownCountries = (String(updatedRule.allowUnknownCountries) === 'true' || updatedRule.allowUnknownCountries === true || updatedRule.allowUnknownCountries === '1');
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
 
         // First, handle existing media paths (this is the source of truth from frontend)
@@ -265,8 +292,8 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
         if (files && files.length > 0) {
             // Convert absolute paths to relative paths (relative to server directory)
             const newMediaPaths = files.map(f => {
-                const relativePath = path.relative(process.cwd(), f.path);
-                return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+                const relativePath = path.relative(UPLOAD_DIR, f.path);
+                return `uploads/${relativePath.replace(/\\/g, '/')}`;
             });
             currentMediaPaths = [...currentMediaPaths, ...newMediaPaths];
 
@@ -297,7 +324,10 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             captions: updatedRule.captions !== undefined ? updatedRule.captions : existingRule.captions,
             type: updatedRule.type !== undefined ? updatedRule.type : (existingRule.type || 'simple'),
             menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId,
-            countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || [])
+            countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || []),
+            countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || []),
+            excludeCountries: updatedRule.excludeCountries !== undefined ? updatedRule.excludeCountries : (existingRule.excludeCountries || []),
+            allowUnknownCountries: updatedRule.allowUnknownCountries !== undefined ? updatedRule.allowUnknownCountries : (existingRule.allowUnknownCountries || false)
         };
 
         client.autoReplyRules[index] = mergedRule;
@@ -420,7 +450,8 @@ router.get('/export', async (req, res) => {
         console.log('[Export Rules] Step 9: Adding media files to ZIP');
         // Add media files if any
         for (const mediaPath of mediaFiles) {
-            const fullPath = path.isAbsolute(mediaPath) ? mediaPath : path.join(process.cwd(), mediaPath);
+            const fileName = path.basename(mediaPath);
+            const fullPath = path.join(UPLOAD_DIR, fileName);
             if (fs.existsSync(fullPath)) {
                 const fileName = path.basename(mediaPath);
                 console.log(`[Export Rules] Adding media file: ${fileName} from ${fullPath}`);
@@ -460,10 +491,7 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
             if (ext === '.zip') {
                 // Handle ZIP file
                 const unzipper = (await import('unzipper')).default;
-                const uploadDir = process.env.UPLOAD_DIR || './uploads';
-                if (!fs.existsSync(uploadDir)) {
-                    fs.mkdirSync(uploadDir, { recursive: true });
-                }
+                const uploadDir = UPLOAD_DIR;
 
                 const directory = await unzipper.Open.file(filePath);
                 let jsonContent = null;
@@ -520,7 +548,7 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
             return res.status(400).json({ error: 'Rules must be an array' });
         }
 
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
         const results = { success: 0, failed: 0, replaced: 0, errors: [], rules: [] };
 
         // Check if we should apply to all sessions
@@ -600,7 +628,10 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                             captions: rule.captions || [],
                             caption: (rule.captions && rule.captions[0]) || rule.caption || '',
                             type: rule.type || 'simple',
-                            menuId: finalMenuId || null
+                            menuId: finalMenuId || null,
+                            countries: rule.countries || [],
+                            excludeCountries: rule.excludeCountries || [],
+                            allowUnknownCountries: rule.allowUnknownCountries || false
                         };
                         sessionClient.autoReplyRules[existingIndex] = updatedRule;
 
@@ -625,7 +656,10 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                             captions: rule.captions || [],
                             caption: (rule.captions && rule.captions[0]) || rule.caption || '',
                             type: rule.type || 'simple',
-                            menuId: finalMenuId || null
+                            menuId: finalMenuId || null,
+                            countries: rule.countries || [],
+                            excludeCountries: rule.excludeCountries || [],
+                            allowUnknownCountries: rule.allowUnknownCountries || false
                         };
                         sessionClient.autoReplyRules.push(newRule);
 

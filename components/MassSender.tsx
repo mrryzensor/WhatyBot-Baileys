@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Upload, AlertCircle, Download, HelpCircle, Eye, X } from 'lucide-react';
 import { Contact, MessageLog, ScheduledMessage } from '../types';
-import { sendBulkMessages, scheduleBulkMessages } from '../services/api';
+import { sendBulkMessages, scheduleBulkMessages, cancelScheduledJob, getApiUrl } from '../services/api';
 import { ScheduleManager } from './ScheduleManager';
 import { MarkdownViewer } from './MarkdownViewer';
 import { MessagePreview } from './MessagePreview';
@@ -26,9 +26,11 @@ interface MassSenderProps {
   };
   onNavigate?: (tab: string) => void;
   defaultCountryCode?: string;
+  messageToEdit?: ScheduledMessage | null;
+  onClearEdit?: () => void;
 }
 
-export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toast, onNavigate, defaultCountryCode }) => {
+export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toast, onNavigate, defaultCountryCode, messageToEdit, onClearEdit }) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [messageTemplate, setMessageTemplate] = useState('');
   const [variables, setVariables] = useState<string[]>([]);
@@ -40,6 +42,15 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
   const [showPreview, setShowPreview] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [subscriptionLimits, setSubscriptionLimits] = useState<any[]>([]);
+
+  // Auto-resize campaign template textarea
+  React.useEffect(() => {
+    const textarea = messageTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [messageTemplate]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [limitError, setLimitError] = useState<any>(null);
 
@@ -128,6 +139,62 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
     }
   }, [defaultCountryCode]);
 
+  React.useEffect(() => {
+    if (messageToEdit && messageToEdit.type === 'bulk') {
+      // Don't show '[Archivo multimedia]' placeholder as real message text
+      const realMessage = messageToEdit.message === '[Archivo multimedia]' ? '' : messageToEdit.message;
+      setMessageTemplate(realMessage);
+      if (messageToEdit.recipients) {
+        setContacts(messageToEdit.recipients.map((phone, i) => ({ id: `edit-${i}`, phone, name: '' })));
+      }
+      if (messageToEdit.variables) {
+        setVariables(messageToEdit.variables);
+      }
+      if (messageToEdit.scheduledAt) {
+        const d = new Date(messageToEdit.scheduledAt);
+        schedule.updateSchedule('datetime', 0, d);
+        schedule.setScheduledDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        schedule.setScheduledTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+      }
+
+      if (messageToEdit.mediaPaths && messageToEdit.mediaPaths.length > 0) {
+        const getMediaTypeFromPath = (path: string): 'image' | 'video' | 'document' => {
+          const ext = path.toLowerCase().split('.').pop() || '';
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image';
+          if (['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'].includes(ext)) return 'video';
+          return 'document';
+        };
+
+        const items = messageToEdit.mediaPaths.map((mp: string, index: number) => {
+          const fileName = mp.split(/[/\\]/).pop() || 'archivo';
+          const previewUrl = mp.startsWith('http')
+            ? mp
+            : `${getApiUrl()}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
+
+          return {
+            preview: previewUrl,
+            caption: (messageToEdit.captions && messageToEdit.captions[index]) || '',
+            type: getMediaTypeFromPath(mp),
+            mediaPath: mp,
+            fileName
+          };
+        });
+        media.setMediaItems(items as any);
+      } else {
+        media.setMediaItems([]);
+      }
+    }
+  }, [messageToEdit]);
+
+  const handleCancelEdit = () => {
+    setMessageTemplate('');
+    setContacts([]);
+    setVariables([]);
+    media.clearAll();
+    schedule.reset();
+    if (onClearEdit) onClearEdit();
+    toast.info("Edición cancelada");
+  };
 
   const loadUserInfo = async () => {
     try {
@@ -751,6 +818,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
         .map((item) => item.file)
         .filter((f): f is File => !!f);
       const captions = media.mediaItems.map((item) => item.caption || '');
+      const existingMediaPaths = media.mediaItems.map((item) => item.mediaPath).filter((p): p is string => !!p);
 
       if (schedule.scheduleType === 'now') {
         await sendBulkMessages(
@@ -760,6 +828,21 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
           captions // Captions por archivo
         );
         toast.success('¡Campaña iniciada! Los mensajes se están enviando en segundo plano.');
+        // Clear everything
+        setMessageTemplate('');
+        setContacts([]);
+        setVariables([]);
+        media.clearAll();
+        schedule.reset();
+        if (messageToEdit) {
+          try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+          const existing = localStorage.getItem('scheduledMessages');
+          if (existing) {
+            const scheduledMessages = JSON.parse(existing).filter((m: any) => m.id !== messageToEdit.id);
+            localStorage.setItem('scheduledMessages', JSON.stringify(scheduledMessages));
+          }
+        }
+        if (onClearEdit) onClearEdit();
       } else {
         const response = await scheduleBulkMessages(
           contacts,
@@ -768,7 +851,8 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
           schedule.delayMinutes,
           schedule.scheduledAt,
           files,
-          captions // Captions por archivo
+          captions, // Captions por archivo
+          existingMediaPaths
         );
         
         if (response.success) {
@@ -784,12 +868,21 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
             status: 'scheduled',
             createdAt: new Date(),
             file: files.length > 0 ? files[0] : undefined,
-            variables: variables
+            variables: variables,
+            mediaPaths: response.mediaPaths || existingMediaPaths,
+            captions: response.captions || captions
           };
           
           // Load existing scheduled messages
           const existing = localStorage.getItem('scheduledMessages');
-          const scheduledMessages = existing ? JSON.parse(existing) : [];
+          let scheduledMessages = existing ? JSON.parse(existing) : [];
+          
+          if (messageToEdit) {
+            try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+            scheduledMessages = scheduledMessages.filter((m: any) => m.id !== messageToEdit.id);
+            if (onClearEdit) onClearEdit();
+          }
+          
           // Convert dates to ISO strings for storage
           const messageToSave = {
             ...scheduledMessage,
@@ -800,7 +893,13 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
           localStorage.setItem('scheduledMessages', JSON.stringify(scheduledMessages));
           
           toast.success('¡Campaña programada exitosamente!');
+          // Clear everything
+          setMessageTemplate('');
+          setContacts([]);
+          setVariables([]);
+          media.clearAll();
           schedule.reset();
+          if (onClearEdit) onClearEdit();
           
           // Navigate to scheduled messages tab
           if (onNavigate) {
@@ -989,7 +1088,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                 </label>
                 <textarea
                   placeholder="51977638887&#10;51977638888, Juan Pérez&#10;51977638889	María García"
-                  className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-h-[100px] font-mono text-sm"
+                  className="w-full px-3 py-2 border border-theme rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-h-[100px] max-h-[250px] resize-none overflow-y-auto font-mono text-sm"
                   onPaste={(e) => {
                     const pastedText = e.clipboardData.getData('text');
                     if (pastedText.trim()) {
@@ -1096,7 +1195,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
 
             <textarea
               ref={messageTextareaRef}
-              className="w-full h-48 p-4 border border-theme rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full min-h-[100px] max-h-[500px] p-4 border border-theme rounded-lg resize-none overflow-y-auto focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Escribe tu mensaje aquí... Usa variables como {{name}}"
               value={messageTemplate}
               onChange={(e) => setMessageTemplate(e.target.value)}
@@ -1115,6 +1214,11 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
 
             {/* Attachments */}
             <div className="py-4 border-t border-theme">
+              {messageToEdit && messageToEdit.message === '[Archivo multimedia]' && (!messageToEdit.mediaPaths || messageToEdit.mediaPaths.length === 0) && (
+                <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  ⚠️ Este mensaje tenía archivos adjuntos que no se pueden recuperar automáticamente. Vuelve a adjuntarlos.
+                </div>
+              )}
               <label className="block text-sm font-medium text-theme-main mb-2">
                 Archivos Adjuntos (opcional)
               </label>
@@ -1158,6 +1262,15 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                   <Eye size={18} />
                   Vista Previa
                 </button>
+                {messageToEdit && (
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 px-6 py-3 rounded-lg font-bold transition-all mr-2"
+                  >
+                    <X size={18} />
+                    Cancelar
+                  </button>
+                )}
                 <button
                   onClick={startSending}
                   disabled={!isConnected || isSending || (contacts.length === 0)}
@@ -1166,11 +1279,18 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                       : 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-900/20'
                     }`}
                 >
-                  <Send size={18} />
                   {isSending ? (
                     schedule.scheduleType === 'now' ? 'Enviando...' : 'Programando...'
+                  ) : messageToEdit ? (
+                    <>
+                      <Send size={18} />
+                      Guardar Edición
+                    </>
                   ) : (
-                    schedule.scheduleType === 'now' ? 'Enviar Masivamente' : 'Programar Envío'
+                    <>
+                      <Send size={18} />
+                      {schedule.scheduleType === 'now' ? 'Enviar Masivamente' : 'Programar Envío'}
+                    </>
                   )}
                 </button>
               </div>

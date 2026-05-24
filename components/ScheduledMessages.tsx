@@ -2,36 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { Clock, Calendar, Trash2, Edit2, AlertCircle, CheckCircle } from 'lucide-react';
 import { ScheduledMessage } from '../types';
 import { ConfirmModal } from './ConfirmModal';
-import { cancelScheduledJob, updateScheduledJob } from '../services/api';
+import { cancelScheduledJob, updateScheduledJob, getScheduledJobs, getSocket } from '../services/api';
 
-export const ScheduledMessages: React.FC = () => {
+interface ScheduledMessagesProps {
+  onEdit?: (message: ScheduledMessage) => void;
+}
+
+export const ScheduledMessages: React.FC<ScheduledMessagesProps> = ({ onEdit }) => {
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(new Date());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingScheduledAt, setEditingScheduledAt] = useState<string>('');
 
   // Load scheduled messages from localStorage or API
   useEffect(() => {
-    loadScheduledMessages();
-    
+    // Initial load: enrich from backend
+    loadScheduledMessages(true);
+
     // Listen for storage events to update when messages are added from other tabs
     const handleStorageChange = () => {
-      loadScheduledMessages();
+      loadScheduledMessages(false);
     };
-    
+
     window.addEventListener('storage', handleStorageChange);
-    
+
     // Update current time every second for countdown
     const timeInterval = setInterval(() => {
       setNow(new Date());
     }, 1000);
-    
-    // Also check periodically for updates
-    const interval = setInterval(loadScheduledMessages, 2000);
-    
+
+    // Periodic lightweight refresh (no backend enrichment)
+    const interval = setInterval(() => loadScheduledMessages(false), 5000);
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
@@ -39,59 +42,109 @@ export const ScheduledMessages: React.FC = () => {
     };
   }, []);
 
-  const loadScheduledMessages = () => {
+  // Socket listener: mark cards as sent/failed when scheduler completes a job
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const markJobDone = ({ jobId, status }: { jobId: string; status?: string }) => {
+      const resolvedStatus = status === 'failed' ? 'failed' : 'sent';
+      setScheduledMessages(prev => {
+        const updated = prev.map(m =>
+          m.id === jobId ? { ...m, status: resolvedStatus } : m
+        );
+        // Persist to localStorage
+        localStorage.setItem('scheduledMessages', JSON.stringify(updated.map(m => ({
+          ...m,
+          scheduledAt: m.scheduledAt?.toISOString(),
+          createdAt: m.createdAt.toISOString()
+        }))));
+        return updated;
+      });
+    };
+
+    socket.on('job_completed', markJobDone);
+    return () => { socket.off('job_completed', markJobDone); };
+  }, []);
+
+  const loadScheduledMessages = async (enrich: boolean = false) => {
     setLoading(true);
-    // Simulate loading - in real app this would come from API
     const saved = localStorage.getItem('scheduledMessages');
     if (saved) {
       const messages = JSON.parse(saved).map((msg: any) => {
         const scheduledAt = msg.scheduledAt ? new Date(msg.scheduledAt) : undefined;
         const createdAt = new Date(msg.createdAt);
-        
-        // Check if message was already sent (scheduledAt is in the past and status is still scheduled)
+
         let status = msg.status;
         if (status === 'scheduled' && scheduledAt && scheduledAt <= now) {
-          // Message should have been sent, update status
           status = 'sent';
         }
-        
-        return {
-          ...msg,
-          createdAt,
-          scheduledAt,
-          status
-        };
+
+        return { ...msg, createdAt, scheduledAt, status };
       });
-      
+
+      // Cross-reference with backend scheduler to enrich with mediaPaths/captions
+      // Only on initial load to avoid excessive API calls
+      if (enrich) {
+        try {
+          const backendJobs = await getScheduledJobs();
+          if (backendJobs.success && Array.isArray(backendJobs.jobs)) {
+            const jobsById: Record<string, any> = {};
+            backendJobs.jobs.forEach((job: any) => { jobsById[job.id] = job; });
+
+            messages.forEach((msg: any) => {
+              const backendJob = jobsById[msg.id];
+              if (backendJob) {
+                if ((!msg.mediaPaths || msg.mediaPaths.length === 0) && backendJob.mediaPaths && backendJob.mediaPaths.length > 0) {
+                  msg.mediaPaths = backendJob.mediaPaths;
+                  msg.captions = backendJob.captions || [];
+                }
+                if (msg.message === '[Archivo multimedia]' && backendJob.message && backendJob.message !== '[Archivo multimedia]') {
+                  msg.message = backendJob.message;
+                }
+              }
+            });
+
+            localStorage.setItem('scheduledMessages', JSON.stringify(messages.map((msg: any) => ({
+              ...msg,
+              scheduledAt: msg.scheduledAt?.toISOString(),
+              createdAt: msg.createdAt.toISOString()
+            }))));
+          }
+        } catch (e) {
+          // Silently ignore if backend is unavailable
+        }
+      }
+
       // Update localStorage if status changed
-      const hasChanges = messages.some((msg, idx) => {
+      const hasChanges = messages.some((msg: any, idx: number) => {
         const savedMsg = JSON.parse(saved)[idx];
-        return msg.status !== savedMsg.status;
+        return msg.status !== savedMsg?.status;
       });
-      
+
       if (hasChanges) {
-        localStorage.setItem('scheduledMessages', JSON.stringify(messages.map(msg => ({
+        localStorage.setItem('scheduledMessages', JSON.stringify(messages.map((msg: any) => ({
           ...msg,
           scheduledAt: msg.scheduledAt?.toISOString(),
           createdAt: msg.createdAt.toISOString()
         }))));
       }
-      
-      setScheduledMessages(messages);
+
+      setScheduledMessages(messages.sort((a: ScheduledMessage, b: ScheduledMessage) => b.createdAt.getTime() - a.createdAt.getTime()));
     }
     setLoading(false);
   };
-  
+
   const getTimeRemaining = (scheduledAt?: Date, createdAt?: Date): { time: string; isPast: boolean; progress: number } => {
     if (!scheduledAt) return { time: 'N/A', isPast: false, progress: 0 };
-    
+
     const diff = scheduledAt.getTime() - now.getTime();
     const isPast = diff <= 0;
-    
+
     if (isPast) {
       return { time: 'Enviado', isPast: true, progress: 100 };
     }
-    
+
     // Calculate progress based on time elapsed vs total time
     let progress = 0;
     if (createdAt) {
@@ -99,12 +152,12 @@ export const ScheduledMessages: React.FC = () => {
       const elapsedTime = now.getTime() - createdAt.getTime();
       progress = Math.min(100, Math.max(0, (elapsedTime / totalTime) * 100));
     }
-    
+
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
+
     let timeStr = '';
     if (days > 0) {
       timeStr = `${days}d ${hours % 24}h`;
@@ -115,7 +168,7 @@ export const ScheduledMessages: React.FC = () => {
     } else {
       timeStr = `${seconds}s`;
     }
-    
+
     return { time: timeStr, isPast: false, progress };
   };
 
@@ -173,55 +226,6 @@ export const ScheduledMessages: React.FC = () => {
     } finally {
       setShowDeleteModal(false);
       setMessageToDelete(null);
-    }
-  };
-
-  const startEditMessage = (msg: ScheduledMessage) => {
-    if (!msg.scheduledAt) return;
-    setEditingId(msg.id);
-    const local = new Date(msg.scheduledAt);
-    const year = local.getFullYear();
-    const month = String(local.getMonth() + 1).padStart(2, '0');
-    const day = String(local.getDate()).padStart(2, '0');
-    const hours = String(local.getHours()).padStart(2, '0');
-    const minutes = String(local.getMinutes()).padStart(2, '0');
-    setEditingScheduledAt(`${year}-${month}-${day}T${hours}:${minutes}`);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditingScheduledAt('');
-  };
-
-  const saveEdit = async (msg: ScheduledMessage) => {
-    if (!editingScheduledAt) return;
-    const newDate = new Date(editingScheduledAt);
-    if (isNaN(newDate.getTime())) {
-      alert('Fecha y hora no válidas');
-      return;
-    }
-    try {
-      await updateScheduledJob(msg.id, newDate);
-      const updatedMessages = scheduledMessages.map(m => {
-        if (m.id === msg.id) {
-          return {
-            ...m,
-            scheduledAt: newDate,
-            status: 'scheduled'
-          };
-        }
-        return m;
-      });
-      setScheduledMessages(updatedMessages);
-      localStorage.setItem('scheduledMessages', JSON.stringify(updatedMessages.map(m => ({
-        ...m,
-        scheduledAt: m.scheduledAt?.toISOString(),
-        createdAt: m.createdAt.toISOString()
-      }))));
-      cancelEdit();
-    } catch (error) {
-      console.error('Error updating scheduled job:', error);
-      alert('No se pudo actualizar la programación. Por favor, inténtalo de nuevo.');
     }
   };
 
@@ -290,20 +294,19 @@ export const ScheduledMessages: React.FC = () => {
         ) : (
           <div className="space-y-4">
             {scheduledMessages.map((message) => {
-              const timeInfo = message.scheduleType === 'datetime' && message.scheduledAt 
+              const timeInfo = message.scheduleType === 'datetime' && message.scheduledAt
                 ? getTimeRemaining(message.scheduledAt, message.createdAt)
                 : { time: '', isPast: false, progress: 0 };
-              
+
               return (
-                <div 
-                  key={message.id} 
-                  className={`border-2 ${getCardBorderColor(message.status)} rounded-lg p-4 hover:shadow-md transition-shadow ${
-                    message.status === 'sent' ? 'bg-primary-50' :
-                    message.status === 'failed' ? 'bg-red-50' :
-                    message.status === 'scheduled' ? 'bg-blue-50' :
-                    message.status === 'cancelled' ? 'bg-theme-base' :
-                    'bg-yellow-50'
-                  }`}
+                <div
+                  key={message.id}
+                  className={`border-2 ${getCardBorderColor(message.status)} rounded-lg p-4 hover:shadow-md transition-shadow ${message.status === 'sent' ? 'bg-primary-50' :
+                      message.status === 'failed' ? 'bg-red-50' :
+                        message.status === 'scheduled' ? 'bg-blue-50' :
+                          message.status === 'cancelled' ? 'bg-theme-base' :
+                            'bg-yellow-50'
+                    }`}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
@@ -321,15 +324,15 @@ export const ScheduledMessages: React.FC = () => {
                           {message.type === 'groups' && 'Grupos'}
                         </span>
                       </div>
-                      
+
                       <div className="text-sm font-semibold text-theme-main mb-1">
                         {message.recipients?.length || 0} destinatarios
                       </div>
-                      
+
                       <div className="text-sm text-theme-main mb-3 line-clamp-2">
                         {message.message}
                       </div>
-                      
+
                       {/* Progress Bar for scheduled messages */}
                       {message.status === 'scheduled' && message.scheduleType === 'datetime' && message.scheduledAt && (
                         <div className="mb-3">
@@ -342,14 +345,14 @@ export const ScheduledMessages: React.FC = () => {
                             </span>
                           </div>
                           <div className="w-full bg-blue-200 rounded-full h-2.5">
-                            <div 
+                            <div
                               className="bg-blue-600 h-2.5 rounded-full transition-all duration-1000"
                               style={{ width: `${timeInfo.progress}%` }}
                             ></div>
                           </div>
                         </div>
                       )}
-                      
+
                       <div className="flex items-center gap-4 text-xs text-theme-muted flex-wrap">
                         <div className="flex items-center gap-1">
                           <Calendar size={12} />
@@ -387,15 +390,15 @@ export const ScheduledMessages: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 ml-4">
                       {message.status === 'pending' || message.status === 'scheduled' ? (
                         <>
-                          {message.scheduleType === 'datetime' && message.scheduledAt && (
+                          {message.scheduleType === 'datetime' && message.scheduledAt && onEdit && (
                             <button
-                              onClick={() => startEditMessage(message)}
+                              onClick={() => onEdit(message)}
                               className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                              title="Editar fecha/hora programada"
+                              title="Editar mensaje programado"
                             >
                               <Edit2 size={14} />
                             </button>
@@ -428,34 +431,7 @@ export const ScheduledMessages: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {editingId === message.id && message.scheduleType === 'datetime' && message.scheduledAt && (
-                    <div className="mt-3 p-3 bg-theme-base border border-theme rounded-md flex flex-col sm:flex-row sm:items-center gap-2">
-                      <label className="text-xs font-medium text-theme-main flex items-center gap-2">
-                        <span>Nueva fecha y hora:</span>
-                        <input
-                          type="datetime-local"
-                          className="border border-theme rounded px-2 py-1 text-xs"
-                          value={editingScheduledAt}
-                          onChange={(e) => setEditingScheduledAt(e.target.value)}
-                        />
-                      </label>
-                      <div className="flex gap-2 mt-2 sm:mt-0 sm:ml-auto">
-                        <button
-                          onClick={() => saveEdit(message)}
-                          className="px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
-                        >
-                          Guardar cambios
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="px-3 py-1 rounded-full bg-slate-100 text-theme-main text-xs font-medium hover:bg-slate-200"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  
+
                   {message.file && (
                     <div className="mt-2 text-xs text-theme-muted flex items-center gap-1 font-medium">
                       📎 {message.file.name}

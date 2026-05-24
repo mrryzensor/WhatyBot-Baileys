@@ -60,6 +60,24 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
         return () => clearInterval(interval);
     }, []);
 
+    // Auto-resize menu message textarea
+    React.useEffect(() => {
+        const textarea = menuMessageRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }, [formData.message]);
+
+    // Auto-resize option response textarea
+    React.useEffect(() => {
+        const textarea = optionResponseRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }, [editingOption?.response]);
+
     const loadMenus = async () => {
         try {
             const response = await getInteractiveMenus();
@@ -827,10 +845,9 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                 <textarea
                                     ref={menuMessageRef}
-                                    className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2 ${formErrors.message ? 'border-red-300' : 'border-theme'
+                                    className={`w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none overflow-y-auto mt-2 min-h-[100px] max-h-[450px] ${formErrors.message ? 'border-red-300' : 'border-theme'
                                         }`}
                                     placeholder="¡Hola! 👋 ¿En qué puedo ayudarte?&#10;&#10;1️⃣ Información&#10;2️⃣ Precios&#10;3️⃣ Soporte"
-                                    rows={6}
                                     value={formData.message}
                                     onChange={e => {
                                         setFormData({ ...formData, message: e.target.value });
@@ -1025,9 +1042,8 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
 
                                     <textarea
                                         ref={optionResponseRef}
-                                        className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none mt-2"
+                                        className="w-full border border-theme rounded-lg px-4 py-2.5 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none overflow-y-auto mt-2 min-h-[80px] max-h-[350px]"
                                         placeholder="Texto de respuesta cuando se selecciona esta opción"
-                                        rows={4}
                                         value={editingOption.response || ''}
                                         onChange={e => setEditingOption({ ...editingOption, response: e.target.value })}
                                     />

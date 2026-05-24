@@ -1,6 +1,7 @@
 import schedule from 'node-schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { userService, messageCountService, messageLogService } from './database.js';
+import fs from 'fs';
 
 class MessageScheduler {
     constructor(whatsappClient) {
@@ -91,6 +92,15 @@ class MessageScheduler {
                     });
                 }
             } finally {
+                // Emit completion event so the UI can mark the card as sent/failed
+                if (this.io) {
+                    this.io.emit('job_completed', { jobId, userId });
+                }
+                // Clean up media files after sending (success or failure)
+                const paths = Array.isArray(mediaPath) ? mediaPath : (mediaPath ? [mediaPath] : []);
+                for (const p of paths) {
+                    try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* ignore */ }
+                }
                 this.jobs.delete(jobId);
             }
         });
@@ -197,6 +207,15 @@ class MessageScheduler {
                     });
                 }
             } finally {
+                // Emit completion event so the UI can mark the card as sent/failed
+                if (this.io) {
+                    this.io.emit('job_completed', { jobId, userId });
+                }
+                // Clean up media files after sending (success or failure)
+                const paths = Array.isArray(mediaPath) ? mediaPath : (mediaPath ? [mediaPath] : []);
+                for (const p of paths) {
+                    try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* ignore */ }
+                }
                 this.jobs.delete(jobId);
             }
         });
@@ -227,13 +246,24 @@ class MessageScheduler {
         console.log(`Scheduling group messages for ${groupIds.length} groups at ${scheduledDate} for user ${userId}`);
 
         const job = schedule.scheduleJob(scheduledDate, async () => {
+            let outerFailed = false;
             try {
                 console.log(`Executing scheduled group messages`);
+
+                // Normalize mediaPaths and captions to arrays
+                const mediaPaths = Array.isArray(mediaPath) ? mediaPath : (mediaPath ? [mediaPath] : []);
+                const mediaCaptions = Array.isArray(caption) ? caption : (caption ? [caption] : mediaPaths.map(() => ''));
+
+                const sessionManager = this.whatsappClient;
+                const sessionId = sessionManager.getFirstActiveSession(userId);
+                if (!sessionId) {
+                    throw new Error('La sesión de WhatsApp no está lista o no existe (No active session found for user)');
+                }
 
                 // Get group names for better logging
                 let groupNamesMap = {};
                 try {
-                    const groups = await this.whatsappClient.getGroups();
+                    const groups = await sessionManager.getGroups(sessionId);
                     groups.forEach(group => {
                         groupNamesMap[group.id] = group.name;
                     });
@@ -242,45 +272,24 @@ class MessageScheduler {
                 }
 
                 let successCount = 0;
+                let failedCount = 0;
+                const totalGroups = groupIds.length;
 
-                for (const groupId of groupIds) {
+                for (let i = 0; i < groupIds.length; i++) {
+                    const groupId = groupIds[i];
+                    const groupName = groupNamesMap[groupId] || groupId;
                     try {
-                        const sessionManager = this.whatsappClient;
-                        const sessionId = sessionManager.getFirstActiveSession(userId);
+                        // Send all media in one call (array of paths + captions)
+                        await sessionManager.sendMessage(sessionId, groupId, message || '', mediaPaths.length > 0 ? mediaPaths : null, mediaCaptions);
 
-                        if (!sessionId) {
-                            throw new Error('La sesión de WhatsApp no está lista o no existe (No active session found for user)');
-                        }
+                        successCount++;
 
-                        // Pass sessionId as the first argument
-                        await this.whatsappClient.sendMessage(sessionId, groupId, message || '', mediaPath, caption || '');
-
-                        // Increment message count for each successful group send (only if userId is provided)
                         if (userId) {
                             await messageCountService.incrementCount(userId, 1);
                             console.log(`Incremented message count for user ${userId}: +1 message (scheduled group)`);
-
-                            // Use group name if available, otherwise use ID
-                            const groupName = groupNamesMap[groupId] || groupId;
-
-                            // Log message to database
-                            await messageLogService.logMessage(
-                                userId,
-                                'group',
-                                groupName,
-                                'sent',
-                                message || '[Archivo multimedia]',
-                                scheduledDate
-                            );
-                        } else {
-                            console.warn('Cannot increment message count: userId is missing for scheduled group message');
+                            await messageLogService.logMessage(userId, 'group', groupName, 'sent', message || '[Archivo multimedia]', scheduledDate);
                         }
-                        successCount++;
 
-                        // Use group name if available, otherwise use ID
-                        const groupName = groupNamesMap[groupId] || groupId;
-
-                        // Emit log event for each group with userId
                         if (this.io) {
                             this.io.emit('message_log', {
                                 id: `scheduled-group-${jobId}-${groupId}`,
@@ -289,37 +298,27 @@ class MessageScheduler {
                                 status: 'sent',
                                 timestamp: new Date(),
                                 content: message || '[Archivo multimedia]',
-                                messageType: 'group' // Include message type
+                                messageType: 'group'
                             });
-
-                            // Emit progress for progress bar
+                            // Emit progress so the UI queue bar shows up
                             this.io.emit('group_progress', {
-                                current: successCount, // successCount was already incremented
-                                total: groupIds.length,
-                                successCount: successCount,
-                                failedCount: groupIds.length - (groupIds.length - (groupIds.indexOf(groupId) + 1)) - successCount, // Calc failed
+                                userId,
+                                current: i + 1,
+                                total: totalGroups,
+                                successCount,
+                                failedCount,
+                                groupId,
                                 status: 'sent'
                             });
                         }
                     } catch (error) {
+                        failedCount++;
                         console.error(`Failed to send to group ${groupId}:`, error);
 
-                        // Use group name if available, otherwise use ID
-                        const groupName = groupNamesMap[groupId] || groupId;
-
-                        // Log failed message to database (only if userId is provided)
                         if (userId) {
-                            await messageLogService.logMessage(
-                                userId,
-                                'group',
-                                groupName,
-                                'failed',
-                                message || '[Archivo multimedia]',
-                                scheduledDate
-                            );
+                            await messageLogService.logMessage(userId, 'group', groupName, 'failed', message || '[Archivo multimedia]', scheduledDate);
                         }
 
-                        // Emit log event for failed group message with userId
                         if (this.io) {
                             this.io.emit('message_log', {
                                 id: `scheduled-group-${jobId}-${groupId}`,
@@ -328,27 +327,35 @@ class MessageScheduler {
                                 status: 'failed',
                                 timestamp: new Date(),
                                 content: message || '[Archivo multimedia]',
-                                messageType: 'group' // Include message type
+                                messageType: 'group'
                             });
-
-                            // Emit progress for progress bar (failure case)
-                            // We need to know current index to calculate total processed
-                            const currentProcessed = groupIds.indexOf(groupId) + 1;
-
                             this.io.emit('group_progress', {
-                                current: currentProcessed,
-                                total: groupIds.length,
-                                successCount: successCount,
-                                failedCount: currentProcessed - successCount,
-                                status: 'failed'
+                                userId,
+                                current: i + 1,
+                                total: totalGroups,
+                                successCount,
+                                failedCount,
+                                groupId,
+                                status: 'failed',
+                                error: error.message
                             });
                         }
                     }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (i < groupIds.length - 1) await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             } catch (error) {
                 console.error(`Failed to execute scheduled group messages:`, error);
+                outerFailed = true;
             } finally {
+                // Emit completion event so the UI can mark the card as sent/failed
+                if (this.io) {
+                    this.io.emit('job_completed', { jobId, userId, status: outerFailed ? 'failed' : 'sent' });
+                }
+                // Clean up media files after sending (success or failure)
+                const paths = Array.isArray(mediaPath) ? mediaPath : (mediaPath ? [mediaPath] : []);
+                for (const p of paths) {
+                    try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* ignore */ }
+                }
                 this.jobs.delete(jobId);
             }
         });
@@ -370,7 +377,7 @@ class MessageScheduler {
         return null;
     }
 
-    cancelJob(jobId, userId = null) {
+    cancelJob(jobId, userId = null, keepMedia = false) {
         const jobData = this.jobs.get(jobId);
         if (jobData && jobData.job) {
             if (userId && jobData.userId && jobData.userId !== userId) {
@@ -378,6 +385,13 @@ class MessageScheduler {
                 return false;
             }
             jobData.job.cancel();
+            // Only clean up media files if keepMedia is false
+            if (!keepMedia) {
+                const paths = Array.isArray(jobData.mediaPath) ? jobData.mediaPath : (jobData.mediaPath ? [jobData.mediaPath] : []);
+                for (const p of paths) {
+                    try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* ignore */ }
+                }
+            }
             this.jobs.delete(jobId);
             return true;
         }
@@ -404,12 +418,23 @@ class MessageScheduler {
     getJobs() {
         const jobsList = [];
         this.jobs.forEach((value, key) => {
+            // Normalize mediaPaths and captions arrays
+            const mediaPaths = Array.isArray(value.mediaPath)
+                ? value.mediaPath
+                : (value.mediaPath ? [value.mediaPath] : []);
+            const captions = Array.isArray(value.caption)
+                ? value.caption
+                : (value.caption ? [value.caption] : mediaPaths.map(() => ''));
+
             jobsList.push({
                 id: key,
                 type: value.type,
                 scheduledDate: value.scheduledDate,
                 details: value.to || `${value.count} recipients`,
-                userId: value.userId || null
+                userId: value.userId || null,
+                mediaPaths,
+                captions,
+                message: value.message || ''
             });
         });
         return jobsList;

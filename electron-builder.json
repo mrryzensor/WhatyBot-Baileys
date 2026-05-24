@@ -40,7 +40,10 @@
       "from": "server/data",
       "to": "server/data",
       "filter": [
-        "**/*"
+        "**/*",
+        "!**/*.db",
+        "!**/*.json",
+        "!local_logs/**/*"
       ]
     },
     {

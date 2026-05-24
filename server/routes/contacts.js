@@ -30,33 +30,50 @@ async function downloadAndZip(contactsWithImages, res) {
     }
 
     const archive = archiver('zip', { zlib: { level: 5 } });
+
+    // Listen for archive errors
+    archive.on('error', (err) => {
+        console.error('[ExportPhotos] Archiver error:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Error al generar el archivo ZIP: ' + err.message });
+        }
+    });
+
     res.attachment(`fotos_perfil_${new Date().getTime()}.zip`);
     archive.pipe(res);
 
     console.log(`[ExportPhotos] Starting parallel export for ${contactsWithImages.length} images`);
 
-    // Download in chunks of 10 to be faster but not overwhelm the server/network
-    const CONCURRENCY = 10;
+    // Download in chunks of 5 to be more conservative with memory and network
+    const CONCURRENCY = 5;
+    let downloadedCount = 0;
+    let failedCount = 0;
+
     for (let i = 0; i < contactsWithImages.length; i += CONCURRENCY) {
         const chunk = contactsWithImages.slice(i, i + CONCURRENCY);
         await Promise.all(chunk.map(async (contact) => {
             try {
+                if (!contact.profilePicUrl) return;
+
                 const response = await axios({
                     url: contact.profilePicUrl,
                     method: 'GET',
                     responseType: 'arraybuffer',
-                    timeout: 8000 // Increased timeout
+                    timeout: 15000 // Increased timeout further for slow connections
                 });
 
-                const safePhone = contact.phone ? contact.phone.replace(/[/\\?%*:|"<>]/g, '') : 'desconocido';
+                const safePhone = contact.phone ? String(contact.phone).replace(/[/\\?%*:|"<>]/g, '') : 'desconocido';
                 const fileName = `${safePhone}.jpg`;
                 archive.append(response.data, { name: fileName });
+                downloadedCount++;
             } catch (err) {
                 console.warn(`[ExportPhotos] Failed to download image for ${contact.phone}:`, err.message);
+                failedCount++;
             }
         }));
     }
 
+    console.log(`[ExportPhotos] Export finished. Downloaded: ${downloadedCount}, Failed: ${failedCount}`);
     await archive.finalize();
 }
 

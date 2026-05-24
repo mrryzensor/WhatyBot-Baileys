@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon, Globe, ChevronDown, ChevronUp, Copy, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon, Globe, ChevronDown, ChevronUp, Copy, CheckSquare, Square, Zap } from 'lucide-react';
 import { AutoReplyRule, InteractiveMenu } from '../types';
 import { countries as countryList } from '../utils/countries';
 import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus, getApiUrl } from '../services/api';
@@ -13,6 +13,7 @@ import { MediaThumbnail } from './MediaThumbnail';
 import { GlobalSessionIndicator } from './GlobalSessionToggle';
 import { useGlobalSessions } from '../hooks/useGlobalSessions';
 import { ImportModal } from './ImportModal';
+import { BulkRuleCreator } from './BulkRuleCreator';
 
 interface AutoReplyManagerProps {
     rules: AutoReplyRule[];
@@ -34,14 +35,19 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
     const [isExporting, setIsExporting] = useState(false);
     const [menus, setMenus] = useState<InteractiveMenu[]>([]);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showBulkCreator, setShowBulkCreator] = useState(false);
     const [showCountrySelector, setShowCountrySelector] = useState(false);
     const [countrySearch, setCountrySearch] = useState('');
+    const [countryTab, setCountryTab] = useState<'include' | 'exclude'>('include');
+    const [showMobileEditor, setShowMobileEditor] = useState(false);
     const { globalSessionsEnabled } = useGlobalSessions();
 
     // Load interactive menus
     useEffect(() => {
         loadMenus();
     }, []);
+
+
 
     const loadMenus = async () => {
         try {
@@ -80,13 +86,24 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         delay: 2,
         isActive: true,
         type: 'simple',
-        countries: []
+        countries: [],
+        excludeCountries: [],
+        allowUnknownCountries: false
     });
 
     const [keywordInput, setKeywordInput] = useState('');
     const media = useMedia({ maxFiles: 50 });
     const importInputRef = useRef<HTMLInputElement>(null);
     const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-resize response message textarea
+    React.useEffect(() => {
+        const textarea = messageTextareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }, [formData.response]);
 
     const resetForm = () => {
         setFormData({
@@ -97,20 +114,28 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             delay: 2,
             isActive: true,
             type: 'simple',
-            countries: []
+            countries: [],
+            excludeCountries: [],
+            allowUnknownCountries: false
         });
         setKeywordInput('');
         media.setMediaItems([]);
         setEditingId(null);
+        setShowMobileEditor(false);
     };
 
     const handleEdit = (rule: AutoReplyRule) => {
         setEditingId(rule.id);
-        setFormData({ ...rule, countries: rule.countries || [] });
-        if (rule.countries && rule.countries.length > 0) {
-            setShowCountrySelector(true);
+        setShowMobileEditor(true);
+        setFormData({ ...rule, countries: rule.countries || [], excludeCountries: rule.excludeCountries || [] });
+        const hasCountries = (rule.countries && rule.countries.length > 0) || (rule.excludeCountries && rule.excludeCountries.length > 0);
+        setShowCountrySelector(hasCountries);
+
+        // Auto-switch to exclude tab if only excluded countries are present
+        if (rule.excludeCountries && rule.excludeCountries.length > 0 && (!rule.countries || rule.countries.length === 0)) {
+            setCountryTab('exclude');
         } else {
-            setShowCountrySelector(false);
+            setCountryTab('include');
         }
 
         // Normalize keywords to array before joining
@@ -224,12 +249,10 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 .filter((f): f is File => !!f);
             const captions = media.mediaItems.map(item => item.caption || '');
 
-            // Si estamos editando y no hay nuevos archivos, preservamos las rutas existentes (pueden ser varias)
-            const existingMediaPaths = editingId && files.length === 0 && media.mediaItems.length > 0
-                ? media.mediaItems
-                    .map(item => item.mediaPath)
-                    .filter((p): p is string => !!p)
-                : undefined;
+            // Collect existing media paths that are already on the server
+            const existingMediaPaths = media.mediaItems
+                .map(item => item.mediaPath)
+                .filter((p): p is string => !!p);
 
             console.log('[AutoReplyManager] handleSave - files:', files, 'captions:', captions, 'existingMediaPaths:', existingMediaPaths);
 
@@ -244,7 +267,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 captions,
                 type: formData.type || 'simple',
                 menuId: formData.menuId,
-                countries: formData.countries || []
+                countries: formData.countries || [],
+                excludeCountries: formData.excludeCountries || [],
+                allowUnknownCountries: formData.allowUnknownCountries ?? false
             };
 
             if (editingId) {
@@ -261,6 +286,12 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 if (response.success) {
                     setRules([...rules, response.rule]);
                     resetForm();
+                    setTimeout(() => {
+                        const element = document.getElementById(`rule-container-${response.rule.id}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
                 }
             }
         } catch (error: any) {
@@ -329,6 +360,12 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 if (toast) {
                     toast.success(`Regla "${rule.name}" duplicada como "${duplicateName}"`);
                 }
+                setTimeout(() => {
+                    const element = document.getElementById(`rule-container-${response.rule.id}`);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
             }
         } catch (error: any) {
             console.error('Error duplicating rule:', error);
@@ -347,7 +384,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         try {
             setIsLoading(true);
             const updatedRule = { ...rule, isActive: !rule.isActive };
-            const response = await updateAutoReplyRule(id, updatedRule);
+            const existingMediaPaths = (rule as any).mediaPaths ? (rule as any).mediaPaths.filter((p: string) => !!p) : (rule.mediaPath ? [rule.mediaPath] : []);
+            const response = await updateAutoReplyRule(id, updatedRule, [], existingMediaPaths);
             if (response.success) {
                 setRules(rules.map(r => r.id === id ? response.rule : r));
                 if (toast) {
@@ -641,55 +679,72 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)]">
 
                 {/* Left Column: Rules List */}
-                <div className="lg:col-span-1 flex flex-col gap-4 h-full overflow-hidden">
+                <div className={`${showMobileEditor ? 'hidden lg:flex' : 'flex'} lg:col-span-1 flex-col gap-4 h-full overflow-hidden`}>
                     <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold text-theme-main flex items-center gap-2">
+                                <Bot size={20} className="text-primary-600" /> Reglas Activas
+                            </h3>
+                            <button
+                                onClick={() => setShowMobileEditor(true)}
+                                className="lg:hidden bg-primary-600 text-white p-2 rounded-lg"
+                                title="Nueva Regla"
+                            >
+                                <Plus size={20} />
+                            </button>
+                        </div>
                         <div className="mb-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="font-semibold text-theme-main flex items-center gap-2">
-                                    <Bot size={20} className="text-primary-600" /> Reglas Activas
-                                </h3>
-                                <GlobalSessionIndicator enabled={globalSessionsEnabled} />
-                            </div>
+                            <GlobalSessionIndicator enabled={globalSessionsEnabled} />
                             <p className="text-xs text-theme-muted mt-2">
                                 El bot responderá automáticamente cuando detecte estas palabras clave.
                             </p>
                         </div>
 
-                        {/* Export/Import buttons */}
-                        <div className="flex gap-2">
+                        {/* Export/Import/Bulk buttons */}
+                        <div className="flex flex-col gap-2">
                             <button
-                                onClick={handleExportRules}
-                                disabled={rules.length === 0 || isExporting}
-                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                                title="Exportar reglas a archivo JSON"
+                                onClick={() => setShowBulkCreator(true)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-primary-600 to-blue-600 text-white rounded-lg hover:from-primary-700 hover:to-blue-700 transition-all text-sm font-semibold shadow-sm"
+                                title="Crear reglas para múltiples países a la vez"
                             >
-                                {isExporting ? (
-                                    <>
-                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                                        Exportando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Download size={16} />
-                                        Exportar
-                                    </>
-                                )}
+                                <Zap size={16} />
+                                Creación Masiva por País
                             </button>
-                            <button
-                                onClick={() => setShowImportModal(true)}
-                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                title="Importar reglas desde archivo JSON"
-                            >
-                                <Upload size={16} />
-                                Importar
-                            </button>
-                            <input
-                                ref={importInputRef}
-                                type="file"
-                                accept=".json,.zip"
-                                onChange={handleImportFile}
-                                className="hidden"
-                            />
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleExportRules}
+                                    disabled={rules.length === 0 || isExporting}
+                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                                    title="Exportar reglas a archivo JSON"
+                                >
+                                    {isExporting ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                            Exportando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download size={16} />
+                                            Exportar
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => setShowImportModal(true)}
+                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                    title="Importar reglas desde archivo JSON"
+                                >
+                                    <Upload size={16} />
+                                    Importar
+                                </button>
+                                <input
+                                    ref={importInputRef}
+                                    type="file"
+                                    accept=".json,.zip"
+                                    onChange={handleImportFile}
+                                    className="hidden"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -706,62 +761,66 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                 </div>
                             ) : (
                                 rules.map(rule => (
-                                    <div key={rule.id} className={`p-4 rounded-lg border transition-all ${editingId === rule.id ? 'border-primary-500 bg-primary-50' : rule.isActive ? 'border-theme hover:border-primary-200 bg-theme-card' : 'border-theme bg-theme-base opacity-75'}`}>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-theme-main text-sm">{rule.name}</h4>
+                                    <div id={`rule-container-${rule.id}`} key={rule.id} className={`p-4 rounded-lg border transition-all ${editingId === rule.id ? 'border-primary-500 bg-primary-50' : rule.isActive ? 'border-theme hover:border-primary-200 bg-theme-card' : 'border-theme bg-theme-base opacity-75'}`}>
+                                        <div className="flex justify-between items-start gap-3 mb-2">
+                                            <div className="flex items-center gap-2 flex-wrap pt-1">
+                                                <h4 className="font-bold text-theme-main text-sm break-all">{rule.name}</h4>
                                                 {rule.type === 'menu' && (
-                                                    <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                                                    <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full flex items-center gap-1 whitespace-nowrap">
                                                         <MenuIcon size={12} /> Menú
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-col items-end gap-2 shrink-0">
+                                                {/* Primera fila: Toggle Activar/Desactivar */}
                                                 <button
                                                     onClick={() => toggleStatus(rule.id)}
-                                                    className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${rule.isActive
+                                                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${rule.isActive
                                                         ? "text-primary-600 hover:bg-primary-50 bg-primary-50"
                                                         : "text-slate-400 hover:bg-slate-100 bg-theme-base"
                                                         }`}
                                                     title={rule.isActive ? "Desactivar regla" : "Activar regla"}
                                                 >
-                                                    {rule.isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                                                    <span className="text-xs font-medium">
+                                                    <span className="text-[11px] font-medium hidden min-[400px]:inline">
                                                         {rule.isActive ? 'Activo' : 'Inactivo'}
                                                     </span>
+                                                    {rule.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                                                 </button>
-                                                <button
-                                                    onClick={() => handleEdit(rule)}
-                                                    className="p-1.5 rounded text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                                                    title="Editar regla"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDuplicate(rule)}
-                                                    className="p-1.5 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-                                                    title="Duplicar regla"
-                                                >
-                                                    <Copy size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(rule.id)}
-                                                    className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                                    title="Eliminar regla"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                {/* Segunda fila: Botonera Editar, Duplicar, Eliminar */}
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => handleEdit(rule)}
+                                                        className="p-1.5 rounded text-blue-500 hover:text-blue-700 hover:bg-blue-50 shadow-sm border border-transparent hover:border-blue-100 transition-all bg-theme-base"
+                                                        title="Editar regla"
+                                                    >
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDuplicate(rule)}
+                                                        className="p-1.5 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-50 shadow-sm border border-transparent hover:border-slate-200 transition-all bg-theme-base"
+                                                        title="Duplicar regla"
+                                                    >
+                                                        <Copy size={15} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(rule.id)}
+                                                        className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 shadow-sm border border-transparent hover:border-red-100 transition-all bg-theme-base"
+                                                        title="Eliminar regla"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
 
                                         {/* Country Filter Badge */}
                                         <div className="flex flex-wrap gap-1 mb-2">
-                                            {rule.countries && rule.countries.length > 0 ? (
-                                                // Identify unique countries based on the codes stored
+                                            {/* Included Countries */}
+                                            {rule.countries && rule.countries.length > 0 && (
                                                 Array.from(new Set(rule.countries)).map(code => {
                                                     const country = countryList.find(c => c.code === code);
                                                     return (
-                                                        <span key={`${country?.iso || code}-${code}`} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100" title={country?.name}>
+                                                        <span key={`inc-${code}`} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100" title={`Incluido: ${country?.name}`}>
                                                             {country?.iso ? (
                                                                 <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="16" alt={country.name} className="rounded-sm" />
                                                             ) : <Globe size={10} />}
@@ -769,7 +828,25 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                         </span>
                                                     );
                                                 })
-                                            ) : (
+                                            )}
+
+                                            {/* Excluded Countries */}
+                                            {rule.excludeCountries && rule.excludeCountries.length > 0 && (
+                                                Array.from(new Set(rule.excludeCountries)).map(code => {
+                                                    const country = countryList.find(c => c.code === code);
+                                                    return (
+                                                        <span key={`exc-${code}`} className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-red-100" title={`Excluido: ${country?.name}`}>
+                                                            <X size={10} className="text-red-400" />
+                                                            {country?.iso ? (
+                                                                <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="16" alt={country.name} className="rounded-sm" />
+                                                            ) : <Globe size={10} />}
+                                                            {country?.name || code}
+                                                        </span>
+                                                    );
+                                                })
+                                            )}
+
+                                            {(!rule.countries || rule.countries.length === 0) && (!rule.excludeCountries || rule.excludeCountries.length === 0) && (
                                                 <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1 border border-theme">
                                                     <Globe size={10} /> Todos los países
                                                 </span>
@@ -825,12 +902,20 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 </div>
 
                 {/* Right Column: Editor */}
-                <div className="lg:col-span-2">
+                <div className={`${showMobileEditor ? 'block' : 'hidden lg:block'} lg:col-span-2`}>
                     <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-semibold text-theme-main flex items-center gap-2">
-                                {editingId ? <><Edit2 size={18} /> Editar Regla</> : <><Plus size={18} /> Nueva Regla</>}
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setShowMobileEditor(false)}
+                                    className="lg:hidden p-1 hover:bg-theme rounded-lg"
+                                >
+                                    <X size={20} />
+                                </button>
+                                <h3 className="font-semibold text-theme-main flex items-center gap-2">
+                                    {editingId ? <><Edit2 size={18} /> Editar Regla</> : <><Plus size={18} /> Nueva Regla</>}
+                                </h3>
+                            </div>
                             {editingId && (
                                 <button onClick={resetForm} className="text-xs text-theme-muted flex items-center gap-1 hover:text-red-500">
                                     <X size={14} /> Cancelar Edición
@@ -940,132 +1025,190 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                 >
                                     <span className="flex items-center gap-2">
                                         <Globe size={16} className="text-primary-600" />
-                                        Filtro por País (opcional)
+                                        Filtros Geográficos (opcional)
                                     </span>
                                     {showCountrySelector ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                 </button>
 
                                 {showCountrySelector && (
-                                    <div className="mt-3 space-y-2">
-                                        <div className="relative mb-3">
+                                    <div className="mt-3 space-y-4">
+                                        {/* Tabs */}
+                                        <div className="flex bg-theme-card p-1 rounded-lg border border-theme">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCountryTab('include')}
+                                                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${countryTab === 'include'
+                                                    ? 'bg-primary-600 text-white shadow-sm'
+                                                    : 'text-theme-muted hover:text-theme-main'
+                                                    }`}
+                                            >
+                                                Incluir
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCountryTab('exclude')}
+                                                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${countryTab === 'exclude'
+                                                    ? 'bg-red-600 text-white shadow-sm'
+                                                    : 'text-theme-muted hover:text-theme-main'
+                                                    }`}
+                                            >
+                                                Excluir
+                                            </button>
+                                        </div>
+
+                                        <div className="relative">
                                             <input
                                                 type="text"
                                                 placeholder="Buscar país o prefijo..."
-                                                className="w-full bg-theme-card border border-theme rounded-md py-2 px-3 pl-9 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 transition-all"
+                                                className={`w-full bg-theme-card border border-theme rounded-md py-2 px-3 pl-9 text-sm focus:outline-none focus:ring-1 transition-all ${countryTab === 'include' ? 'focus:ring-primary-500' : 'focus:ring-red-500'
+                                                    }`}
                                                 value={countrySearch}
                                                 onChange={(e) => setCountrySearch(e.target.value)}
                                             />
                                             <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
                                         </div>
-                                        <div className="flex items-center justify-between px-1 mb-2">
-                                            <p className="text-xs text-theme-muted">
-                                                Selecciona los países para los cuales esta regla debe activarse.
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const filteredList = countryList.filter(country =>
-                                                        country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                                                        country.code.includes(countrySearch.replace('+', ''))
-                                                    );
-                                                    const filteredCodes = filteredList.map(c => c.code);
-                                                    const currentCountries = formData.countries || [];
 
-                                                    // Determine if all filtered are already selected
-                                                    const allSelected = filteredCodes.every(code => currentCountries.includes(code));
-
-                                                    if (allSelected) {
-                                                        // Deselect all that are in the filtered list
-                                                        setFormData({ ...formData, countries: currentCountries.filter(code => !filteredCodes.includes(code)) });
-                                                    } else {
-                                                        // Select all from filtered list (merge with current)
-                                                        setFormData({ ...formData, countries: Array.from(new Set([...currentCountries, ...filteredCodes])) });
-                                                    }
-                                                }}
-                                                className="text-[10px] font-medium text-primary-600 hover:text-primary-700 hover:underline"
-                                            >
-                                                {(() => {
-                                                    const filteredCodes = countryList.filter(country =>
-                                                        country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                                                        country.code.includes(countrySearch.replace('+', ''))
-                                                    ).map(c => c.code);
-                                                    const currentCountries = formData.countries || [];
-                                                    return filteredCodes.every(code => currentCountries.includes(code)) ? 'Desmarcar todo' : 'Marcar todo';
-                                                })()}
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
-                                            {countryList
-                                                .filter(country =>
-                                                    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                                                    country.code.includes(countrySearch.replace('+', ''))
-                                                )
-                                                .map(country => (
-                                                    <label key={`${country.iso}-${country.code}`} className="flex items-center gap-2 p-2 rounded hover:bg-theme-card cursor-pointer border border-transparent hover:border-theme transition-colors">
-                                                        <input
-                                                            type="checkbox"
-                                                            className="rounded text-primary-600"
-                                                            checked={(formData.countries || []).includes(country.code)}
-                                                            onChange={(e) => {
-                                                                const currentCountries = formData.countries || [];
-                                                                if (e.target.checked) {
-                                                                    setFormData({ ...formData, countries: [...currentCountries, country.code] });
-                                                                } else {
-                                                                    setFormData({ ...formData, countries: currentCountries.filter(c => c !== country.code) });
-                                                                }
-                                                            }}
-                                                        />
-                                                        <span className="text-xs flex items-center gap-2">
-                                                            {country.iso && (
-                                                                <img
-                                                                    src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`}
-                                                                    width="18"
-                                                                    alt={country.name}
-                                                                    className="rounded-sm shadow-sm"
-                                                                />
-                                                            )}
-                                                            <span className="truncate">{country.name} (+{country.code})</span>
-                                                        </span>
-                                                    </label>
-                                                ))}
-                                        </div>
-                                        {formData.countries && formData.countries.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 mt-2">
-                                                {formData.countries.map(code => {
-                                                    const country = countryList.find(c => c.code === code);
-                                                    return (
-                                                        <span key={`${country?.iso || code}-${code}`} className="bg-primary-50 text-primary-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-primary-200">
-                                                            {country?.iso && (
-                                                                <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="14" alt={country?.name} className="rounded-xs" />
-                                                            )}
-                                                            {country?.name}
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    // Remove all instances of this code (or just one? if they are different countries with same code)
-                                                                    // Actually, since we want to support multiple countries with same code, we should probably store ISOs.
-                                                                    // But the filter logic uses codes. 
-                                                                    // Let's just filter the first one we find or all.
-                                                                    setFormData({ ...formData, countries: formData.countries?.filter(c => c !== code) });
-                                                                }}
-                                                                className="hover:text-primary-900"
-                                                            >
-                                                                <X size={10} />
-                                                            </button>
-                                                        </span>
-                                                    );
-                                                })}
+                                        <div>
+                                            <div className="flex items-center justify-between px-1 mb-2">
+                                                <p className="text-[10px] text-theme-muted">
+                                                    {countryTab === 'include'
+                                                        ? 'Selecciona los países para los cuales esta regla DEBE activarse.'
+                                                        : 'Selecciona los países a los que NO se les debe responder.'}
+                                                </p>
                                                 <button
-                                                    onClick={(e) => { e.preventDefault(); setFormData({ ...formData, countries: [] }); }}
-                                                    className="text-[10px] text-red-500 hover:text-red-700 font-medium ml-1"
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const field = countryTab === 'include' ? 'countries' : 'excludeCountries';
+                                                        const filteredList = countryList.filter(country =>
+                                                            country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                            country.code.includes(countrySearch.replace('+', ''))
+                                                        );
+                                                        const filteredCodes = filteredList.map(c => c.code);
+                                                        const currentValues = formData[field] || [];
+                                                        const allSelected = filteredCodes.every(code => currentValues.includes(code));
+
+                                                        if (allSelected) {
+                                                            setFormData({ ...formData, [field]: currentValues.filter(code => !filteredCodes.includes(code)) });
+                                                        } else {
+                                                            setFormData({ ...formData, [field]: Array.from(new Set([...currentValues, ...filteredCodes])) });
+                                                        }
+                                                    }}
+                                                    className={`text-[10px] font-medium hover:underline ${countryTab === 'include' ? 'text-primary-600' : 'text-red-600'
+                                                        }`}
                                                 >
-                                                    Limpiar todos
+                                                    {(() => {
+                                                        const field = countryTab === 'include' ? 'countries' : 'excludeCountries';
+                                                        const filteredCodes = countryList.filter(country =>
+                                                            country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                            country.code.includes(countrySearch.replace('+', ''))
+                                                        ).map(c => c.code);
+                                                        const currentValues = formData[field] || [];
+                                                        return filteredCodes.every(code => currentValues.includes(code)) ? 'Desmarcar todo' : 'Marcar todo';
+                                                    })()}
                                                 </button>
                                             </div>
-                                        )}
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border border-theme rounded-md bg-theme-card/30">
+                                                {countryList
+                                                    .filter(country =>
+                                                        country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                        country.code.includes(countrySearch.replace('+', ''))
+                                                    )
+                                                    .map(country => {
+                                                        const field = countryTab === 'include' ? 'countries' : 'excludeCountries';
+                                                        const isChecked = (formData[field] || []).includes(country.code);
+                                                        return (
+                                                            <label
+                                                                key={`${countryTab}-${country.iso}-${country.code}`}
+                                                                className={`flex items-center gap-2 p-2 rounded cursor-pointer border border-transparent transition-colors ${isChecked
+                                                                    ? (countryTab === 'include' ? 'bg-primary-50/50 border-primary-200' : 'bg-red-50/50 border-red-200')
+                                                                    : 'hover:bg-theme-card'
+                                                                    }`}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className={`rounded ${countryTab === 'include' ? 'text-primary-600' : 'text-red-600'}`}
+                                                                    checked={isChecked}
+                                                                    onChange={(e) => {
+                                                                        const currentValues = formData[field] || [];
+                                                                        if (e.target.checked) {
+                                                                            setFormData({ ...formData, [field]: [...currentValues, country.code] });
+                                                                        } else {
+                                                                            setFormData({ ...formData, [field]: currentValues.filter(c => c !== country.code) });
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <span className="text-[10px] flex items-center gap-2">
+                                                                    {country.iso && (
+                                                                        <img
+                                                                            src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`}
+                                                                            width="16"
+                                                                            alt={country.name}
+                                                                            className="rounded-sm shadow-sm"
+                                                                        />
+                                                                    )}
+                                                                    <span className="truncate">{country.name} (+{country.code})</span>
+                                                                </span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                            </div>
+                                        </div>
+
+                                        {/* Selected summary for both tabs */}
+                                        <div className="space-y-2 pt-2 border-t border-theme">
+                                            {/* Included summary */}
+                                            {formData.countries && formData.countries.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 items-center">
+                                                    <span className="text-[10px] font-semibold text-primary-600 mr-1">Incluidos:</span>
+                                                    {formData.countries.map(code => {
+                                                        const country = countryList.find(c => c.code === code);
+                                                        return (
+                                                            <span key={`inc-${code}`} className="bg-primary-50 text-primary-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-primary-100">
+                                                                {country?.iso && <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="12" alt="" className="rounded-xs" />}
+                                                                {code}
+                                                                <button onClick={(e) => { e.preventDefault(); setFormData({ ...formData, countries: formData.countries?.filter(c => c !== code) }); }} className="hover:text-primary-900"><X size={8} /></button>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {/* Excluded summary */}
+                                            {formData.excludeCountries && formData.excludeCountries.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 items-center">
+                                                    <span className="text-[10px] font-semibold text-red-600 mr-1">Excluidos:</span>
+                                                    {formData.excludeCountries.map(code => {
+                                                        const country = countryList.find(c => c.code === code);
+                                                        return (
+                                                            <span key={`exc-${code}`} className="bg-red-50 text-red-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-red-100">
+                                                                {country?.iso && <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="12" alt="" className="rounded-xs" />}
+                                                                {code}
+                                                                <button onClick={(e) => { e.preventDefault(); setFormData({ ...formData, excludeCountries: formData.excludeCountries?.filter(c => c !== code) }); }} className="hover:text-red-900"><X size={8} /></button>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-2"> {/* Removed extra border-t as previous block has it */}
+                                            <label className="flex items-center gap-2 cursor-pointer text-xs group">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.allowUnknownCountries || false}
+                                                    onChange={(e) => setFormData({ ...formData, allowUnknownCountries: e.target.checked })}
+                                                    className="h-3 w-3 text-primary-600 rounded border-theme focus:ring-primary-500"
+                                                />
+                                                <span className="text-theme-muted group-hover:text-theme-main transition-colors">
+                                                    Permitir si el país no es detectable (LID desconocido)
+                                                </span>
+                                            </label>
+                                        </div>
                                     </div>
                                 )}
                             </div>
+
+
 
                             <div>
                                 <label className="block text-sm font-medium text-theme-main mb-1">Palabras Clave (Triggers)</label>
@@ -1131,7 +1274,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                         />
                                         <textarea
                                             ref={messageTextareaRef}
-                                            className={`flex-1 w-full p-4 border rounded-lg resize-none mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-sans ${formErrors.response ? 'border-red-300' : 'border-theme'
+                                            className={`w-full min-h-[100px] max-h-[450px] p-4 border rounded-lg resize-none overflow-y-auto mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-sans ${formErrors.response ? 'border-red-300' : 'border-theme'
                                                 }`}
                                             placeholder="Escribe la respuesta automática aquí... (opcional si adjuntas multimedia)"
                                             value={formData.response}
@@ -1191,10 +1334,10 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             {/* Delete Confirmation Modal */}
-            <ConfirmModal
+            < ConfirmModal
                 isOpen={showDeleteModal}
                 onClose={() => {
                     setShowDeleteModal(false);
@@ -1216,6 +1359,24 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 description="Selecciona un archivo ZIP o JSON con reglas"
                 acceptedFormats=".json,.zip"
             />
+
+            <BulkRuleCreator
+                                isOpen={showBulkCreator}
+                                onClose={() => setShowBulkCreator(false)}
+                                onRulesCreated={(newRules) => {
+                                    setRules([...rules, ...newRules]);
+                                    if (newRules.length > 0) {
+                                        setTimeout(() => {
+                                            const firstNewRule = newRules[0];
+                                            const element = document.getElementById(`rule-container-${firstNewRule.id}`);
+                                            if (element) {
+                                                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            }
+                                        }, 100);
+                                    }
+                                }}
+                                toast={toast}
+                            />
         </>
     );
 };

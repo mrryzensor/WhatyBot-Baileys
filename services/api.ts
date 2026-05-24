@@ -418,7 +418,8 @@ export const sendMediaMessage = async (
   message: string,
   files: File[],
   captions?: string[],
-  scheduledAt?: Date
+  scheduledAt?: Date,
+  existingMediaPaths?: string[]
 ) => {
   const formData = new FormData();
   formData.append('to', to);
@@ -432,6 +433,10 @@ export const sendMediaMessage = async (
   // Enviar captions como array JSON (opcional)
   if (captions && captions.length > 0) {
     formData.append('captions', JSON.stringify(captions));
+  }
+
+  if (existingMediaPaths && existingMediaPaths.length > 0) {
+    formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
   }
 
   if (scheduledAt) {
@@ -500,8 +505,8 @@ export const getScheduledJobs = async () => {
   return response.data;
 };
 
-export const cancelScheduledJob = async (jobId: string) => {
-  const response = await api.delete(`/messages/scheduled/${jobId}`);
+export const cancelScheduledJob = async (jobId: string, keepMedia: boolean = false) => {
+  const response = await api.delete(`/messages/scheduled/${jobId}${keepMedia ? '?keepMedia=true' : ''}`);
   return response.data;
 };
 
@@ -556,7 +561,8 @@ export const scheduleGroupMessages = async (
   delayMinutes?: number,
   scheduledAt?: Date,
   files?: File[],
-  captions?: string[]
+  captions?: string[],
+  existingMediaPaths?: string[]
 ) => {
   const formData = new FormData();
   formData.append('groupIds', JSON.stringify(groupIds));
@@ -575,6 +581,10 @@ export const scheduleGroupMessages = async (
   }
   if (captions && captions.length > 0) {
     formData.append('captions', JSON.stringify(captions));
+  }
+
+  if (existingMediaPaths && existingMediaPaths.length > 0) {
+    formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
   }
 
   const response = await api.post('/groups/schedule', formData, {
@@ -625,7 +635,8 @@ export const scheduleBulkMessages = async (
   delayMinutes?: number,
   scheduledAt?: Date,
   files?: File[],
-  captions?: string[]
+  captions?: string[],
+  existingMediaPaths?: string[]
 ) => {
   const formData = new FormData();
   formData.append('contacts', JSON.stringify(contacts));
@@ -657,6 +668,10 @@ export const scheduleBulkMessages = async (
 
   if (captions && captions.length > 0) {
     formData.append('captions', JSON.stringify(captions)); // Captions for media
+  }
+
+  if (existingMediaPaths && existingMediaPaths.length > 0) {
+    formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
   }
 
   // Use /send-bulk endpoint which handles both immediate and scheduled messages
@@ -704,6 +719,12 @@ export const createAutoReplyRule = async (rule: any, files?: File[], captions?: 
   if (rule.countries && Array.isArray(rule.countries)) {
     formData.append('countries', JSON.stringify(rule.countries));
   }
+  if (rule.excludeCountries && Array.isArray(rule.excludeCountries)) {
+    formData.append('excludeCountries', JSON.stringify(rule.excludeCountries));
+  }
+  if (rule.allowUnknownCountries !== undefined) {
+    formData.append('allowUnknownCountries', rule.allowUnknownCountries.toString());
+  }
   if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
     formData.append('mediaPaths', JSON.stringify(rule.mediaPaths));
   }
@@ -739,6 +760,12 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   if (rule.countries && Array.isArray(rule.countries)) {
     formData.append('countries', JSON.stringify(rule.countries));
   }
+  if (rule.excludeCountries && Array.isArray(rule.excludeCountries)) {
+    formData.append('excludeCountries', JSON.stringify(rule.excludeCountries));
+  }
+  if (rule.allowUnknownCountries !== undefined) {
+    formData.append('allowUnknownCountries', rule.allowUnknownCountries.toString());
+  }
   if (files && files.length > 0) {
     files.forEach((file) => {
       formData.append('media', file);
@@ -747,8 +774,8 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   if (rule.captions && Array.isArray(rule.captions) && rule.captions.length > 0) {
     formData.append('captions', JSON.stringify(rule.captions));
   }
-  // If no new files but we have existing mediaPaths, preserve them (como JSON)
-  if ((!files || files.length === 0) && existingMediaPaths && existingMediaPaths.length > 0) {
+  // Send existing media paths
+  if (existingMediaPaths !== undefined) {
     formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
   }
 

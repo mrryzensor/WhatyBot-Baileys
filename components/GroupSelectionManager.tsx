@@ -87,11 +87,8 @@ export const GroupSelectionManager: React.FC<GroupSelectionManagerProps> = ({
         
         setSavedSelections(validSelections);
 
-        // Show warning if some selections were filtered out
-        const filteredCount = response.selections.length - validSelections.length;
-        if (filteredCount > 0) {
-          toast?.warning(`${filteredCount} selección(es) fueron omitidas porque contenían grupos que ya no existen`);
-        }
+        // We don't show a warning here anymore to prevent annoying popups on load
+        // The selections are just silently filtered to valid groups
       }
     } catch (error: any) {
       console.error('Error loading group selections:', error);

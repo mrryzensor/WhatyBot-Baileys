@@ -9,13 +9,7 @@ import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion, Disconn
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const resolveSessionDir = () => {
-  const envDir = process.env.SESSION_DIR;
-  if (envDir && envDir.trim()) {
-    return path.resolve(envDir.trim());
-  }
-  return path.join(__dirname, '.baileys_auth');
-};
+import { DATA_DIR, UPLOAD_DIR, SESSION_DIR } from './utils/paths.js';
 
 // Helper for display formatting
 const formatTarget = (jid) => {
@@ -23,11 +17,21 @@ const formatTarget = (jid) => {
   return jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
 };
 
+// Normalizes text to strip diacritics/accents, lowercase, and trim for robust keyword matching
+const normalizeText = (str) => {
+  if (!str) return '';
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+};
+
 class WhatsAppClient extends EventEmitter {
   constructor(io, authDir = null, sessionId = null) {
     super();
     this.io = io;
-    this.authDir = authDir || resolveSessionDir();
+    this.authDir = authDir || SESSION_DIR;
     this.sessionId = sessionId;
     this.client = null;
     this.sock = null;
@@ -60,11 +64,13 @@ class WhatsAppClient extends EventEmitter {
     this.loadUserSessions();
     this.loadConfig();
     this.loadGlobalSessionsConfig();
+    this._saveContactsTimeout = null;
+    this.loadContactsCache();
   }
 
   loadGlobalSessionsConfig() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       const configPath = path.join(dataDir, 'globalSessionsConfig.json');
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -160,7 +166,7 @@ class WhatsAppClient extends EventEmitter {
 
   async checkAndAutoInitialize() {
     try {
-      const sessionPath = path.join(__dirname, '.baileys_auth');
+      const sessionPath = SESSION_DIR;
       if (fs.existsSync(sessionPath)) {
         const files = fs.readdirSync(sessionPath);
         if (files.length > 0) {
@@ -182,7 +188,7 @@ class WhatsAppClient extends EventEmitter {
 
   loadAutoReplyRules() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       // Use session-specific file if sessionId is present, otherwise use default
       const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
       const rulesPath = path.join(dataDir, fileName);
@@ -256,7 +262,7 @@ class WhatsAppClient extends EventEmitter {
 
   saveAutoReplyRules() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       const fileName = this.sessionId ? `autoReplyRules_${this.sessionId}.json` : 'autoReplyRules.json';
       const rulesPath = path.join(dataDir, fileName);
 
@@ -274,7 +280,7 @@ class WhatsAppClient extends EventEmitter {
   // Interactive Menus Management
   loadInteractiveMenus() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
       const menusPath = path.join(dataDir, fileName);
 
@@ -311,7 +317,7 @@ class WhatsAppClient extends EventEmitter {
 
   saveInteractiveMenus() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       const fileName = this.sessionId ? `interactiveMenus_${this.sessionId}.json` : 'interactiveMenus.json';
       const menusPath = path.join(dataDir, fileName);
 
@@ -325,10 +331,54 @@ class WhatsAppClient extends EventEmitter {
     }
   }
 
+  // Contacts Cache Management (Persistence for LID resolution)
+  loadContactsCache() {
+    try {
+      const dataDir = DATA_DIR;
+      const fileName = this.sessionId ? `contactsCache_${this.sessionId}.json` : 'contactsCache.json';
+      const cachePath = path.join(dataDir, fileName);
+      console.log(`[WhatsApp] Loading contacts cache from: ${cachePath}`);
+      if (fs.existsSync(cachePath)) {
+        const rawData = fs.readFileSync(cachePath, 'utf8');
+        if (rawData && rawData.trim()) {
+          this.contactsCache = JSON.parse(rawData);
+          console.log(`[WhatsApp] Loaded ${Object.keys(this.contactsCache).length} contacts for LID resolution`);
+        } else {
+          console.log('[WhatsApp] Contacts cache file is empty');
+        }
+      } else {
+        console.log('[WhatsApp] No contacts cache file found');
+      }
+    } catch (error) {
+      console.error('[WhatsApp] Error loading contacts cache:', error);
+    }
+  }
+
+  saveContactsCache() {
+    if (this._saveContactsTimeout) clearTimeout(this._saveContactsTimeout);
+
+    this._saveContactsTimeout = setTimeout(() => {
+      try {
+        const dataDir = DATA_DIR;
+        const fileName = this.sessionId ? `contactsCache_${this.sessionId}.json` : 'contactsCache.json';
+        const cachePath = path.join(dataDir, fileName);
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+        // Safety check: ensure contactsCache is not empty before writing if it was loaded
+        if (this.contactsCache && Object.keys(this.contactsCache).length > 0) {
+          fs.writeFileSync(cachePath, JSON.stringify(this.contactsCache, null, 2));
+          // console.log(`[WhatsApp] Saved ${Object.keys(this.contactsCache).length} contacts cache`);
+        }
+      } catch (error) {
+        console.error('[WhatsApp] Error saving contacts cache:', error);
+      }
+    }, 30000); // 30 seconds debounce to prevent restart loops in dev
+  }
+
   // User Sessions Management
   loadUserSessions() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       const sessionsPath = path.join(dataDir, 'userSessions.json');
       if (fs.existsSync(sessionsPath)) {
         const sessionsArray = JSON.parse(fs.readFileSync(sessionsPath, 'utf8'));
@@ -348,7 +398,7 @@ class WhatsAppClient extends EventEmitter {
 
   saveUserSessions() {
     try {
-      const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+      const dataDir = DATA_DIR;
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
@@ -440,10 +490,14 @@ class WhatsAppClient extends EventEmitter {
 
       // Find matching option
       const matchedOption = currentMenu.options.find(option =>
-        option.triggers.some(trigger =>
-          messageText.toLowerCase().trim() === trigger.toLowerCase().trim() ||
-          messageText.toLowerCase().includes(trigger.toLowerCase())
-        )
+        option.triggers.some(trigger => {
+          const triggerNormalized = normalizeText(trigger);
+          const messageTextNormalized = normalizeText(messageText);
+          return (
+            messageTextNormalized === triggerNormalized ||
+            messageTextNormalized.includes(triggerNormalized)
+          );
+        })
       );
 
       if (!matchedOption) {
@@ -734,6 +788,40 @@ class WhatsAppClient extends EventEmitter {
       });
       this.client = this.sock;
       this.sock.ev.on('creds.update', saveCreds);
+
+      // Listen for contact updates to map LIDs (privacy IDs) to real JIDs (phone numbers)
+      this.sock.ev.on('contacts.upsert', (contacts) => {
+        let changed = false;
+        for (const contact of contacts) {
+          if (contact.id) {
+            this.contactsCache[contact.id] = { ...this.contactsCache[contact.id], ...contact };
+            if (contact.lid) {
+              this.contactsCache[contact.lid] = this.contactsCache[contact.id];
+            }
+            changed = true;
+          }
+        }
+        if (changed) {
+          // Debounce save if needed, but for now just save
+          this.saveContactsCache();
+        }
+      });
+
+      this.sock.ev.on('contacts.update', (updates) => {
+        let changed = false;
+        for (const update of updates) {
+          if (update.id) {
+            this.contactsCache[update.id] = { ...this.contactsCache[update.id], ...update };
+            if (update.lid) {
+              this.contactsCache[update.lid] = this.contactsCache[update.id];
+            }
+            changed = true;
+          }
+        }
+        if (changed) {
+          this.saveContactsCache();
+        }
+      });
       this.sock.ev.on('connection.update', async (update) => {
         this.emit('connection.update', update);
         const { connection, qr, lastDisconnect } = update;
@@ -799,6 +887,12 @@ class WhatsAppClient extends EventEmitter {
           } catch (error) {
             console.error('Error validating phone number usage:', error);
           }
+
+
+          // Schedule background contact sync to ensure LIDs are resolved if cache is empty or stale
+          setTimeout(() => {
+            this.syncContactsInBackground();
+          }, 10000); // 10 seconds delay to allow initial messages/events to settle
 
           this.io?.emit('authenticated', { sessionId: this.sessionId, phone: phoneNumber });
           this.io?.emit('ready', { sessionId: this.sessionId, status: 'connected', phone: phoneNumber });
@@ -883,11 +977,48 @@ class WhatsAppClient extends EventEmitter {
             return;
           }
 
-          const from = remoteJid;
+          let from = remoteJid;
+          // Resolve LID to real JID if possible
+          if (from.includes('@lid')) {
+            const cleanLid = from.split(':')[0]; // Remove device specific suffix if present
+            let cachedContact = this.contactsCache[cleanLid];
+
+            // Debugging: Log what we found
+            // console.log(`[WhatsApp] Checking LID cache for ${cleanLid}:`, cachedContact ? 'Found' : 'Not Found');
+
+            // If not found, try to force a sync by fetching profile pic
+            if (!cachedContact || !cachedContact.id || !cachedContact.id.endsWith('@s.whatsapp.net')) {
+              console.log(`[WhatsApp] ⚠️ LID desconocido ${from}, intentando sincronizar contacto...`);
+              try {
+                // Trigger metadata update
+                await this.sock.profilePictureUrl(cleanLid, 'image').catch(() => null);
+                // Small delay to allow events to process
+                await new Promise(r => setTimeout(r, 2000));
+                // Check cache again
+                cachedContact = this.contactsCache[cleanLid];
+              } catch (e) {
+                console.log('[WhatsApp] Error intentando sincronizar LID:', e);
+              }
+            }
+
+            if (cachedContact && cachedContact.id && cachedContact.id.endsWith('@s.whatsapp.net')) {
+              console.log(`[WhatsApp] 🔍 Resolving LID: ${cleanLid} -> ${cachedContact.id}`);
+              from = cachedContact.id;
+              // Fix potential double suffix corruption from cache
+              if (from.endsWith('@s.whatsapp.net@s.whatsapp.net')) {
+                from = from.replace('@s.whatsapp.net@s.whatsapp.net', '@s.whatsapp.net');
+                console.log(`[WhatsApp] 🛠️ Fixed corrupted JID: ${from}`);
+              }
+            } else {
+              console.log(`[WhatsApp] ⚠️ No se pudo resolver LID: ${from} a un número de teléfono. Las reglas de país podrían fallar.`);
+            }
+          }
+
           const body = (this.getTextFromMessage(m) || '').toLowerCase();
           const activeUserInfo = this.activeUserId ? `[Usuario activo: ${this.activeUserId}]` : '[Usuario activo: NINGUNO]';
           console.log(`${activeUserInfo} Message received:`, {
             from,
+            originalJid: remoteJid,
             body: body.substring(0, 100) || '(sin texto)',
             isGroup,
             fromMe
@@ -963,27 +1094,53 @@ class WhatsAppClient extends EventEmitter {
           for (const rule of this.autoReplyRules) {
             if (!rule.isActive || rule.type !== 'menu') continue;
 
+            const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
             const phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
 
             // Country filter check
             if (rule.countries && rule.countries.length > 0) {
-              const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
-              if (!matchedCountry) {
-                console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
-                continue;
+              if (isUnresolvedLid) {
+                // If unresolvable LID, check user preference
+                if (!rule.allowUnknownCountries) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country unknown (LID) and allowUnknownCountries=false`);
+                  continue;
+                }
+              } else {
+                const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
+                if (!matchedCountry) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
+                  continue;
+                }
               }
             }
 
-            const messageText = body.trim();
+            // Exclude country check
+            if (rule.excludeCountries && rule.excludeCountries.length > 0) {
+              if (isUnresolvedLid) {
+                // If unresolvable, and user didn't explicitly allow unknowns, block it (safety default)
+                if (!rule.allowUnknownCountries) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country unknown (LID) and allowUnknownCountries=false (blacklist)`);
+                  continue;
+                }
+              } else {
+                const matchedExcluded = rule.excludeCountries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
+                if (matchedExcluded) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country is excluded (${phoneNumberFrom} matches [${rule.excludeCountries.join(',')}])`);
+                  continue;
+                }
+              }
+            }
+
+            const messageTextNormalized = normalizeText(body);
             let shouldReply = false;
 
             if (rule.matchType === 'exact') {
-              shouldReply = rule.keywords.some(keyword => messageText === keyword.toLowerCase().trim());
+              shouldReply = rule.keywords.some(keyword => messageTextNormalized === normalizeText(keyword));
             } else if (rule.matchType === 'contains') {
-              shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase().trim()));
+              shouldReply = rule.keywords.some(keyword => messageTextNormalized.includes(normalizeText(keyword)));
             }
 
-            console.log(`[WhatsApp] Rule [${rule.name}] match result: ${shouldReply} (Keywords: ${rule.keywords.join(',')}, Input: ${messageText})`);
+            console.log(`[WhatsApp] Rule [${rule.name}] match result: ${shouldReply} (Keywords: ${rule.keywords.join(',')}, Input: ${messageTextNormalized})`);
 
             if (shouldReply && rule.menuId) {
               // Start menu session
@@ -1035,22 +1192,56 @@ class WhatsAppClient extends EventEmitter {
           for (const rule of this.autoReplyRules) {
             if (!rule.isActive || rule.type === 'menu') continue;
 
-            const phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+            let phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+            // Si el número tiene el formato indexado (ej: 51920...:0), split(':')[0] ya nos deja el número limpio.
+            // Para mayor seguridad, si después de limpiar nos queda algo muy largo o con sufijos, asegurar el formato.
+            const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
 
             // Country filter check
             if (rule.countries && rule.countries.length > 0) {
-              const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
-              if (!matchedCountry) {
-                console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
-                continue;
+              if (isUnresolvedLid) {
+                if (!rule.allowUnknownCountries) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country unknown (LID) and allowUnknownCountries=false`);
+                  continue;
+                }
+              } else {
+                const matchedCountry = rule.countries.some(countryCode => {
+                  const code = countryCode.replace(/\D/g, '');
+                  return phoneNumberFrom.startsWith(code);
+                });
+
+                if (!matchedCountry) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
+                  continue;
+                }
               }
             }
-            const messageText = body;
+
+            // Exclude country check
+            if (rule.excludeCountries && rule.excludeCountries.length > 0) {
+              if (isUnresolvedLid) {
+                if (!rule.allowUnknownCountries) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country unknown (LID) and allowUnknownCountries=false (blacklist)`);
+                  continue;
+                }
+              } else {
+                const matchedExcluded = rule.excludeCountries.some(countryCode => {
+                  const code = countryCode.replace(/\D/g, '');
+                  return phoneNumberFrom.startsWith(code);
+                });
+
+                if (matchedExcluded) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country is excluded (${phoneNumberFrom} matches [${rule.excludeCountries.join(',')}])`);
+                  continue;
+                }
+              }
+            }
+            const messageTextNormalized = normalizeText(body);
             let shouldReply = false;
             if (rule.matchType === 'exact') {
-              shouldReply = rule.keywords.some(keyword => messageText === keyword.toLowerCase());
+              shouldReply = rule.keywords.some(keyword => messageTextNormalized === normalizeText(keyword));
             } else if (rule.matchType === 'contains') {
-              shouldReply = rule.keywords.some(keyword => messageText.includes(keyword.toLowerCase()));
+              shouldReply = rule.keywords.some(keyword => messageTextNormalized.includes(normalizeText(keyword)));
             }
             if (shouldReply) {
               // Regular auto-reply (simple type)
@@ -1233,7 +1424,12 @@ class WhatsAppClient extends EventEmitter {
     if (!this.sock) throw new Error('WhatsApp client no está inicializado');
     if (!this.isReady) throw new Error('WhatsApp client no está listo');
     try {
-      const jid = this.resolveJid(to);
+      let jid = this.resolveJid(to);
+      // Sanitize corrupted JID if present
+      if (jid.endsWith('@s.whatsapp.net@s.whatsapp.net')) {
+        jid = jid.replace('@s.whatsapp.net@s.whatsapp.net', '@s.whatsapp.net');
+        console.log(`[WhatsApp] 🛠️ Fixed corrupted JID in sendMessage: ${jid}`);
+      }
 
       // Normalizar a arrays para soportar múltiples adjuntos manteniendo compatibilidad con string
       const mediaPaths = mediaPath
@@ -1273,28 +1469,20 @@ class WhatsAppClient extends EventEmitter {
           normalizedPath = normalizedPath.replace('uploads/uploads/', 'uploads/');
         }
 
-        // Convert relative paths to absolute paths
-        // Assuming structure: /app/server (CWD) -> /app/uploads or /app/server/uploads
-        // Railway structure typically sets CWD to /app/server due to "cd server && npm install"
+        // Resolve absolute path
         let absolutePath;
-        if (path.isAbsolute(normalizedPath)) {
+        if (path.isAbsolute(normalizedPath) && fs.existsSync(normalizedPath)) {
           absolutePath = normalizedPath;
         } else {
-          // If path starts with uploads/, try to find it in project root
-          if (normalizedPath.startsWith('uploads/')) {
-            // Try relative to current dir first
-            absolutePath = path.join(__dirname, normalizedPath);
-            if (!fs.existsSync(absolutePath)) {
-              // Try one level up (project root)
-              absolutePath = path.join(__dirname, '..', normalizedPath);
-            }
-            if (!fs.existsSync(absolutePath)) {
-              // Try two levels up (in case structure is deeper)
-              absolutePath = path.join(__dirname, '../..', normalizedPath);
-            }
-          } else {
-            // No prefix, assume it is in default uploads folder relative to __dirname
-            absolutePath = path.join(__dirname, 'uploads', normalizedPath);
+          // All media should be in UPLOAD_DIR. normalizedPath is like "uploads/filename" or just "filename"
+          const fileName = path.basename(normalizedPath);
+          absolutePath = path.join(UPLOAD_DIR, fileName);
+
+          // Fallback check if fileName was not enough (e.g. nested uploads)
+          if (!fs.existsSync(absolutePath)) {
+            // If normalizedPath starts with uploads/, try stripping it
+            const stripped = normalizedPath.startsWith('uploads/') ? normalizedPath.replace('uploads/', '') : normalizedPath;
+            absolutePath = path.join(UPLOAD_DIR, stripped);
           }
         }
 
@@ -1671,7 +1859,7 @@ class WhatsAppClient extends EventEmitter {
         console.log(`[getContacts] Found ${cachedContacts.length} contacts in cache`);
 
         cachedContacts.forEach(c => {
-          if (c.id && c.id.endsWith('@s.whatsapp.net')) {
+          if (c && typeof c === 'object' && c.id && c.id.endsWith('@s.whatsapp.net')) {
             const phone = c.id.split('@')[0];
             contactsMap.set(phone, {
               id: c.id,
@@ -1802,10 +1990,28 @@ class WhatsAppClient extends EventEmitter {
       const contacts = contactsWithImages.sort((a, b) => a.phone.localeCompare(b.phone)); // Sort by phone
 
       console.log(`[getContacts] Returning ${contacts.length} unique contacts`);
+      this.saveContactsCache(); // Persist any new identity mappings found
       return contacts;
     } catch (error) {
       console.error('[getContacts] Error:', error);
       throw error;
+    }
+  }
+
+  async syncContactsInBackground() {
+    if (this._isDestroying) return;
+    try {
+      console.log('[WhatsApp] 🔄 Starting background contact sync to update LID cache...');
+      // Reuse getContacts logic which extracts from groups and updates/saves cache
+      // We catch errors to ensuring background process doesn't crash the bot
+      const contacts = await this.getContacts().catch(err => {
+        console.error('[WhatsApp] Background sync failed (getContacts):', err.message);
+        return [];
+      });
+      console.log(`[WhatsApp] ✅ Background sync completed. Cache updated with ${contacts.length} contacts.`);
+      this.saveContactsCache();
+    } catch (error) {
+      console.error('[WhatsApp] Critical error in background sync:', error);
     }
   }
 
@@ -1844,17 +2050,36 @@ class WhatsAppClient extends EventEmitter {
     try {
       const meta = await this.sock.groupMetadata(groupId);
       const participants = meta.participants || [];
-      return participants.map(p => ({
-        id: p.id,
-        phone: (
+      const members = participants.map(p => {
+        const rawPhone = (
           p?.phoneNumber ||
           p?.phone_number ||
           p?.pn ||
           (p.id || '').split('@')[0]
-        ),
-        name: p.name || p.notify || (p.id || '').split('@')[0],
-        isAdmin: !!p.admin
-      }));
+        );
+        // Ensure phone is clean (no @s.whatsapp.net)
+        const phone = rawPhone ? rawPhone.split('@')[0] : '';
+        const contactObj = {
+          id: p.id,
+          phone: phone,
+          name: p.name || p.notify || phone,
+          isAdmin: !!p.admin
+        };
+
+        // Populate cache for LID resolution
+        if (p.id) {
+          this.contactsCache[p.id] = { ...this.contactsCache[p.id], ...contactObj };
+          // If we have a phone number but the ID is a LID, ensure we can resolve it
+          if (p.id.endsWith('@lid') && p.id !== phone + '@s.whatsapp.net' && phone.length > 5) {
+            const realJid = phone + '@s.whatsapp.net';
+            this.contactsCache[p.id].id = realJid; // Force ID to be the real JID for auto-reply
+          }
+        }
+
+        return contactObj;
+      });
+      this.saveContactsCache(); // Persist any new identity mappings found in the group
+      return members;
     } catch (error) {
       throw error;
     }
@@ -1882,6 +2107,7 @@ class WhatsAppClient extends EventEmitter {
 
   async destroy() {
     this._isDestroying = true;
+    this.saveContactsCache(); // Save state before exit
     try {
       if (this.sock) {
         try { this.sock.ws?.close?.(); } catch { }

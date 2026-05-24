@@ -77,6 +77,17 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
     };
   }, [showEmojiPicker, emojiPickerIndex]);
 
+  // Auto-resize captions textareas
+  useEffect(() => {
+    mediaItems.forEach((item, index) => {
+      const el = captionTextareaRefs.current[index];
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+      }
+    });
+  }, [mediaItems]);
+
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -509,11 +520,10 @@ export const MediaUpload: React.FC<MediaUploadProps> = ({
                   value={item.caption}
                   onChange={(e) => updateCaption(index, e.target.value)}
                   placeholder="Añade una descripción para este archivo... Usa *negrita*, _cursiva_, ~tachado~, `código` o {{variables}}"
-                  className="w-full px-2 py-1.5 text-sm border border-theme rounded resize-none h-20 focus:outline-none focus:border-blue-500 font-mono"
-                  maxLength={1024}
+                  className="w-full px-3 py-2 text-sm border border-theme rounded resize-none overflow-y-auto min-h-[80px] max-h-[350px] focus:outline-none focus:border-blue-500 font-mono"
                 />
                 <div className="flex items-center justify-between text-xs text-slate-400 mt-1">
-                  <span>{item.caption.length}/1024</span>
+                  <span>{item.caption.length} caracteres</span>
                   <span className="text-theme-muted">Formatos: *negrita* _cursiva_ ~tachado~ `código`</span>
                 </div>
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { UPLOAD_DIR } from './paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,8 +158,11 @@ export function deleteItemMediaFiles(item) {
     mediaPaths.forEach(mediaPath => {
         if (mediaPath && !mediaPath.startsWith('http')) {
             try {
-                if (fs.existsSync(mediaPath)) {
-                    fs.unlinkSync(mediaPath);
+                const absolutePath = path.isAbsolute(mediaPath)
+                    ? mediaPath
+                    : path.join(UPLOAD_DIR, path.basename(mediaPath));
+                if (fs.existsSync(absolutePath)) {
+                    fs.unlinkSync(absolutePath);
                     result.deleted.push(path.basename(mediaPath));
                     console.log(`[MediaCleanup] Deleted file: ${path.basename(mediaPath)}`);
                 }
@@ -178,7 +182,7 @@ export function deleteItemMediaFiles(item) {
  * @param {string} uploadDir - Directorio de uploads
  * @returns {Object} Resultado de la limpieza
  */
-export function cleanSessionOrphanedFiles(client, uploadDir = './uploads') {
+export function cleanSessionOrphanedFiles(client, uploadDir = UPLOAD_DIR) {
     const menus = client.interactiveMenus || [];
     const rules = client.autoReplyRules || [];
 
@@ -196,7 +200,7 @@ export function cleanSessionOrphanedFiles(client, uploadDir = './uploads') {
  * @param {string} uploadDir - Directorio de uploads
  * @returns {Object} Resultado de la limpieza
  */
-export function cleanAllSessionsOrphanedFiles(sessionManager, uploadDir = './uploads') {
+export function cleanAllSessionsOrphanedFiles(sessionManager, uploadDir = UPLOAD_DIR) {
     const allReferencedFiles = new Set();
 
     // Recopilar archivos referenciados de todas las sesiones

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Phone, AlertCircle } from 'lucide-react';
+import { Send, Phone, AlertCircle, X } from 'lucide-react';
 import { MessageLog, ScheduledMessage } from '../types';
-import { sendMessage, sendMediaMessage } from '../services/api';
+import { sendMessage, sendMediaMessage, cancelScheduledJob, getApiUrl } from '../services/api';
 import { MessagePreview } from './MessagePreview';
 import { MediaUpload } from './MediaUpload';
 import { MessageEditorToolbar } from './MessageEditorToolbar';
@@ -23,6 +23,8 @@ interface SingleSenderProps {
         info: (message: string) => void;
     };
     onNavigate?: (tab: string) => void;
+    messageToEdit?: ScheduledMessage | null;
+    onClearEdit?: () => void;
 }
 
 export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: string }> = ({
@@ -30,7 +32,9 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
     addLog,
     toast,
     onNavigate,
-    defaultCountryCode
+    defaultCountryCode,
+    messageToEdit,
+    onClearEdit
 }) => {
     const [countryCode, setCountryCode] = useState(defaultCountryCode || '');
     const [localNumber, setLocalNumber] = useState('');
@@ -51,6 +55,15 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
     React.useEffect(() => {
         loadUserInfo();
     }, []);
+
+    // Auto-resize message textarea
+    React.useEffect(() => {
+        const textarea = messageTextareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }, [message]);
 
     const loadUserInfo = async () => {
         try {
@@ -75,6 +88,60 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
         const display = `${countryCode || ''}${localNumber ? ` ${localNumber}` : ''}`.trim();
         setPhone(display);
     }, [countryCode, localNumber]);
+
+    useEffect(() => {
+        if (messageToEdit && messageToEdit.type === 'single') {
+            // Don't show '[Archivo multimedia]' placeholder as real message text
+            const realMessage = messageToEdit.message === '[Archivo multimedia]' ? '' : messageToEdit.message;
+            setMessage(realMessage);
+            if (messageToEdit.recipients && messageToEdit.recipients.length > 0) {
+                setCountryCode('');
+                setLocalNumber(messageToEdit.recipients[0]);
+            }
+            if (messageToEdit.scheduledAt) {
+                const d = new Date(messageToEdit.scheduledAt);
+                schedule.updateSchedule('datetime', 0, d);
+                schedule.setScheduledDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+                schedule.setScheduledTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+            }
+
+            if (messageToEdit.mediaPaths && messageToEdit.mediaPaths.length > 0) {
+                const getMediaTypeFromPath = (path: string): 'image' | 'video' | 'document' => {
+                    const ext = path.toLowerCase().split('.').pop() || '';
+                    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image';
+                    if (['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'].includes(ext)) return 'video';
+                    return 'document';
+                };
+
+                const items = messageToEdit.mediaPaths.map((mp: string, index: number) => {
+                    const fileName = mp.split(/[/\\]/).pop() || 'archivo';
+                    const previewUrl = mp.startsWith('http')
+                        ? mp
+                        : `${getApiUrl()}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
+
+                    return {
+                        preview: previewUrl,
+                        caption: (messageToEdit.captions && messageToEdit.captions[index]) || '',
+                        type: getMediaTypeFromPath(mp),
+                        mediaPath: mp,
+                        fileName
+                    };
+                });
+                media.setMediaItems(items as any);
+            } else {
+                media.setMediaItems([]);
+            }
+        }
+    }, [messageToEdit]);
+
+    const handleCancelEdit = () => {
+        setMessage('');
+        setLocalNumber('');
+        media.clearAll();
+        schedule.reset();
+        if (onClearEdit) onClearEdit();
+        toast.info("Edición cancelada");
+    };
 
     const handleSend = async () => {
         if (!countryCode || !localNumber) {
@@ -112,19 +179,21 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                 schedule.scheduleType === 'delay' ? new Date(Date.now() + (schedule.delayMinutes || 0) * 60 * 1000) :
                     undefined;
 
+            const captions = media.mediaItems.map((item) => item.caption || '');
             if (media.mediaItems.length > 0) {
                 // Enviar un solo mensaje con todos los adjuntos seleccionados
                 const files = media.mediaItems
                     .map((item) => item.file)
                     .filter((f): f is File => !!f);
-                const captions = media.mediaItems.map((item) => item.caption || '');
+                const existingMediaPaths = media.mediaItems.map((item) => item.mediaPath).filter((p): p is string => !!p);
 
                 response = await sendMediaMessage(
                     cleanPhone,
                     message,
                     files,
                     captions,
-                    scheduleDate
+                    scheduleDate,
+                    existingMediaPaths
                 );
             } else {
                 response = await sendMessage(cleanPhone, message, scheduleDate);
@@ -140,6 +209,16 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                         content: message || '[Archivo adjunto]'
                     });
                     toast.success('¡Mensaje enviado exitosamente!');
+
+                    if (messageToEdit) {
+                        try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+                        const existing = localStorage.getItem('scheduledMessages');
+                        if (existing) {
+                            const scheduledMessages = JSON.parse(existing).filter((m: any) => m.id !== messageToEdit.id);
+                            localStorage.setItem('scheduledMessages', JSON.stringify(scheduledMessages));
+                        }
+                        if (onClearEdit) onClearEdit();
+                    }
                 } else {
                     // Save scheduled message to localStorage
                     const scheduledMessage: ScheduledMessage = {
@@ -153,12 +232,21 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                         status: 'scheduled',
                         createdAt: new Date(),
                         file: media.mediaItems.length > 0 ? media.mediaItems[0].file : undefined,
-                        variables: []
+                        variables: [],
+                        mediaPaths: response.mediaPaths || media.mediaItems.map((item) => item.mediaPath).filter(Boolean),
+                        captions: response.captions || captions
                     };
 
                     // Load existing scheduled messages
                     const existing = localStorage.getItem('scheduledMessages');
-                    const scheduledMessages = existing ? JSON.parse(existing) : [];
+                    let scheduledMessages = existing ? JSON.parse(existing) : [];
+                    
+                    if (messageToEdit) {
+                        try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+                        scheduledMessages = scheduledMessages.filter((m: any) => m.id !== messageToEdit.id);
+                        if (onClearEdit) onClearEdit();
+                    }
+                    
                     // Convert dates to ISO strings for storage
                     const messageToSave = {
                         ...scheduledMessage,
@@ -297,7 +385,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                             />
                             <textarea
                                 ref={messageTextareaRef}
-                                className="w-full h-32 p-4 border border-theme rounded-lg resize-none focus:ring-2 focus:ring-primary-500 focus:border-transparent mt-2"
+                                className="w-full min-h-[100px] max-h-[500px] p-4 border border-theme rounded-lg resize-none overflow-y-auto focus:ring-2 focus:ring-primary-500 focus:border-transparent mt-2"
                                 placeholder="Escribe tu mensaje aquí..."
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
@@ -317,6 +405,11 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
 
                         {/* Media Upload */}
                         <div>
+                            {messageToEdit && messageToEdit.message === '[Archivo multimedia]' && (!messageToEdit.mediaPaths || messageToEdit.mediaPaths.length === 0) && (
+                                <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                                    ⚠️ Este mensaje tenía archivos adjuntos que no se pueden recuperar automáticamente. Vuelve a adjuntarlos.
+                                </div>
+                            )}
                             <label className="block text-sm font-medium text-theme-main mb-2">
                                 Archivos Adjuntos
                             </label>
@@ -363,7 +456,17 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                                     </>
                                 )}
                             </div>
-                            <button
+                            <div className="flex items-center gap-3">
+                                {messageToEdit && (
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 px-6 py-3 rounded-lg font-bold transition-all"
+                                    >
+                                        <X size={18} />
+                                        Cancelar
+                                    </button>
+                                )}
+                                <button
                                 onClick={handleSend}
                                 disabled={!isConnected || isSending || (!message && media.mediaItems.length === 0) || !phone}
                                 className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-white transition-all ${!isConnected || isSending || (!message && media.mediaItems.length === 0) || !phone
@@ -376,6 +479,11 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                         {schedule.scheduleType === 'now' ? 'Enviando...' : 'Programando...'}
                                     </>
+                                ) : messageToEdit ? (
+                                    <>
+                                        <Send size={18} />
+                                        Guardar Edición
+                                    </>
                                 ) : (
                                     <>
                                         <Send size={18} />
@@ -386,8 +494,8 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                         </div>
                     </div>
                 </div>
-
             </div>
-        </>
-    );
+        </div>
+    </>
+);
 };

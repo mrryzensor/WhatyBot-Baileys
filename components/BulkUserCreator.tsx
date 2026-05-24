@@ -484,7 +484,7 @@ export const BulkUserCreator: React.FC<BulkUserCreatorProps> = ({
                   <textarea
                     ref={pasteTextareaRef}
                     placeholder="usuario1,email1@example.com,gratuito&#10;usuario2,email2@example.com,pro&#10;..."
-                    className="w-full px-3 py-2 border border-theme rounded-lg h-32 font-mono text-sm"
+                    className="w-full px-3 py-2 border border-theme rounded-lg min-h-[100px] max-h-[250px] resize-none overflow-y-auto font-mono text-sm"
                     onPaste={(e) => {
                       const target = e.currentTarget;
                       setTimeout(() => {

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { deleteItemMediaFiles, cleanSessionOrphanedFiles } from '../utils/mediaCleanup.js';
+import { UPLOAD_DIR } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,7 +28,7 @@ const getSessionId = (req) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
+        const uploadDir = UPLOAD_DIR;
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -116,10 +117,10 @@ router.post('/', upload.array('media', 50), (req, res) => {
         menu.updatedAt = new Date().toISOString();
 
         if (files.length > 0) {
-            // Convert absolute paths to relative paths (relative to server directory)
+            // Convert absolute paths to relative paths (relative to UPLOAD_DIR)
             const uploadedPaths = files.map(f => {
-                const relativePath = path.relative(process.cwd(), f.path);
-                return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+                const relativePath = path.relative(UPLOAD_DIR, f.path);
+                return `uploads/${relativePath.replace(/\\/g, '/')}`; // Normalize and prefix with uploads/
             });
             menu.mediaPaths = menu.mediaPaths || [];
             menu.mediaPaths.push(...uploadedPaths);
@@ -199,10 +200,10 @@ router.put('/:id', upload.array('media', 50), (req, res) => {
 
         // Add newly uploaded files to the mediaPaths
         if (files.length > 0) {
-            // Convert absolute paths to relative paths (relative to server directory)
+            // Convert absolute paths to relative paths (relative to UPLOAD_DIR)
             const uploadedPaths = files.map(f => {
-                const relativePath = path.relative(process.cwd(), f.path);
-                return relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+                const relativePath = path.relative(UPLOAD_DIR, f.path);
+                return `uploads/${relativePath.replace(/\\/g, '/')}`; // Normalize and prefix with uploads/
             });
             updatedMenu.mediaPaths = [...updatedMenu.mediaPaths, ...uploadedPaths];
         }
@@ -219,8 +220,7 @@ router.put('/:id', upload.array('media', 50), (req, res) => {
         client.saveInteractiveMenus();
 
         // Limpiar archivos huérfanos después de actualizar
-        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
-        cleanSessionOrphanedFiles(client, uploadDir);
+        cleanSessionOrphanedFiles(client, UPLOAD_DIR);
 
         res.json({ success: true, menu: mergedMenu });
     } catch (error) {
@@ -279,8 +279,7 @@ router.delete('/:id', (req, res) => {
         client.saveInteractiveMenus();
 
         // Limpiar archivos huérfanos (por si acaso)
-        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
-        cleanSessionOrphanedFiles(client, uploadDir);
+        cleanSessionOrphanedFiles(client, UPLOAD_DIR);
 
         res.json({ success: true, message: 'Menu deleted successfully' });
     } catch (error) {
@@ -448,7 +447,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
             if (ext === '.zip') {
                 // Handle ZIP file
                 const unzipper = (await import('unzipper')).default;
-                const uploadDir = process.env.UPLOAD_DIR || './uploads';
+                const uploadDir = UPLOAD_DIR;
                 if (!fs.existsSync(uploadDir)) {
                     fs.mkdirSync(uploadDir, { recursive: true });
                 }
@@ -512,7 +511,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
         let skipped = 0;
         let replaced = 0;
         const errors = [];
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
 
         // Check if we should apply to all sessions
         const applyToAllSessions = req.body.applyToAllSessions === 'true';
@@ -536,7 +535,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
                 menu.mediaPaths = menu.mediaPaths.map(p => {
                     if (p && !p.startsWith('http')) {
                         const fileName = path.basename(p);
-                        return path.join(uploadDir, fileName);
+                        return `uploads/${fileName}`;
                     }
                     return p;
                 });
@@ -549,7 +548,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
                         opt.mediaPaths = opt.mediaPaths.map(p => {
                             if (p && !p.startsWith('http')) {
                                 const fileName = path.basename(p);
-                                return path.join(uploadDir, fileName);
+                                return `uploads/${fileName}`;
                             }
                             return p;
                         });

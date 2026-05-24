@@ -49,6 +49,8 @@ export interface AutoReplyRule {
   type?: 'simple' | 'menu'; // Type of auto-reply
   menuId?: string; // ID of menu if type is 'menu'
   countries?: string[]; // Optional: List of countries to match (based on phone prefix)
+  excludeCountries?: string[]; // Optional: List of countries to NOT match
+  allowUnknownCountries?: boolean; // Allow if country cannot be detected (LID)
 }
 
 // Interactive Menu System
@@ -101,6 +103,8 @@ export interface ScheduledMessage {
   createdAt: Date;
   contactFile?: File;
   variables?: string[];
+  mediaPaths?: string[];
+  captions?: string[];
 }
 
 // Group selection save types

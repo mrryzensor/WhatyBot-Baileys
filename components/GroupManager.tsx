@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, RefreshCw, Send, Search, Save, FolderOpen, Eye, X, UserCheck } from 'lucide-react';
 import { Group, MessageLog, GroupSelection, ScheduledMessage } from '../types';
-import { getGroups, sendGroupMessages, scheduleGroupMessages } from '../services/api';
+import { getGroups, sendGroupMessages, scheduleGroupMessages, cancelScheduledJob, getApiUrl } from '../services/api';
 import { GroupSelectionManager } from './GroupSelectionManager';
 import { ScheduleManager } from './ScheduleManager';
 import { MessagePreview } from './MessagePreview';
@@ -29,9 +29,11 @@ interface GroupManagerProps {
   onNavigate?: (tab: string) => void;
   initialGroups?: Group[];
   onGroupsUpdate?: (groups: Group[]) => void;
+  messageToEdit?: ScheduledMessage | null;
+  onClearEdit?: () => void;
 }
 
-export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog, toast, onNavigate, initialGroups, onGroupsUpdate }) => {
+export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog, toast, onNavigate, initialGroups, onGroupsUpdate, messageToEdit, onClearEdit }) => {
   const [groups, setGroups] = useState<Group[]>(initialGroups || []);
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
@@ -62,6 +64,58 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
     loadUserInfo();
   }, []);
 
+  // Auto-resize message textarea
+  useEffect(() => {
+    const textarea = messageTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [message]);
+
+  useEffect(() => {
+    if (messageToEdit && messageToEdit.type === 'groups') {
+      // Don't show '[Archivo multimedia]' placeholder as real message text
+      const realMessage = messageToEdit.message === '[Archivo multimedia]' ? '' : messageToEdit.message;
+      setMessage(realMessage);
+      if (messageToEdit.recipients) {
+        setSelectedGroups(new Set(messageToEdit.recipients));
+      }
+      if (messageToEdit.scheduledAt) {
+        const d = new Date(messageToEdit.scheduledAt);
+        schedule.updateSchedule('datetime', 0, d);
+        schedule.setScheduledDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        schedule.setScheduledTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+      }
+
+      if (messageToEdit.mediaPaths && messageToEdit.mediaPaths.length > 0) {
+        const getMediaTypeFromPath = (path: string): 'image' | 'video' | 'document' => {
+          const ext = path.toLowerCase().split('.').pop() || '';
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image';
+          if (['mp4', 'avi', 'mov', 'webm', 'mkv', 'flv', 'wmv'].includes(ext)) return 'video';
+          return 'document';
+        };
+
+        const items = messageToEdit.mediaPaths.map((mp: string, index: number) => {
+          const fileName = mp.split(/[/\\]/).pop() || 'archivo';
+          const previewUrl = mp.startsWith('http')
+            ? mp
+            : `${getApiUrl()}/uploads/${mp.replace(/^.*[\\/]/, '')}`;
+
+          return {
+            preview: previewUrl,
+            caption: (messageToEdit.captions && messageToEdit.captions[index]) || '',
+            type: getMediaTypeFromPath(mp),
+            mediaPath: mp,
+            fileName
+          };
+        });
+        media.setMediaItems(items as any);
+      } else {
+        media.setMediaItems([]);
+      }
+    }
+  }, [messageToEdit]);
 
   const loadUserInfo = async () => {
     try {
@@ -119,6 +173,15 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
     setSelectedGroups(newSelected);
   };
 
+  const handleCancelEdit = () => {
+    setMessage('');
+    media.clearAll();
+    setSelectedGroups(new Set());
+    schedule.reset();
+    if (onClearEdit) onClearEdit();
+    toast.info("Edición cancelada");
+  };
+
   const handleSendToGroups = async () => {
     if (!message && media.mediaItems.length === 0) {
       toast.error("Por favor ingresa un mensaje o selecciona un archivo multimedia");
@@ -147,6 +210,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
         .map((item) => item.file)
         .filter((f): f is File => !!f);
       const captions = media.mediaItems.map((item) => item.caption || '');
+      const existingMediaPaths = media.mediaItems.map((item) => item.mediaPath).filter((p): p is string => !!p);
 
       if (schedule.scheduleType === 'now') {
         const response = await sendGroupMessages(groupIds, message, files, captions);
@@ -164,6 +228,17 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
           }
 
           toast.success(`¡Mensaje enviado a ${targets.length} grupos!`);
+          
+          if (messageToEdit) {
+            try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+            const existing = localStorage.getItem('scheduledMessages');
+            if (existing) {
+              const scheduledMessages = JSON.parse(existing).filter((m: any) => m.id !== messageToEdit.id);
+              localStorage.setItem('scheduledMessages', JSON.stringify(scheduledMessages));
+            }
+            if (onClearEdit) onClearEdit();
+          }
+
           setMessage('');
           media.clearAll();
           setSelectedGroups(new Set());
@@ -177,7 +252,8 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
           schedule.delayMinutes,
           schedule.scheduledAt,
           files,
-          captions
+          captions,
+          existingMediaPaths
         );
 
         if (response.success) {
@@ -193,12 +269,21 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
             status: 'scheduled',
             createdAt: new Date(),
             file: files.length > 0 ? files[0] : undefined,
-            variables: []
+            variables: [],
+            mediaPaths: response.mediaPaths || existingMediaPaths,
+            captions: response.captions || captions
           };
 
           // Load existing scheduled messages
           const existing = localStorage.getItem('scheduledMessages');
-          const scheduledMessages = existing ? JSON.parse(existing) : [];
+          let scheduledMessages = existing ? JSON.parse(existing) : [];
+          
+          if (messageToEdit) {
+            try { await cancelScheduledJob(messageToEdit.id, true); } catch(e) {}
+            scheduledMessages = scheduledMessages.filter((m: any) => m.id !== messageToEdit.id);
+            if (onClearEdit) onClearEdit();
+          }
+          
           // Convert dates to ISO strings for storage
           const messageToSave = {
             ...scheduledMessage,
@@ -545,7 +630,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                 />
                 <textarea
                   ref={messageTextareaRef}
-                  className="flex-1 w-full p-4 border border-theme rounded-lg resize-none mb-4 mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full min-h-[100px] max-h-[500px] p-4 border border-theme rounded-lg resize-none overflow-y-auto mb-4 mt-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Escribe tu mensaje para los grupos seleccionados..."
                   value={message}
                   onChange={e => setMessage(e.target.value)}
@@ -553,6 +638,11 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
 
                 {/* Media Upload */}
                 <div className="mb-4">
+                  {messageToEdit && messageToEdit.message === '[Archivo multimedia]' && (!messageToEdit.mediaPaths || messageToEdit.mediaPaths.length === 0) && (
+                    <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                      ⚠️ Este mensaje tenía archivos adjuntos que no se pueden recuperar automáticamente. Vuelve a adjuntarlos.
+                    </div>
+                  )}
                   <label className="block text-sm font-medium text-theme-main mb-2">
                     Archivos Adjuntos (opcional)
                   </label>
@@ -597,6 +687,15 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                       <Eye size={18} />
                       Vista Previa
                     </button>
+                    {messageToEdit && (
+                      <button
+                        onClick={handleCancelEdit}
+                        className="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-3 rounded-lg font-medium transition-all"
+                      >
+                        <X size={18} />
+                        Cancelar
+                      </button>
+                    )}
                     <button
                       onClick={handleSendToGroups}
                       disabled={!isConnected || selectedGroups.size === 0 || loading || (!message && media.mediaItems.length === 0)}
@@ -606,6 +705,11 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                         <>
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                           {schedule.scheduleType === 'now' ? 'Enviando...' : 'Programando...'}
+                        </>
+                      ) : messageToEdit ? (
+                        <>
+                          <Send size={18} />
+                          Guardar Edición
                         </>
                       ) : (
                         <>

@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { findAvailablePort, isPortAvailable } from './utils/portFinder.js';
+import { DATA_DIR, UPLOAD_DIR, SESSION_DIR } from './utils/paths.js';
 
 import WhatsAppClient from './whatsapp.js';
 import MessageScheduler from './scheduler.js';
@@ -27,11 +28,9 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const profileSlug = process.env.PROFILE_SLUG || null;
-const sessionDir = process.env.SESSION_DIR || null;
-const dataDir = process.env.DATA_DIR || null;
 const PORT_INFO_FILE = profileSlug
   ? path.join(process.cwd(), `.${profileSlug}-port-info.json`)
-  : path.join(__dirname, '..', '.port-info.json');
+  : path.join(path.dirname(__filename), '..', '.port-info.json');
 
 const persistPortInfo = (info) => {
   try {
@@ -122,8 +121,8 @@ const persistPortInfo = (info) => {
       },
       credentials: true
     }));
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
     // Middleware to extract user and session from request (must be after express.json())
     app.use((req, res, next) => {
@@ -140,12 +139,9 @@ const persistPortInfo = (info) => {
       next();
     });
 
-    // Create uploads directory
-    const uploadsDir = process.env.UPLOAD_DIR || './uploads';
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    app.use('/uploads', express.static(uploadsDir));
+    // Use standardized uploads directory
+    console.log(`📂 Uploads directory: ${UPLOAD_DIR}`);
+    app.use('/uploads', express.static(UPLOAD_DIR));
 
     // Initialize Session Manager
     const sessionManager = new SessionManager(io);

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import supabase, { supabaseAnon } from './supabase.js';
+import { LOGS_DIR } from './utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -580,13 +581,7 @@ export const messageCountService = {
     }
 };
 
-// Almacenamiento local para logs persistente en archivos
-const LOGS_DIR = path.join(__dirname, 'data/local_logs');
-
-// Asegurar que el directorio de logs existe
-if (!fs.existsSync(LOGS_DIR)) {
-    fs.mkdirSync(LOGS_DIR, { recursive: true });
-}
+// Almacenamiento local para logs persistente en archivos (usando LOGS_DIR de paths.js)
 
 const getLogFilePath = (userId) => path.join(LOGS_DIR, `logs_${userId}.json`);
 

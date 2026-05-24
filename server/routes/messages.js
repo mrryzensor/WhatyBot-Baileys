@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { UPLOAD_DIR } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,10 +57,7 @@ router.get('/logs', async (req, res) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // En Railway y otros entornos, asegurar ruta absoluta para evitar ambigüedades
-        const uploadDir = process.env.UPLOAD_DIR
-            ? path.resolve(process.env.UPLOAD_DIR)
-            : path.join(__dirname, '../../uploads');
+        const uploadDir = UPLOAD_DIR;
 
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
@@ -212,8 +210,13 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
             return res.status(400).json({ error: 'Missing required field: to' });
         }
 
+        let existingMediaPaths = [];
+        if (req.body.existingMediaPaths) {
+            try { existingMediaPaths = JSON.parse(req.body.existingMediaPaths); } catch (e) { }
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
-        if (!files || files.length === 0) {
+        if ((!files || files.length === 0) && existingMediaPaths.length === 0) {
             return res.status(400).json({ error: 'No media file uploaded' });
         }
 
@@ -225,7 +228,7 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
             }
         }
 
-        const mediaPaths = files.map(f => f.path);
+        const mediaPaths = [...existingMediaPaths, ...files.map(f => f.path)];
         let mediaCaptions = [];
         if (captions) {
             try {
@@ -243,7 +246,7 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
             const scheduleTime = new Date(scheduledAt);
             const userId = req.userId;
             const jobId = messageScheduler.scheduleMessage(to, message || '', mediaPaths, mediaCaptions, scheduleTime, userId);
-            return res.json({ success: true, message: 'Media message scheduled', jobId });
+            return res.json({ success: true, message: 'Media message scheduled', jobId, mediaPaths, captions: mediaCaptions });
         }
 
         const userId = req.userId;
@@ -322,6 +325,11 @@ router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
             return res.status(400).json({ error: 'Missing required field: contacts' });
         }
 
+        let existingMediaPaths = [];
+        if (req.body.existingMediaPaths) {
+            try { existingMediaPaths = JSON.parse(req.body.existingMediaPaths); } catch (e) { }
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
         let contactsList = typeof contacts === 'string' ? JSON.parse(contacts) : contacts;
 
@@ -333,7 +341,7 @@ router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
             }
         }
 
-        const mediaPaths = files.map(f => f.path);
+        const mediaPaths = [...existingMediaPaths, ...files.map(f => f.path)];
         let mediaCaptions = [];
         if (captions) {
             try {
@@ -355,7 +363,7 @@ router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
         if (scheduledAt) {
             const scheduleTime = new Date(scheduledAt);
             const jobId = messageScheduler.scheduleBulkMessages(contactsList, message || '', mediaPaths, mediaCaptions, messageDelay, scheduleTime, userId, maxContactsPerBatch, waitTimeBetweenBatches);
-            return res.json({ success: true, message: 'Bulk messages scheduled', jobId });
+            return res.json({ success: true, message: 'Bulk messages scheduled', jobId, mediaPaths, captions: mediaCaptions });
         }
 
         sessionManager.sendBulkMessages(sessionId, contactsList, message || '', mediaPaths, mediaCaptions, messageDelay, userId, maxContactsPerBatch, waitTimeBetweenBatches)
@@ -460,8 +468,9 @@ router.delete('/scheduled/:jobId', async (req, res) => {
     try {
         const userId = req.userId;
         const { jobId } = req.params;
+        const keepMedia = req.query.keepMedia === 'true';
         const messageScheduler = req.app.get('messageScheduler');
-        const cancelled = messageScheduler.cancelJob(jobId, userId);
+        const cancelled = messageScheduler.cancelJob(jobId, userId, keepMedia);
         if (!cancelled) return res.status(404).json({ error: 'Job no encontrado' });
         res.json({ success: true });
     } catch (error) {

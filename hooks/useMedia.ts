@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 
 export interface MediaItem {
   file?: File; // Optional for existing files from server

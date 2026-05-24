@@ -17,7 +17,7 @@ import { ToastContainer } from './components/Toast';
 import { BulkProgressBar } from './components/BulkProgressBar';
 import { useBulkQueueControl } from './hooks/useBulkQueueControl';
 import { useToast } from './hooks/useToast';
-import { Tab, MessageLog, AppConfig, AutoReplyRule, Group } from './types';
+import { Tab, MessageLog, AppConfig, AutoReplyRule, Group, ScheduledMessage } from './types';
 import { initializeSocket, getAutoReplyRules, getConfig, initialize, getMessageLogs, waitForBackendPort, getQr, resetWhatsAppSession, getGroups } from './services/api';
 import { isAuthenticated as checkAuth, getCurrentUser } from './services/authApi';
 import { getSubscriptionLimits } from './services/usersApi';
@@ -417,6 +417,7 @@ function AppBody({
 }: any) {
   const { selectedSession, clearSessions, loadSessions } = useSession();
   const isConnected = selectedSession?.isReady || false;
+  const [messageToEdit, setMessageToEdit] = useState<ScheduledMessage | null>(null);
 
   const handleLogoutWithSessionClear = () => {
     clearSessions();
@@ -440,6 +441,13 @@ function AppBody({
     if (targetTab) {
       setActiveTab(targetTab);
     }
+  };
+
+  const handleEditScheduledMessage = (msg: ScheduledMessage) => {
+    setMessageToEdit(msg);
+    if (msg.type === 'single') setActiveTab(Tab.SINGLE_SENDER);
+    else if (msg.type === 'bulk') setActiveTab(Tab.MASS_SENDER);
+    else if (msg.type === 'groups') setActiveTab(Tab.GROUPS);
   };
 
   if (!isAuthenticatedState || !currentUser) {
@@ -474,6 +482,8 @@ function AppBody({
             toast={{ success, error, warning, info }}
             onNavigate={handleNavigate}
             defaultCountryCode={config.defaultCountryCode}
+            messageToEdit={messageToEdit}
+            onClearEdit={() => setMessageToEdit(null)}
           />
         );
       case Tab.MASS_SENDER:
@@ -484,6 +494,8 @@ function AppBody({
             toast={{ success, error, warning, info }}
             onNavigate={handleNavigate}
             defaultCountryCode={config.defaultCountryCode}
+            messageToEdit={messageToEdit}
+            onClearEdit={() => setMessageToEdit(null)}
           />
         );
       case Tab.CONTACTS:
@@ -505,10 +517,12 @@ function AppBody({
             onNavigate={handleNavigate}
             initialGroups={groupsCache}
             onGroupsUpdate={setGroupsCache}
+            messageToEdit={messageToEdit}
+            onClearEdit={() => setMessageToEdit(null)}
           />
         );
       case Tab.SCHEDULED:
-        return <ScheduledMessages />;
+        return <ScheduledMessages onEdit={handleEditScheduledMessage} />;
       case Tab.AUTO_REPLY:
         return <AutoReplyManager rules={rules} setRules={setRules} toast={{ success, error, warning, info }} />;
       case Tab.MENUS:

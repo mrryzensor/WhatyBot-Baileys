@@ -6,6 +6,7 @@ import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { fileURLToPath } from 'url';
 import { cleanSessionOrphanedFiles, cleanAllSessionsOrphanedFiles } from '../utils/mediaCleanup.js';
+import { UPLOAD_DIR } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -190,7 +191,7 @@ router.post('/reset-session', async (req, res) => {
 // Configure multer for complete config import
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = './uploads/temp';
+        const uploadDir = path.join(UPLOAD_DIR, 'temp');
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -230,7 +231,7 @@ router.get('/config/export-all', async (req, res) => {
 
         // Collect all media files
         const mediaFiles = new Set();
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
 
         // Collect media from menus
         menus.forEach(menu => {
@@ -346,7 +347,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
         }
 
         const filePath = req.file.path;
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
 
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
@@ -412,7 +413,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                     menu.mediaPaths = menu.mediaPaths.map(p => {
                         if (p && !p.startsWith('http')) {
                             const fileName = path.basename(p);
-                            return path.join(uploadDir, fileName).replace(/\\/g, '/');
+                            return `uploads/${fileName}`;
                         }
                         return p;
                     });
@@ -424,7 +425,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                             opt.mediaPaths = opt.mediaPaths.map(p => {
                                 if (p && !p.startsWith('http')) {
                                     const fileName = path.basename(p);
-                                    return path.join(uploadDir, fileName).replace(/\\/g, '/');
+                                    return `uploads/${fileName}`;
                                 }
                                 return p;
                             });
@@ -474,7 +475,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                     mediaPaths = rule.mediaPaths.map(p => {
                         if (p && !p.startsWith('http')) {
                             const fileName = path.basename(p);
-                            return path.join(uploadDir, fileName).replace(/\\/g, '/');
+                            return `uploads/${fileName}`;
                         }
                         return p;
                     });
@@ -609,7 +610,7 @@ router.post('/config/global-sessions', (req, res) => {
 router.post('/cleanup-orphaned-files', (req, res) => {
     try {
         const sessionManager = req.app.get('sessionManager');
-        const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+        const uploadDir = UPLOAD_DIR;
         const { sessionId, allSessions } = req.body;
 
         let result;

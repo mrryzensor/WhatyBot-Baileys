@@ -4,6 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { UPLOAD_DIR } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +27,7 @@ const formatTarget = (jid, groupName = null) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const uploadDir = UPLOAD_DIR;
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -100,15 +101,20 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
         const sessionId = getSessionId(req);
         if (!sessionId) return res.status(400).json({ error: 'WhatsApp no conectado' });
 
+        let existingMediaPaths = [];
+        if (req.body.existingMediaPaths) {
+            try { existingMediaPaths = JSON.parse(req.body.existingMediaPaths); } catch (e) { }
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
-        const mediaPaths = files.map(f => f.path);
+        const mediaPaths = [...existingMediaPaths, ...files.map(f => f.path)];
         let mediaCaptions = Array.isArray(captions) ? captions : (captions ? JSON.parse(captions) : []);
         if (mediaCaptions.length === 0) mediaCaptions = mediaPaths.map(() => caption || '');
 
         if (scheduledAt) {
             const userId = req.userId;
             const jobId = messageScheduler.scheduleGroupMessages(groupIds, message || '', mediaPaths, mediaCaptions, new Date(scheduledAt), userId);
-            return res.json({ success: true, message: 'Group messages scheduled', jobId });
+            return res.json({ success: true, message: 'Group messages scheduled', jobId, mediaPaths, captions: mediaCaptions });
         }
 
         const userId = req.userId;
@@ -375,8 +381,13 @@ router.post('/schedule', upload.array('media', 10), async (req, res) => {
         if (typeof groupIds === 'string') groupIds = JSON.parse(groupIds);
         const { message, caption, captions, scheduleType, delayMinutes, scheduledAt } = req.body;
         const messageScheduler = req.app.get('messageScheduler');
+        let existingMediaPaths = [];
+        if (req.body.existingMediaPaths) {
+            try { existingMediaPaths = JSON.parse(req.body.existingMediaPaths); } catch (e) { }
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
-        const mediaPaths = files.map(f => f.path);
+        const mediaPaths = [...existingMediaPaths, ...files.map(f => f.path)];
         let mediaCaptions = Array.isArray(captions) ? captions : (captions ? JSON.parse(captions) : []);
         if (mediaCaptions.length === 0) mediaCaptions = mediaPaths.map(() => caption || '');
 

@@ -2,6 +2,7 @@ import WhatsAppClient from './whatsapp.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { SESSION_DIR } from './utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,7 +69,7 @@ class SessionManager {
    * Obtiene la carpeta de autenticación para una sesión específica
    */
   getSessionAuthDir(sessionId) {
-    const sessionsDir = process.env.SESSION_DIR || path.join(__dirname, '.baileys_sessions');
+    const sessionsDir = SESSION_DIR;
 
     // Extract userId from sessionId to organize by folder
     const match = sessionId.match(/^session_(\d+)_/);
