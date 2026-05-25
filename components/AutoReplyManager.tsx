@@ -845,7 +845,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{rules.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar max-h-[calc(100vh-28rem)] lg:max-h-[calc(100vh-24rem)] min-h-[300px]">
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
                             {rules.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic text-sm">
                                     No hay reglas creadas.
@@ -993,8 +993,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 </div>
 
                 {/* Right Column: Editor */}
-                <div className={`${showMobileEditor ? 'block' : 'hidden lg:block'} lg:col-span-2`}>
-                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col">
+                <div className={`${showMobileEditor ? 'block' : 'hidden lg:block'} lg:col-span-2 h-full overflow-hidden`}>
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col overflow-hidden">
                         <div className="flex justify-between items-center mb-6">
                             <div className="flex items-center gap-3">
                                 <button
@@ -1020,7 +1020,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             </div>
                         )}
 
-                        <div className="space-y-4 flex-1">
+                        <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
                             <div>
                                 <label className="block text-sm font-medium text-theme-main mb-1">Nombre de la Regla</label>
                                 <input

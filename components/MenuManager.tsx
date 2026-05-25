@@ -705,7 +705,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{menus.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar max-h-[calc(100vh-20rem)] lg:max-h-[calc(100vh-17rem)] min-h-[300px]">
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
                             {menus.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic text-sm">
                                     No hay menús creados.
@@ -790,8 +790,8 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                 </div>
 
                 {/* Right Column: Editor */}
-                <div className="lg:col-span-2">
-                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col">
+                <div className="lg:col-span-2 h-full overflow-hidden">
+                    <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme h-full flex flex-col overflow-hidden">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-semibold text-theme-main flex items-center gap-2">
                                 {editingId ? <><Edit2 size={18} /> Editar Menú</> : <><Plus size={18} /> Nuevo Menú</>}
@@ -809,7 +809,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             </div>
                         )}
 
-                        <div className="space-y-4 flex-1 overflow-y-auto">
+                        <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
                             <div>
                                 <label className="block text-sm font-medium text-theme-main mb-1">Nombre del Menú</label>
                                 <input
