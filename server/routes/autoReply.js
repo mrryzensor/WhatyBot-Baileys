@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { deleteItemMediaFiles, cleanSessionOrphanedFiles } from '../utils/mediaCleanup.js';
 import { UPLOAD_DIR } from '../utils/paths.js';
+import { optimizeUploadedFiles } from '../utils/mediaOptimizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,8 +107,9 @@ router.get('/rules', (req, res) => {
 });
 
 // POST /api/auto-reply/rules - Create new rule
-router.post('/rules', upload.array('media', 10), (req, res) => {
+router.post('/rules', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const sessionManager = req.app.get('sessionManager');
         const sessionId = getSessionId(req);
         if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
@@ -231,8 +233,9 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
 });
 
 // PUT /api/auto-reply/rules/:id - Update rule
-router.put('/rules/:id', upload.array('media', 10), (req, res) => {
+router.put('/rules/:id', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const sessionManager = req.app.get('sessionManager');
         const sessionId = getSessionId(req);
         if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });

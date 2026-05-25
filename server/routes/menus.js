@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { deleteItemMediaFiles, cleanSessionOrphanedFiles } from '../utils/mediaCleanup.js';
 import { UPLOAD_DIR } from '../utils/paths.js';
+import { optimizeUploadedFiles } from '../utils/mediaOptimizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,8 +71,9 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/menus - Create new menu
-router.post('/', upload.array('media', 50), (req, res) => {
+router.post('/', upload.array('media', 50), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const sessionManager = req.app.get('sessionManager');
         const sessionId = getSessionId(req);
         if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
@@ -147,8 +149,9 @@ router.post('/', upload.array('media', 50), (req, res) => {
 });
 
 // PUT /api/menus/:id - Update menu
-router.put('/:id', upload.array('media', 50), (req, res) => {
+router.put('/:id', upload.array('media', 50), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const sessionManager = req.app.get('sessionManager');
         const sessionId = getSessionId(req);
         if (!sessionId) return res.status(400).json({ error: 'No active WhatsApp session' });
@@ -240,8 +243,9 @@ router.put('/:id', upload.array('media', 50), (req, res) => {
 });
 
 // POST /api/menus/upload-option-media - Upload media for menu option
-router.post('/upload-option-media', upload.array('media', 10), (req, res) => {
+router.post('/upload-option-media', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const files = req.files || [];
         if (files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 

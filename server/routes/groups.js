@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { UPLOAD_DIR } from '../utils/paths.js';
+import { optimizeUploadedFiles } from '../utils/mediaOptimizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +89,7 @@ router.get('/:id/members', async (req, res) => {
 // POST /api/groups/send - Send to groups
 router.post('/send', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         let groupIds = req.body.groupIds;
         if (typeof groupIds === 'string') groupIds = JSON.parse(groupIds);
         const { message, caption, captions, scheduledAt } = req.body;
@@ -199,6 +201,7 @@ router.post('/send', upload.array('media', 10), async (req, res) => {
 // POST /api/groups/send-poll - Send poll to groups
 router.post('/send-poll', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         let groupIds = req.body.groupIds;
         if (typeof groupIds === 'string') groupIds = JSON.parse(groupIds);
 
@@ -377,6 +380,7 @@ router.delete('/lists/:id', (req, res) => {
 
 router.post('/schedule', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         let groupIds = req.body.groupIds;
         if (typeof groupIds === 'string') groupIds = JSON.parse(groupIds);
         const { message, caption, captions, scheduleType, delayMinutes, scheduledAt } = req.body;

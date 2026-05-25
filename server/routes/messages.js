@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { UPLOAD_DIR } from '../utils/paths.js';
+import { optimizeUploadedFiles } from '../utils/mediaOptimizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -194,6 +195,7 @@ router.post('/send', async (req, res) => {
 // POST /api/messages/send-media - Send message with one or multiple media files
 router.post('/send-media', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const { to, message, caption, captions, scheduledAt } = req.body;
         const sessionManager = req.app.get('sessionManager');
         const messageScheduler = req.app.get('messageScheduler');
@@ -309,6 +311,7 @@ router.post('/send-media', upload.array('media', 10), async (req, res) => {
 // POST /api/messages/send-bulk - Send bulk messages
 router.post('/send-bulk', upload.array('media', 10), async (req, res) => {
     try {
+        await optimizeUploadedFiles(req);
         const { contacts, message, caption, captions, delay, scheduledAt } = req.body;
         const sessionManager = req.app.get('sessionManager');
         const messageScheduler = req.app.get('messageScheduler');
