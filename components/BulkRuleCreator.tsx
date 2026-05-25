@@ -405,6 +405,7 @@ export const BulkRuleCreator: React.FC<BulkRuleCreatorProps> = ({ isOpen, onClos
                                         onFileSelect={media.handleFileSelect}
                                         onDrop={media.handleDrop}
                                         onOpenFileSelector={media.openFileSelector}
+                                        uploadProgress={media.uploadProgress}
                                     />
                                 </div>
                             </div>

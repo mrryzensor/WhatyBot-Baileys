@@ -1234,6 +1234,7 @@ export const MassSender: React.FC<MassSenderProps> = ({ isConnected, addLog, toa
                 onUpdateCaption={media.updateCaption}
                 variables={variables}
                 sampleVariables={getSampleVariables()}
+                uploadProgress={media.uploadProgress}
               />
               <p className="text-xs text-slate-400 mt-2">
                 Si adjuntas archivos, el mensaje de texto se enviará por separado después de los archivos.

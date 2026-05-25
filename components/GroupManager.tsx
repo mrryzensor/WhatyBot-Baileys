@@ -656,6 +656,7 @@ export const GroupManager: React.FC<GroupManagerProps> = ({ isConnected, addLog,
                     onOpenFileSelector={media.openFileSelector}
                     onRemoveMedia={media.removeMedia}
                     onUpdateCaption={media.updateCaption}
+                    uploadProgress={media.uploadProgress}
                   />
                 </div>
 

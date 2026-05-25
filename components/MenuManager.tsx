@@ -879,6 +879,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                     onOpenFileSelector={menuMedia.openFileSelector}
                                     onRemoveMedia={menuMedia.removeMedia}
                                     onUpdateCaption={menuMedia.updateCaption}
+                                    uploadProgress={menuMedia.uploadProgress}
                                 />
                                 <p className="text-xs text-slate-400 mt-2">
                                     Estos archivos se enviarán junto con el mensaje del menú.
@@ -1066,6 +1067,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                         onOpenFileSelector={optionMedia.openFileSelector}
                                         onRemoveMedia={optionMedia.removeMedia}
                                         onUpdateCaption={optionMedia.updateCaption}
+                                        uploadProgress={optionMedia.uploadProgress}
                                     />
                                     <p className="text-xs text-slate-400 mt-2">
                                         Puedes adjuntar imágenes, videos o documentos con sus respectivos captions.

@@ -423,6 +423,7 @@ export const SingleSender: React.FC<SingleSenderProps & { defaultCountryCode?: s
                                 onOpenFileSelector={media.openFileSelector}
                                 onRemoveMedia={media.removeMedia}
                                 onUpdateCaption={media.updateCaption}
+                                uploadProgress={media.uploadProgress}
                             />
                         </div>
 

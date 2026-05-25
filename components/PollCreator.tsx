@@ -313,6 +313,7 @@ export const PollCreator: React.FC<PollCreatorProps> = ({
                             onOpenFileSelector={media.openFileSelector}
                             onRemoveMedia={media.removeMedia}
                             onUpdateCaption={media.updateCaption}
+                            uploadProgress={media.uploadProgress}
                         />
                     </div>
                 )}

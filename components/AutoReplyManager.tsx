@@ -1657,6 +1657,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                             onOpenFileSelector={media.openFileSelector}
                                             onRemoveMedia={media.removeMedia}
                                             onUpdateCaption={media.updateCaption}
+                                            uploadProgress={media.uploadProgress}
                                         />
                                         <p className="text-xs text-slate-400 mt-2">
                                             Si adjuntas un archivo, el mensaje de texto se enviará por separado después del archivo.
