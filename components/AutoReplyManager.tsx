@@ -845,7 +845,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{rules.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar max-h-[calc(100vh-27rem)] min-h-[300px]">
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar max-h-[calc(100vh-28rem)] lg:max-h-[calc(100vh-24rem)] min-h-[300px]">
                             {rules.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic text-sm">
                                     No hay reglas creadas.

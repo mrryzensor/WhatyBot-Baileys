@@ -647,7 +647,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
         <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-8rem)]">
                 {/* Left Column: Menus List */}
-                <div className="lg:col-span-1 flex flex-col gap-4">
+                <div className="lg:col-span-1 flex flex-col gap-4 h-full overflow-hidden">
                     <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
                         <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
@@ -705,7 +705,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             <span className="bg-slate-200 text-theme-muted px-2 py-0.5 rounded text-xs">{menus.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar max-h-[calc(100vh-20rem)] lg:max-h-[calc(100vh-17rem)] min-h-[300px]">
                             {menus.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic text-sm">
                                     No hay menús creados.
