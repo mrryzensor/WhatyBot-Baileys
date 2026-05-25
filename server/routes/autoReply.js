@@ -452,16 +452,28 @@ router.get('/export', async (req, res) => {
         });
 
         console.log('[Export Rules] Step 5: Collecting media files');
-        const mediaFiles = new Set();
+        const mediaFiles = new Map(); // filename -> fullPath
+        const registerMediaFile = (p) => {
+            if (p && !p.startsWith('http')) {
+                const fileName = getSafeBasename(p);
+                if (!fileName) return;
+
+                const localPath = path.join(UPLOAD_DIR, fileName);
+                if (fs.existsSync(localPath)) {
+                    mediaFiles.set(fileName, localPath);
+                } else if (path.isAbsolute(p) && fs.existsSync(p)) {
+                    mediaFiles.set(fileName, p);
+                } else {
+                    mediaFiles.set(fileName, localPath); // Fallback even if not existing
+                }
+            }
+        };
+
         rules.forEach(rule => {
             if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
-                rule.mediaPaths.forEach(p => {
-                    if (p && !p.startsWith('http')) {
-                        mediaFiles.add(p);
-                    }
-                });
-            } else if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
-                mediaFiles.add(rule.mediaPath);
+                rule.mediaPaths.forEach(registerMediaFile);
+            } else if (rule.mediaPath) {
+                registerMediaFile(rule.mediaPath);
             }
 
             // Collect geofiltered country responses media files
@@ -470,21 +482,17 @@ router.get('/export', async (req, res) => {
                     const override = rule.countryResponses[countryCode];
                     if (override && typeof override === 'object') {
                         if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
-                            override.mediaPaths.forEach(p => {
-                                if (p && !p.startsWith('http')) {
-                                    mediaFiles.add(p);
-                                }
-                            });
+                            override.mediaPaths.forEach(registerMediaFile);
                         }
-                        if (override.mediaPath && !override.mediaPath.startsWith('http')) {
-                            mediaFiles.add(override.mediaPath);
+                        if (override.mediaPath) {
+                            registerMediaFile(override.mediaPath);
                         }
                     }
                 });
             }
         });
 
-        console.log(`[Export Rules] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles));
+        console.log(`[Export Rules] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles.keys()));
 
         console.log('[Export Rules] Step 6: Creating ZIP archive');
         // Always create ZIP (even if no media files)
@@ -507,9 +515,7 @@ router.get('/export', async (req, res) => {
 
         console.log('[Export Rules] Step 9: Adding media files to ZIP');
         // Add media files if any
-        for (const mediaPath of mediaFiles) {
-            const fileName = getSafeBasename(mediaPath);
-            const fullPath = path.join(UPLOAD_DIR, fileName);
+        for (const [fileName, fullPath] of mediaFiles.entries()) {
             if (fs.existsSync(fullPath)) {
                 console.log(`[Export Rules] Adding media file: ${fileName} from ${fullPath}`);
                 archive.file(fullPath, { name: `media/${fileName}` });

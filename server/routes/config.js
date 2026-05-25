@@ -240,35 +240,35 @@ router.get('/config/export-all', async (req, res) => {
         });
 
         // Collect all media files
-        const mediaFiles = new Set();
+        const mediaFiles = new Map(); // filename -> fullPath
         const uploadDir = UPLOAD_DIR;
+
+        const registerMediaFile = (p) => {
+            if (p && !p.startsWith('http')) {
+                const fileName = getSafeBasename(p);
+                if (!fileName) return;
+
+                const localPath = path.join(uploadDir, fileName);
+                if (fs.existsSync(localPath)) {
+                    mediaFiles.set(fileName, localPath);
+                } else if (path.isAbsolute(p) && fs.existsSync(p)) {
+                    mediaFiles.set(fileName, p);
+                } else {
+                    mediaFiles.set(fileName, localPath);
+                }
+            }
+        };
 
         // Collect media from menus
         menus.forEach(menu => {
             if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
-                menu.mediaPaths.forEach(p => {
-                    if (p && !p.startsWith('http')) {
-                        const fileName = getSafeBasename(p);
-                        const fullPath = path.join(uploadDir, fileName);
-                        if (fs.existsSync(fullPath)) {
-                            mediaFiles.add(fileName);
-                        }
-                    }
-                });
+                menu.mediaPaths.forEach(registerMediaFile);
             }
 
             if (menu.options && Array.isArray(menu.options)) {
                 menu.options.forEach(opt => {
                     if (opt.mediaPaths && Array.isArray(opt.mediaPaths)) {
-                        opt.mediaPaths.forEach(p => {
-                            if (p && !p.startsWith('http')) {
-                                const fileName = getSafeBasename(p);
-                                const fullPath = path.join(uploadDir, fileName);
-                                if (fs.existsSync(fullPath)) {
-                                    mediaFiles.add(fileName);
-                                }
-                            }
-                        });
+                        opt.mediaPaths.forEach(registerMediaFile);
                     }
                 });
             }
@@ -277,15 +277,7 @@ router.get('/config/export-all', async (req, res) => {
         // Collect media from rules
         rules.forEach(rule => {
             if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
-                rule.mediaPaths.forEach(p => {
-                    if (p && !p.startsWith('http')) {
-                        const fileName = getSafeBasename(p);
-                        const fullPath = path.join(uploadDir, fileName);
-                        if (fs.existsSync(fullPath)) {
-                            mediaFiles.add(fileName);
-                        }
-                    }
-                });
+                rule.mediaPaths.forEach(registerMediaFile);
             }
 
             // Collect geofiltered country responses media files
@@ -294,29 +286,17 @@ router.get('/config/export-all', async (req, res) => {
                     const override = rule.countryResponses[countryCode];
                     if (override && typeof override === 'object') {
                         if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
-                            override.mediaPaths.forEach(p => {
-                                if (p && !p.startsWith('http')) {
-                                    const fileName = getSafeBasename(p);
-                                    const fullPath = path.join(uploadDir, fileName);
-                                    if (fs.existsSync(fullPath)) {
-                                        mediaFiles.add(fileName);
-                                    }
-                                }
-                            });
+                            override.mediaPaths.forEach(registerMediaFile);
                         }
-                        if (override.mediaPath && !override.mediaPath.startsWith('http')) {
-                            const fileName = getSafeBasename(override.mediaPath);
-                            const fullPath = path.join(uploadDir, fileName);
-                            if (fs.existsSync(fullPath)) {
-                                mediaFiles.add(fileName);
-                            }
+                        if (override.mediaPath) {
+                            registerMediaFile(override.mediaPath);
                         }
                     }
                 });
             }
         });
 
-        console.log(`[Export-All] Found ${mediaFiles.size} media files`);
+        console.log(`[Export-All] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles.keys()));
 
         // Create ZIP file
         const archive = archiver('zip', { zlib: { level: 9 } });
@@ -345,10 +325,11 @@ router.get('/config/export-all', async (req, res) => {
         archive.append(JSON.stringify(rulesData, null, 2), { name: 'rules.json' });
 
         // Add media files
-        for (const fileName of mediaFiles) {
-            const filePath = path.join(uploadDir, fileName);
+        for (const [fileName, filePath] of mediaFiles.entries()) {
             if (fs.existsSync(filePath)) {
                 archive.file(filePath, { name: `media/${fileName}` });
+            } else {
+                console.warn(`[Export-All] Media file not found: ${filePath}`);
             }
         }
 

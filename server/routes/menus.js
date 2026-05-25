@@ -370,31 +370,39 @@ router.get('/export', async (req, res) => {
         });
 
         console.log('[Export] Step 5: Collecting media files');
-        const mediaFiles = new Set();
+        const mediaFiles = new Map(); // filename -> fullPath
+        const registerMediaFile = (p) => {
+            if (p && !p.startsWith('http')) {
+                const fileName = getSafeBasename(p);
+                if (!fileName) return;
+
+                const localPath = path.join(UPLOAD_DIR, fileName);
+                if (fs.existsSync(localPath)) {
+                    mediaFiles.set(fileName, localPath);
+                } else if (path.isAbsolute(p) && fs.existsSync(p)) {
+                    mediaFiles.set(fileName, p);
+                } else {
+                    mediaFiles.set(fileName, localPath); // Fallback even if not existing, will log warning
+                }
+            }
+        };
+
         menus.forEach(menu => {
             // Menu-level media
             if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
-                menu.mediaPaths.forEach(p => {
-                    if (p && !p.startsWith('http')) {
-                        mediaFiles.add(p);
-                    }
-                });
+                menu.mediaPaths.forEach(registerMediaFile);
             }
             // Option-level media
             if (menu.options && Array.isArray(menu.options)) {
                 menu.options.forEach(opt => {
                     if (opt.mediaPaths && Array.isArray(opt.mediaPaths)) {
-                        opt.mediaPaths.forEach(p => {
-                            if (p && !p.startsWith('http')) {
-                                mediaFiles.add(p);
-                            }
-                        });
+                        opt.mediaPaths.forEach(registerMediaFile);
                     }
                 });
             }
         });
 
-        console.log(`[Export] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles));
+        console.log(`[Export] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles.keys()));
 
         console.log('[Export] Step 6: Creating ZIP archive');
         // Always create ZIP (even if no media files)
@@ -416,9 +424,7 @@ router.get('/export', async (req, res) => {
         archive.append(JSON.stringify(jsonData, null, 2), { name: 'menus.json' });
 
         console.log('[Export] Step 9: Adding media files to ZIP');
-        for (const mediaPath of mediaFiles) {
-            const fileName = getSafeBasename(mediaPath);
-            const fullPath = path.isAbsolute(mediaPath) ? mediaPath : path.join(UPLOAD_DIR, fileName);
+        for (const [fileName, fullPath] of mediaFiles.entries()) {
             if (fs.existsSync(fullPath)) {
                 console.log(`[Export] Adding media file: ${fileName} from ${fullPath}`);
                 archive.file(fullPath, { name: `media/${fileName}` });
