@@ -725,8 +725,14 @@ export const createAutoReplyRule = async (rule: any, files?: File[], captions?: 
   if (rule.allowUnknownCountries !== undefined) {
     formData.append('allowUnknownCountries', rule.allowUnknownCountries.toString());
   }
+  if (rule.isMessageCaption !== undefined) {
+    formData.append('isMessageCaption', rule.isMessageCaption.toString());
+  }
   if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
     formData.append('mediaPaths', JSON.stringify(rule.mediaPaths));
+  }
+  if (rule.countryResponses) {
+    formData.append('countryResponses', typeof rule.countryResponses === 'string' ? rule.countryResponses : JSON.stringify(rule.countryResponses));
   }
   if (files && files.length > 0) {
     files.forEach((file) => {
@@ -766,6 +772,9 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   if (rule.allowUnknownCountries !== undefined) {
     formData.append('allowUnknownCountries', rule.allowUnknownCountries.toString());
   }
+  if (rule.isMessageCaption !== undefined) {
+    formData.append('isMessageCaption', rule.isMessageCaption.toString());
+  }
   if (files && files.length > 0) {
     files.forEach((file) => {
       formData.append('media', file);
@@ -777,6 +786,9 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   // Send existing media paths
   if (existingMediaPaths !== undefined) {
     formData.append('existingMediaPaths', JSON.stringify(existingMediaPaths));
+  }
+  if (rule.countryResponses) {
+    formData.append('countryResponses', typeof rule.countryResponses === 'string' ? rule.countryResponses : JSON.stringify(rule.countryResponses));
   }
 
   const response = await api.put(`/auto-reply/rules/${id}`, formData, {

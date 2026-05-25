@@ -151,6 +151,22 @@ router.post('/rules', upload.array('media', 10), (req, res) => {
             rule.allowUnknownCountries = false;
         }
 
+        if (rule.isMessageCaption !== undefined) {
+            rule.isMessageCaption = (String(rule.isMessageCaption) === 'true' || rule.isMessageCaption === true || rule.isMessageCaption === '1');
+        } else {
+            rule.isMessageCaption = false;
+        }
+
+        if (rule.countryResponses) {
+            try {
+                rule.countryResponses = typeof rule.countryResponses === 'string' ? JSON.parse(rule.countryResponses) : rule.countryResponses;
+            } catch (e) {
+                rule.countryResponses = {};
+            }
+        } else {
+            rule.countryResponses = {};
+        }
+
         // Convert absolute paths to relative paths (relative to server directory)
         let mediaPaths = files.map(f => {
             const relativePath = path.relative(UPLOAD_DIR, f.path);
@@ -255,6 +271,18 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             updatedRule.allowUnknownCountries = (String(updatedRule.allowUnknownCountries) === 'true' || updatedRule.allowUnknownCountries === true || updatedRule.allowUnknownCountries === '1');
         }
 
+        if (updatedRule.isMessageCaption !== undefined) {
+            updatedRule.isMessageCaption = (String(updatedRule.isMessageCaption) === 'true' || updatedRule.isMessageCaption === true || updatedRule.isMessageCaption === '1');
+        }
+
+        if (updatedRule.countryResponses) {
+            try {
+                updatedRule.countryResponses = typeof updatedRule.countryResponses === 'string' ? JSON.parse(updatedRule.countryResponses) : updatedRule.countryResponses;
+            } catch (e) {
+                updatedRule.countryResponses = {};
+            }
+        }
+
         const files = Array.isArray(req.files) ? req.files : [];
 
         // First, handle existing media paths (this is the source of truth from frontend)
@@ -325,9 +353,10 @@ router.put('/rules/:id', upload.array('media', 10), (req, res) => {
             type: updatedRule.type !== undefined ? updatedRule.type : (existingRule.type || 'simple'),
             menuId: updatedRule.menuId !== undefined ? updatedRule.menuId : existingRule.menuId,
             countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || []),
-            countries: updatedRule.countries !== undefined ? updatedRule.countries : (existingRule.countries || []),
             excludeCountries: updatedRule.excludeCountries !== undefined ? updatedRule.excludeCountries : (existingRule.excludeCountries || []),
-            allowUnknownCountries: updatedRule.allowUnknownCountries !== undefined ? updatedRule.allowUnknownCountries : (existingRule.allowUnknownCountries || false)
+            allowUnknownCountries: updatedRule.allowUnknownCountries !== undefined ? updatedRule.allowUnknownCountries : (existingRule.allowUnknownCountries || false),
+            isMessageCaption: updatedRule.isMessageCaption !== undefined ? updatedRule.isMessageCaption : (existingRule.isMessageCaption || false),
+            countryResponses: updatedRule.countryResponses !== undefined ? updatedRule.countryResponses : (existingRule.countryResponses || {})
         };
 
         client.autoReplyRules[index] = mergedRule;
@@ -631,7 +660,8 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                             menuId: finalMenuId || null,
                             countries: rule.countries || [],
                             excludeCountries: rule.excludeCountries || [],
-                            allowUnknownCountries: rule.allowUnknownCountries || false
+                            allowUnknownCountries: rule.allowUnknownCountries || false,
+                            countryResponses: rule.countryResponses || {}
                         };
                         sessionClient.autoReplyRules[existingIndex] = updatedRule;
 
@@ -659,7 +689,8 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                             menuId: finalMenuId || null,
                             countries: rule.countries || [],
                             excludeCountries: rule.excludeCountries || [],
-                            allowUnknownCountries: rule.allowUnknownCountries || false
+                            allowUnknownCountries: rule.allowUnknownCountries || false,
+                            countryResponses: rule.countryResponses || {}
                         };
                         sessionClient.autoReplyRules.push(newRule);
 

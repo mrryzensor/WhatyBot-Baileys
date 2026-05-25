@@ -46,11 +46,22 @@ export interface AutoReplyRule {
   caption?: string; // Caption for media (optional)
   mediaPaths?: string[]; // Multiple media files
   captions?: string[]; // Captions for multiple media files
+  isMessageCaption?: boolean; // Destination of main text message (standalone vs caption)
   type?: 'simple' | 'menu'; // Type of auto-reply
   menuId?: string; // ID of menu if type is 'menu'
   countries?: string[]; // Optional: List of countries to match (based on phone prefix)
   excludeCountries?: string[]; // Optional: List of countries to NOT match
   allowUnknownCountries?: boolean; // Allow if country cannot be detected (LID)
+  countryResponses?: {
+    [countryCode: string]: {
+      response?: string;
+      mediaPaths?: string[];
+      captions?: string[];
+      mediaPath?: string;
+      caption?: string;
+      isMessageCaption?: boolean;
+    };
+  };
 }
 
 // Interactive Menu System

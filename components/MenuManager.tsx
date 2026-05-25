@@ -976,7 +976,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                             <button
                                 onClick={handleSave}
                                 disabled={isLoading}
-                                className="bg-theme-sidebar text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2 shadow-lg disabled:opacity-50"
+                                className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3 rounded-lg font-medium hover:bg-black dark:hover:bg-white flex items-center gap-2 shadow-lg transition-all duration-200 disabled:opacity-50"
                             >
                                 <Save size={18} /> {editingId ? 'Actualizar Menú' : 'Guardar Menú'}
                             </button>

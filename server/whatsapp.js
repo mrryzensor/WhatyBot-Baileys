@@ -254,6 +254,8 @@ class WhatsAppClient extends EventEmitter {
           if (!Array.isArray(rule.countries)) {
             rule.countries = [];
           }
+          // Ensure isMessageCaption is always a boolean
+          rule.isMessageCaption = (rule.isMessageCaption === true || String(rule.isMessageCaption) === 'true' || rule.isMessageCaption === '1');
           return rule;
         });
       } else {
@@ -681,6 +683,148 @@ class WhatsAppClient extends EventEmitter {
     );
   }
 
+  async resolveLidJid(lidJid) {
+    if (!lidJid || !lidJid.includes('@lid')) return lidJid;
+    const cleanLid = lidJid.split(':')[0]; // Remove device specific suffix if present
+    const lidNumber = cleanLid.split('@')[0];
+    let cachedContact = this.contactsCache[cleanLid];
+
+    if (!cachedContact || !cachedContact.id || !cachedContact.id.endsWith('@s.whatsapp.net')) {
+      console.log(`[WhatsApp] ⚠️ LID desconocido ${lidJid}, intentando buscar en participantes de grupos...`);
+      try {
+        const groupsObj = await this.sock.groupFetchAllParticipating().catch(() => ({}));
+        const groups = Object.values(groupsObj || {});
+        for (const g of groups) {
+          if (!g.participants) continue;
+          const foundParticipant = g.participants.find(p => {
+            const pId = p.id || p.jid || '';
+            const pLid = p.lid || p.participant_lid || '';
+            const pIdNum = pId.split('@')[0].split(':')[0];
+            const pLidNum = pLid.split('@')[0].split(':')[0];
+            return pIdNum === lidNumber || pLidNum === lidNumber;
+          });
+          if (foundParticipant) {
+            const resolvedJid = foundParticipant.id || foundParticipant.jid || '';
+            const resolvedLid = foundParticipant.lid || foundParticipant.participant_lid || '';
+            
+            if (resolvedJid.endsWith('@s.whatsapp.net') && resolvedLid.endsWith('@lid')) {
+              const cleanL = resolvedLid.split(':')[0].split('@')[0] + '@lid';
+              const cleanJ = resolvedJid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
+              
+              console.log(`[WhatsApp] 👥 Encontrado participante en grupo "${g.subject || g.id}": LID ${cleanL} -> JID ${cleanJ}`);
+              
+              // Guardar en caché
+              this.contactsCache[cleanL] = {
+                ...(this.contactsCache[cleanL] || {}),
+                id: cleanJ
+              };
+              this.contactsCache[cleanJ] = {
+                ...(this.contactsCache[cleanJ] || {}),
+                id: cleanJ,
+                lid: cleanL
+              };
+              this.saveContactsCache();
+              
+              cachedContact = this.contactsCache[cleanL];
+              break;
+            }
+          }
+        }
+      } catch (groupError) {
+        console.error('[WhatsApp] Error buscando LID en grupos:', groupError);
+      }
+    }
+
+    if (!cachedContact || !cachedContact.id || !cachedContact.id.endsWith('@s.whatsapp.net')) {
+      console.log(`[WhatsApp] ⚠️ LID no resuelto en grupos, intentando sincronización técnica...`);
+      try {
+        // Opción A: Intentar múltiples métodos en paralelo para forzar a WhatsApp a resolver el LID
+        await Promise.all([
+          this.sock.profilePictureUrl(cleanLid, 'image').catch(() => null),
+          this.sock.fetchStatus(cleanLid).catch(() => null),
+          this.sock.getBusinessProfile(cleanLid).catch(() => null)
+        ]);
+
+        // Pequeño delay de 1.5s para permitir que Baileys procese los eventos y actualice el caché
+        await new Promise(r => setTimeout(r, 1500));
+        cachedContact = this.contactsCache[cleanLid];
+      } catch (e) {
+        console.log('[WhatsApp] Error intentando sincronizar LID:', e);
+      }
+    }
+
+    if (cachedContact && cachedContact.id && cachedContact.id.endsWith('@s.whatsapp.net')) {
+      let resolved = cachedContact.id;
+      if (resolved.endsWith('@s.whatsapp.net@s.whatsapp.net')) {
+        resolved = resolved.replace('@s.whatsapp.net@s.whatsapp.net', '@s.whatsapp.net');
+      }
+      console.log(`[WhatsApp] 🔍 LID resuelto con éxito: ${cleanLid} -> ${resolved}`);
+      return resolved;
+    }
+
+    return lidJid;
+  }
+
+  loadCountriesList() {
+    try {
+      const rootDir = path.join(__dirname, '..');
+      const countriesPath = path.join(rootDir, 'utils', 'countries.ts');
+      if (fs.existsSync(countriesPath)) {
+        const content = fs.readFileSync(countriesPath, 'utf8');
+        const regex = /\{\s*name:\s*'([^']+)',\s*code:\s*'([^']+)',\s*iso:\s*'([^']+)'\s*\}/g;
+        let match;
+        const list = [];
+        while ((match = regex.exec(content)) !== null) {
+          list.push({
+            name: match[1],
+            code: match[2],
+            iso: match[3]
+          });
+        }
+        return list;
+      }
+    } catch (e) {
+      console.error('[WhatsApp] Error loading countries list dynamically:', e);
+    }
+
+    // Fallback en caso de error
+    return [
+      { name: 'Perú', code: '51', iso: 'pe' },
+      { name: 'México', code: '52', iso: 'mx' },
+      { name: 'Colombia', code: '57', iso: 'co' },
+      { name: 'Argentina', code: '54', iso: 'ar' },
+      { name: 'España', code: '34', iso: 'es' }
+    ];
+  }
+
+  getFlagEmoji(isoCode) {
+    if (!isoCode || isoCode.length !== 2) return '🌎';
+    try {
+      const codePoints = isoCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt(0));
+      return String.fromCodePoint(...codePoints);
+    } catch {
+      return '🌎';
+    }
+  }
+
+  getCountryInfo(code) {
+    const countries = this.loadCountriesList();
+    const cleanCode = code.replace(/\D/g, '');
+    const matches = countries.filter(c => c.code === cleanCode);
+    if (matches.length > 0) {
+      const usMatch = matches.find(c => c.iso === 'us' || c.name === 'Estados Unidos');
+      const match = usMatch || matches[0];
+      return {
+        name: match.name,
+        flag: this.getFlagEmoji(match.iso)
+      };
+    }
+    return { name: `Código +${cleanCode}`, flag: '🌎' };
+  }
+
   // Control de cola de envíos masivos por usuario
   getBulkController(userId) {
     const key = userId || 'global';
@@ -907,9 +1051,16 @@ class WhatsAppClient extends EventEmitter {
           }
 
 
-          // Schedule background contact sync to ensure LIDs are resolved if cache is empty or stale
+          // Schedule background group load instead of contact sync to avoid rate limits
           setTimeout(() => {
-            this.syncContactsInBackground();
+            if (!this._isDestroying) {
+              console.log('[WhatsApp] 🔄 Cargando grupos en segundo plano al iniciar...');
+              this.getGroups().then(() => {
+                console.log('[WhatsApp] ✅ Grupos cargados en segundo plano al iniciar.');
+              }).catch(err => {
+                console.error('[WhatsApp] Error cargando grupos al iniciar:', err.message);
+              });
+            }
           }, 10000); // 10 seconds delay to allow initial messages/events to settle
 
           this.io?.emit('authenticated', { sessionId: this.sessionId, phone: phoneNumber });
@@ -996,39 +1147,15 @@ class WhatsAppClient extends EventEmitter {
           }
 
           let from = remoteJid;
-          // Resolve LID to real JID if possible
+          // Optimización: Intentar resolver el LID únicamente consultando el cache instantáneo
           if (from.includes('@lid')) {
             const cleanLid = from.split(':')[0]; // Remove device specific suffix if present
             let cachedContact = this.contactsCache[cleanLid];
-
-            // Debugging: Log what we found
-            // console.log(`[WhatsApp] Checking LID cache for ${cleanLid}:`, cachedContact ? 'Found' : 'Not Found');
-
-            // If not found, try to force a sync by fetching profile pic
-            if (!cachedContact || !cachedContact.id || !cachedContact.id.endsWith('@s.whatsapp.net')) {
-              console.log(`[WhatsApp] ⚠️ LID desconocido ${from}, intentando sincronizar contacto...`);
-              try {
-                // Trigger metadata update
-                await this.sock.profilePictureUrl(cleanLid, 'image').catch(() => null);
-                // Small delay to allow events to process
-                await new Promise(r => setTimeout(r, 2000));
-                // Check cache again
-                cachedContact = this.contactsCache[cleanLid];
-              } catch (e) {
-                console.log('[WhatsApp] Error intentando sincronizar LID:', e);
-              }
-            }
-
             if (cachedContact && cachedContact.id && cachedContact.id.endsWith('@s.whatsapp.net')) {
-              console.log(`[WhatsApp] 🔍 Resolving LID: ${cleanLid} -> ${cachedContact.id}`);
               from = cachedContact.id;
-              // Fix potential double suffix corruption from cache
               if (from.endsWith('@s.whatsapp.net@s.whatsapp.net')) {
                 from = from.replace('@s.whatsapp.net@s.whatsapp.net', '@s.whatsapp.net');
-                console.log(`[WhatsApp] 🛠️ Fixed corrupted JID: ${from}`);
               }
-            } else {
-              console.log(`[WhatsApp] ⚠️ No se pudo resolver LID: ${from} a un número de teléfono. Las reglas de país podrían fallar.`);
             }
           }
 
@@ -1082,13 +1209,173 @@ class WhatsAppClient extends EventEmitter {
           const { rules, menus } = this.getRulesAndMenus();
 
           // Check for active menu session FIRST
-          const session = this.getSession(from);
-          if (session) {
+          let session = this.getSession(from);
+
+          // 0. Interceptar si el usuario solicita cambiar de país activamente
+          const normalizedBody = normalizeText(body);
+          const isChangeCountryRequest = [
+            'cambiar pais', 
+            'cambiar de pais', 
+            'cambiar mi pais', 
+            'configurar pais',
+            'change country',
+            'modificar pais'
+          ].some(trigger => normalizedBody === trigger || normalizedBody.includes(trigger));
+
+          if (isChangeCountryRequest) {
+            console.log(`[WhatsApp] 🌍 Solicitud de cambio de país recibida de ${from}`);
+            
+            if (!session) {
+              session = {
+                currentMenuId: null,
+                lastInteraction: new Date().toISOString(),
+                conversationData: {}
+              };
+            }
+            
+            // Buscar el último trigger message válido de la sesión para re-despacharlo
+            const lastTrigger = session.conversationData?.lastTriggerMessage || '';
+            console.log(`[WhatsApp] 🔄 Guardando trigger pendiente "${lastTrigger}" para re-despachar tras cambio de país.`);
+            
+            session.currentMenuId = 'country_gate';
+            session.conversationData = session.conversationData || {};
+            session.conversationData.selectedCountryCode = null; // reset
+            session.conversationData.pendingMessage = lastTrigger; // re-use last trigger!
+            
+            this.userSessions.set(from, session);
+            this.saveUserSessions();
+
+            const messageText = `¡Hola! Entendido, vamos a cambiar tu país. Por favor dinos: *¿de qué país nos escribes?* 🌎`;
+            await this.sendMessage(from, messageText);
+            return;
+          }
+
+          // Guardar el mensaje actual como el último trigger válido si no estamos en el gate
+          if (!session) {
+            session = {
+              currentMenuId: null,
+              lastInteraction: new Date().toISOString(),
+              conversationData: {}
+            };
+          }
+          if (session.currentMenuId !== 'country_gate') {
+            session.conversationData = session.conversationData || {};
+            session.conversationData.lastTriggerMessage = body;
+            this.userSessions.set(from, session);
+            this.saveUserSessions();
+          }
+
+          // 1. Interceptar si está atrapado en el gate de selección de país
+          if (session && session.currentMenuId === 'country_gate') {
+            const pendingMessage = session.conversationData?.pendingMessage || '';
+            const optionSelected = body.trim();
+
+            const normalize = (str) => {
+              if (!str) return '';
+              return normalizeText(str)
+                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?¿]/g, '') // remove punctuation
+                .replace(/\s+/g, ' ') // normalize spaces
+                .trim();
+            };
+
+            const normalizedInput = normalize(optionSelected);
+            const countriesList = this.loadCountriesList() || [];
+
+            let matchedCountry = null;
+
+            // 1. Mapeo de alias comunes para alta precisión
+            const aliases = {
+              'peru': 'pe', 'pe': 'pe',
+              'mexico': 'mx', 'mex': 'mx', 'mx': 'mx',
+              'colombia': 'co', 'col': 'co', 'co': 'co',
+              'ecuador': 'ec', 'ecu': 'ec', 'ec': 'ec',
+              'eeuu': 'us', 'usa': 'us', 'us': 'us', 'estados unidos': 'us', 'united states': 'us',
+              'bolivia': 'bo', 'bol': 'bo', 'bo': 'bo',
+              'honduras': 'hn', 'hon': 'hn', 'hn': 'hn',
+              'guatemala': 'gt', 'gua': 'gt', 'gt': 'gt',
+              'argentina': 'ar', 'arg': 'ar', 'ar': 'ar',
+              'venezuela': 've', 'ven': 've', 've': 've',
+              'chile': 'cl', 'chi': 'cl', 'cl': 'cl',
+              'espana': 'es', 'esp': 'es', 'es': 'es', 'españa': 'es'
+            };
+
+            const matchedAliasIso = aliases[normalizedInput];
+            if (matchedAliasIso) {
+              matchedCountry = countriesList.find(c => c.iso === matchedAliasIso);
+            }
+
+            // 2. Coincidencia exacta de nombre
+            if (!matchedCountry) {
+              matchedCountry = countriesList.find(c => normalize(c.name) === normalizedInput);
+            }
+
+            // 3. Coincidencia por código de país numérico directo (ej. "+51", "51", pero NO "mensaje 1")
+            if (!matchedCountry) {
+              const trimmed = optionSelected.trim();
+              if (/^\+?\d{1,4}$/.test(trimmed)) {
+                const digitsOnly = trimmed.replace(/\D/g, '');
+                matchedCountry = countriesList.find(c => c.code === digitsOnly);
+              }
+            }
+
+            // 4. Coincidencia parcial (el nombre del país está dentro de lo que escribió el usuario, ej: "soy de peru")
+            if (!matchedCountry) {
+              matchedCountry = countriesList.find(c => {
+                const normName = normalize(c.name);
+                return normName.length >= 3 && normalizedInput.includes(normName);
+              });
+            }
+
+            // 5. Coincidencia parcial inversa (lo que escribió el usuario está dentro del nombre del país, ej: "ecuad")
+            if (!matchedCountry) {
+              matchedCountry = countriesList.find(c => {
+                const normName = normalize(c.name);
+                return normalizedInput.length >= 3 && normName.includes(normalizedInput);
+              });
+            }
+
+            let selectedCountryCode = 'other';
+            let displayCountryName = 'Otros países (Resto)';
+            let flagEmoji = '🌎';
+
+            if (matchedCountry) {
+              selectedCountryCode = matchedCountry.code;
+              displayCountryName = matchedCountry.name;
+              flagEmoji = this.getFlagEmoji(matchedCountry.iso);
+            }
+
+            console.log(`[WhatsApp] 🌍 Gate de país resuelto. Entrada: "${optionSelected}" -> Código: ${selectedCountryCode} (${displayCountryName})`);
+
+            session.conversationData = session.conversationData || {};
+            session.conversationData.selectedCountryCode = selectedCountryCode;
+            session.currentMenuId = null;
+            session.lastInteraction = new Date().toISOString();
+            this.userSessions.set(from, session);
+            this.saveUserSessions();
+
+            await this.sendMessage(from, `✅ Gracias. Hemos registrado tu país como *${flagEmoji} ${displayCountryName}*.`);
+
+            if (pendingMessage) {
+              setTimeout(() => {
+                const mModified = {
+                  ...m,
+                  message: {
+                    conversation: pendingMessage
+                  }
+                };
+                this.sock.ev.emit('messages.upsert', { messages: [mModified] });
+              }, 1000);
+            }
+            return;
+          }
+
+          if (session && session.currentMenuId && session.currentMenuId !== 'country_gate') {
             // Verify that the menu is still active
             const currentMenu = menus.find(m => String(m.id) === String(session.currentMenuId));
             if (!currentMenu || !currentMenu.isActive) {
               console.log('[WhatsApp] Menu session exists but menu is inactive/deleted, clearing session');
               this.clearSession(from);
+              session = null; // Update local session reference since it was cleared
             } else {
               // Check if there's an auto-reply rule that triggers this menu and if it's still active
               const menuTriggerRule = rules.find(r =>
@@ -1108,6 +1395,65 @@ class WhatsAppClient extends EventEmitter {
             }
           }
 
+          // Si el remitente es un LID no resuelto, y no tiene ya país seleccionado en la sesión,
+          // verificar si el mensaje coincide con alguna regla activa que requiera filtro de país.
+          const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
+          const hasSelectedCountry = session?.conversationData?.selectedCountryCode;
+
+          if (isUnresolvedLid && !hasSelectedCountry) {
+            const messageTextNormalized = normalizeText(body);
+            const matchingRules = [];
+
+            for (const rule of rules) {
+              if (!rule.isActive) continue;
+
+              let shouldReply = false;
+              if (rule.matchType === 'exact') {
+                shouldReply = rule.keywords.some(keyword => messageTextNormalized === normalizeText(keyword));
+              } else if (rule.matchType === 'contains') {
+                shouldReply = rule.keywords.some(keyword => messageTextNormalized.includes(normalizeText(keyword)));
+              }
+
+              if (shouldReply) {
+                matchingRules.push(rule);
+              }
+            }
+
+            // Filtrar reglas coincidentes que tengan alguna restricción de país o respuestas específicas
+            const rulesWithCountryFilter = matchingRules.filter(rule =>
+              (rule.countries && rule.countries.length > 0) ||
+              (rule.excludeCountries && rule.excludeCountries.length > 0) ||
+              (rule.countryResponses && Object.keys(rule.countryResponses).length > 0)
+            );
+
+            if (rulesWithCountryFilter.length > 0) {
+              console.log(`[WhatsApp] 🔍 LID no resuelto ${from} envió palabra clave coincidentes con reglas que tienen filtro de país o respuestas específicas.`);
+
+              // Intentar resolución técnica primero (Opción A)
+              const resolvedJid = await this.resolveLidJid(from);
+              if (resolvedJid !== from) {
+                from = resolvedJid;
+                // Si se resolvió con éxito, actualizamos la referencia del session
+                session = this.getSession(from);
+              } else {
+                // Si falló la resolución técnica, iniciar gate conversacional (Opción B)
+                console.log(`[WhatsApp] ⚠️ Sincronización técnica no resolvió el JID. Iniciando gate conversacional de país...`);
+
+                const messageText = `¡Hola! Para brindarte una mejor atención y dirigirte con el asesor correcto, por favor dinos: *¿de qué país nos escribes?* 🌎`;
+
+                // Iniciar sesión especial country_gate (si ya tiene una sesión, preservar sus datos y sobreescribir currentMenuId)
+                const currentConversationData = session?.conversationData || {};
+                this.setSession(from, 'country_gate', {
+                  ...currentConversationData,
+                  pendingMessage: body
+                });
+
+                await this.sendMessage(from, messageText);
+                return; // Detener flujo para esperar la respuesta
+              }
+            }
+          }
+
           // Process auto-reply rules (only if no menu session or menu didn't handle it)
           // First, check for menu-type rules (higher priority)
           console.log(`[WhatsApp] Checking ${rules.length} auto-reply rules...`);
@@ -1116,10 +1462,30 @@ class WhatsAppClient extends EventEmitter {
 
             const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
             const phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+            const selectedCountryCode = session?.conversationData?.selectedCountryCode;
+            const isCountryOverridden = !!selectedCountryCode;
 
             // Country filter check
             if (rule.countries && rule.countries.length > 0) {
-              if (isUnresolvedLid) {
+              if (isCountryOverridden) {
+                if (selectedCountryCode === 'other') {
+                  const hasOtherAllowed = rule.countries.includes('other');
+                  if (!hasOtherAllowed) {
+                    console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country override is 'other' and rule has country filter`);
+                    continue;
+                  }
+                }
+                const matchedCountry = rule.countries.some(countryCode => {
+                  const code = countryCode.replace(/\D/g, '');
+                  return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                });
+
+                const isAllowed = matchedCountry || (selectedCountryCode === 'other' && rule.countries.includes('other'));
+                if (!isAllowed) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country override mismatch (${selectedCountryCode} does not match [${rule.countries.join(',')}])`);
+                  continue;
+                }
+              } else if (isUnresolvedLid) {
                 // If unresolvable LID, check user preference
                 if (!rule.allowUnknownCountries) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country unknown (LID) and allowUnknownCountries=false`);
@@ -1127,7 +1493,8 @@ class WhatsAppClient extends EventEmitter {
                 }
               } else {
                 const matchedCountry = rule.countries.some(countryCode => phoneNumberFrom.startsWith(countryCode.replace(/\D/g, '')));
-                if (!matchedCountry) {
+                const isAllowed = matchedCountry || rule.countries.includes('other');
+                if (!isAllowed) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
                   continue;
                 }
@@ -1136,7 +1503,18 @@ class WhatsAppClient extends EventEmitter {
 
             // Exclude country check
             if (rule.excludeCountries && rule.excludeCountries.length > 0) {
-              if (isUnresolvedLid) {
+              if (isCountryOverridden) {
+                if (selectedCountryCode !== 'other') {
+                  const matchedExcluded = rule.excludeCountries.some(countryCode => {
+                    const code = countryCode.replace(/\D/g, '');
+                    return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                  });
+                  if (matchedExcluded) {
+                    console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country override is excluded (${selectedCountryCode} matches [${rule.excludeCountries.join(',')}])`);
+                    continue;
+                  }
+                }
+              } else if (isUnresolvedLid) {
                 // If unresolvable, and user didn't explicitly allow unknowns, block it (safety default)
                 if (!rule.allowUnknownCountries) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (menu) skipped: country unknown (LID) and allowUnknownCountries=false (blacklist)`);
@@ -1213,13 +1591,31 @@ class WhatsAppClient extends EventEmitter {
             if (!rule.isActive || rule.type === 'menu') continue;
 
             let phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
-            // Si el número tiene el formato indexado (ej: 51920...:0), split(':')[0] ya nos deja el número limpio.
-            // Para mayor seguridad, si después de limpiar nos queda algo muy largo o con sufijos, asegurar el formato.
             const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
+            const selectedCountryCode = session?.conversationData?.selectedCountryCode;
+            const isCountryOverridden = !!selectedCountryCode;
 
             // Country filter check
             if (rule.countries && rule.countries.length > 0) {
-              if (isUnresolvedLid) {
+              if (isCountryOverridden) {
+                if (selectedCountryCode === 'other') {
+                  const hasOtherAllowed = rule.countries.includes('other');
+                  if (!hasOtherAllowed) {
+                    console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country override is 'other' and rule has country filter`);
+                    continue;
+                  }
+                }
+                const matchedCountry = rule.countries.some(countryCode => {
+                  const code = countryCode.replace(/\D/g, '');
+                  return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                });
+
+                const isAllowed = matchedCountry || (selectedCountryCode === 'other' && rule.countries.includes('other'));
+                if (!isAllowed) {
+                  console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country override mismatch (${selectedCountryCode} does not match [${rule.countries.join(',')}])`);
+                  continue;
+                }
+              } else if (isUnresolvedLid) {
                 if (!rule.allowUnknownCountries) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country unknown (LID) and allowUnknownCountries=false`);
                   continue;
@@ -1230,7 +1626,8 @@ class WhatsAppClient extends EventEmitter {
                   return phoneNumberFrom.startsWith(code);
                 });
 
-                if (!matchedCountry) {
+                const isAllowed = matchedCountry || rule.countries.includes('other');
+                if (!isAllowed) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country mismatch (${phoneNumberFrom} does not match [${rule.countries.join(',')}])`);
                   continue;
                 }
@@ -1239,7 +1636,19 @@ class WhatsAppClient extends EventEmitter {
 
             // Exclude country check
             if (rule.excludeCountries && rule.excludeCountries.length > 0) {
-              if (isUnresolvedLid) {
+              if (isCountryOverridden) {
+                if (selectedCountryCode !== 'other') {
+                  const matchedExcluded = rule.excludeCountries.some(countryCode => {
+                    const code = countryCode.replace(/\D/g, '');
+                    return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                  });
+
+                  if (matchedExcluded) {
+                    console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country override is excluded (${selectedCountryCode} matches [${rule.excludeCountries.join(',')}])`);
+                    continue;
+                  }
+                }
+              } else if (isUnresolvedLid) {
                 if (!rule.allowUnknownCountries) {
                   console.log(`[WhatsApp] Rule [${rule.name}] (simple) skipped: country unknown (LID) and allowUnknownCountries=false (blacklist)`);
                   continue;
@@ -1265,10 +1674,10 @@ class WhatsAppClient extends EventEmitter {
             }
             if (shouldReply) {
               // Regular auto-reply (simple type)
-              const textMessage = rule.response || '';
+              let textMessage = rule.response || '';
 
               // Soporte para múltiples archivos por regla
-              const mediaPaths = Array.isArray(rule.mediaPaths)
+              let mediaPaths = Array.isArray(rule.mediaPaths)
                 ? rule.mediaPaths.filter(Boolean)
                 : (rule.mediaPath ? [rule.mediaPath] : []);
 
@@ -1290,6 +1699,79 @@ class WhatsAppClient extends EventEmitter {
               let captions = Array.isArray(parsedCaptions)
                 ? parsedCaptions
                 : (parsedCaptions ? [parsedCaptions] : mediaPaths.map(() => (rule.caption || '')));
+
+              // APLICAR CAMBIOS PARA REGLAS MULTI-PAÍS CENTRALIZADAS (rule.countryResponses)
+              if (rule.countryResponses && Object.keys(rule.countryResponses).length > 0) {
+                const countryCode = session?.conversationData?.selectedCountryCode || (isUnresolvedLid ? null : phoneNumberFrom);
+
+                let matchedKey = null;
+                if (countryCode && countryCode !== 'other') {
+                  matchedKey = Object.keys(rule.countryResponses).find(key => {
+                    const cleanKey = key.replace(/\D/g, '');
+                    return countryCode === cleanKey || countryCode.startsWith(cleanKey);
+                  });
+                }
+
+                if (matchedKey && rule.countryResponses[matchedKey]) {
+                  const override = rule.countryResponses[matchedKey];
+                  console.log(`[WhatsApp] 🎯 Aplicando respuesta específica de país para +${matchedKey} en regla "${rule.name}"`);
+
+                  mediaPaths = Array.isArray(override.mediaPaths)
+                    ? override.mediaPaths.filter(Boolean)
+                    : (override.mediaPath ? [override.mediaPath] : []);
+
+                  let overrideCaptions = override.captions || override.caption || '';
+                  if (typeof overrideCaptions === 'string' && overrideCaptions.trim().startsWith('[')) {
+                    try {
+                      overrideCaptions = JSON.parse(overrideCaptions);
+                    } catch (e) { }
+                  }
+                  captions = Array.isArray(overrideCaptions)
+                    ? overrideCaptions
+                    : (overrideCaptions ? [overrideCaptions] : mediaPaths.map(() => ''));
+                } else {
+                  console.log(`[WhatsApp] 🌎 Remitente (+${countryCode}) no coincide con los países configurados. Usando respuesta por defecto (fallback).`);
+                }
+              }
+
+              // Aplicar "Destino del Mensaje Principal (Texto)" a nivel global
+              if (rule.isMessageCaption && mediaPaths.length > 0) {
+                textMessage = '';
+                captions[0] = rule.response || '';
+              } else {
+                textMessage = rule.response || '';
+              }
+
+              // RESOLVER VARIABLES EN RESPUESTA Y CAPTIONS (nombre y pais)
+              let finalSenderName = m.pushName || 'Amigo';
+              let finalCountryName = 'tu país';
+
+              const resolvedCountryCode = session?.conversationData?.selectedCountryCode || (isUnresolvedLid ? null : phoneNumberFrom);
+              if (resolvedCountryCode && resolvedCountryCode !== 'other') {
+                const cleanCode = resolvedCountryCode.replace(/\D/g, '');
+                const countriesList = typeof this.loadCountriesList === 'function' ? this.loadCountriesList() : [];
+                const found = countriesList.find(c => cleanCode.startsWith(c.code) || c.code === cleanCode);
+                if (found && found.name) {
+                  finalCountryName = found.name;
+                } else {
+                  const info = this.getCountryInfo(cleanCode);
+                  if (info && info.name) finalCountryName = info.name;
+                }
+              }
+
+              const replaceTemplates = (str) => {
+                if (typeof str !== 'string') return str;
+                return str
+                  .replace(/\{\{nombre\}\}/gi, finalSenderName)
+                  .replace(/\[nombre\]/gi, finalSenderName)
+                  .replace(/\{\{pais\}\}/gi, finalCountryName)
+                  .replace(/\[pais\]/gi, finalCountryName);
+              };
+
+              textMessage = replaceTemplates(textMessage);
+              if (Array.isArray(captions)) {
+                captions = captions.map(c => replaceTemplates(c));
+              }
 
               console.log('[WhatsAppClient] Auto-reply matched rule:', {
                 id: rule.id,

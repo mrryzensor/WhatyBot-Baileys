@@ -683,7 +683,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
           <button
             type="button"
             onClick={handleCheckUpdates}
-            className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium text-white bg-theme-sidebar hover:bg-slate-800"
+            className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-black dark:hover:bg-white inline-flex items-center justify-center shadow-md transition-all duration-200"
           >
             Buscar actualizaciones
           </button>

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon, Globe, ChevronDown, ChevronUp, Copy, CheckSquare, Square, Zap } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, Bot, Clock, ToggleLeft, ToggleRight, X, Download, Upload, Image, Video, FileText, Paperclip, Menu as MenuIcon, Globe, ChevronDown, ChevronUp, Copy, CheckSquare, Square, Zap, Loader } from 'lucide-react';
 import { AutoReplyRule, InteractiveMenu } from '../types';
 import { countries as countryList } from '../utils/countries';
-import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus, getApiUrl } from '../services/api';
+import { createAutoReplyRule, updateAutoReplyRule, deleteAutoReplyRule, importAutoReplyRules, getAutoReplyRules, getInteractiveMenus, getApiUrl, uploadOptionMedia } from '../services/api';
 import { MediaUpload } from './MediaUpload';
 import { MessageEditorToolbar } from './MessageEditorToolbar';
 import { MessagePreview } from './MessagePreview';
@@ -41,6 +41,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
     const [countryTab, setCountryTab] = useState<'include' | 'exclude'>('include');
     const [showMobileEditor, setShowMobileEditor] = useState(false);
     const { globalSessionsEnabled } = useGlobalSessions();
+    const [isLoadingCountryMedia, setIsLoadingCountryMedia] = useState<Record<string, boolean>>({});
+    const [isCountryResponsesExpanded, setIsCountryResponsesExpanded] = useState(true);
+    const [countryResponsesLayout, setCountryResponsesLayout] = useState<'1col' | '2col'>('1col');
 
     // Load interactive menus
     useEffect(() => {
@@ -88,13 +91,17 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         type: 'simple',
         countries: [],
         excludeCountries: [],
-        allowUnknownCountries: false
+        allowUnknownCountries: false,
+        isMessageCaption: false,
+        countryResponses: {}
     });
 
     const [keywordInput, setKeywordInput] = useState('');
     const media = useMedia({ maxFiles: 50 });
     const importInputRef = useRef<HTMLInputElement>(null);
     const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const countryResponseRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
+    const countryCaptionRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
 
     // Auto-resize response message textarea
     React.useEffect(() => {
@@ -104,6 +111,33 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             textarea.style.height = `${textarea.scrollHeight}px`;
         }
     }, [formData.response]);
+
+    // Auto-resize country response and caption textareas
+    React.useEffect(() => {
+        if (!formData.countryResponses) return;
+        
+        Object.keys(formData.countryResponses).forEach(code => {
+            // Resize response textareas
+            const el = countryResponseRefs.current[code];
+            if (el) {
+                el.style.height = 'auto';
+                el.style.height = `${el.scrollHeight}px`;
+            }
+            
+            // Resize caption textareas for each media path
+            const override = formData.countryResponses?.[code];
+            if (override && override.mediaPaths) {
+                override.mediaPaths.forEach((_, idx) => {
+                    const key = `${code}-${idx}`;
+                    const elCap = countryCaptionRefs.current[key];
+                    if (elCap) {
+                        elCap.style.height = 'auto';
+                        elCap.style.height = `${elCap.scrollHeight}px`;
+                    }
+                });
+            }
+        });
+    }, [formData.countryResponses]);
 
     const resetForm = () => {
         setFormData({
@@ -116,7 +150,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             type: 'simple',
             countries: [],
             excludeCountries: [],
-            allowUnknownCountries: false
+            allowUnknownCountries: false,
+            isMessageCaption: false,
+            countryResponses: {}
         });
         setKeywordInput('');
         media.setMediaItems([]);
@@ -124,10 +160,63 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         setShowMobileEditor(false);
     };
 
+    const handleCountryMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>, code: string) => {
+        const fileList = e.target.files;
+        if (!fileList || fileList.length === 0) return;
+        const filesArray = Array.from(fileList) as File[];
+        
+        try {
+            setIsLoadingCountryMedia(prev => ({ ...prev, [code]: true }));
+            const res = await uploadOptionMedia(filesArray);
+            if (res.success && res.files) {
+                const newPaths = res.files.map((f: any) => `uploads/${f.filename}`);
+                
+                const prevOverride = formData.countryResponses?.[code] || { response: '', mediaPaths: [], captions: [] };
+                const currentPaths = prevOverride.mediaPaths || [];
+                const currentCaptions = prevOverride.captions || [];
+                
+                const updatedPaths = [...currentPaths, ...newPaths];
+                const updatedCaptions = [...currentCaptions, ...newPaths.map(() => '')];
+                
+                setFormData(prev => ({
+                    ...prev,
+                    countryResponses: {
+                        ...(prev.countryResponses || {}),
+                        [code]: {
+                            ...prevOverride,
+                            mediaPaths: updatedPaths,
+                            captions: updatedCaptions
+                        }
+                    }
+                }));
+                
+                if (toast) {
+                    const message = filesArray.length > 1 
+                        ? `${filesArray.length} archivos subidos exitosamente` 
+                        : "Archivo subido exitosamente";
+                    toast.success(message);
+                }
+            }
+        } catch (err: any) {
+            console.error("Error uploading country media:", err);
+            if (toast) {
+                toast.error("Error al subir archivos: " + err.message);
+            }
+        } finally {
+            setIsLoadingCountryMedia(prev => ({ ...prev, [code]: false }));
+            e.target.value = ''; // Reset input to allow selecting the same files again
+        }
+    };
+
     const handleEdit = (rule: AutoReplyRule) => {
         setEditingId(rule.id);
         setShowMobileEditor(true);
-        setFormData({ ...rule, countries: rule.countries || [], excludeCountries: rule.excludeCountries || [] });
+        setFormData({
+            ...rule,
+            countries: rule.countries || [],
+            excludeCountries: rule.excludeCountries || [],
+            countryResponses: rule.countryResponses || {}
+        });
         const hasCountries = (rule.countries && rule.countries.length > 0) || (rule.excludeCountries && rule.excludeCountries.length > 0);
         setShowCountrySelector(hasCountries);
 
@@ -269,7 +358,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 menuId: formData.menuId,
                 countries: formData.countries || [],
                 excludeCountries: formData.excludeCountries || [],
-                allowUnknownCountries: formData.allowUnknownCountries ?? false
+                allowUnknownCountries: formData.allowUnknownCountries ?? false,
+                isMessageCaption: formData.isMessageCaption ?? false,
+                countryResponses: formData.countryResponses || {}
             };
 
             if (editingId) {
@@ -1109,6 +1200,36 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                             </div>
 
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border border-theme rounded-md bg-theme-card/30">
+                                                {countryTab === 'include' && ('otros paises'.includes(countrySearch.toLowerCase()) || 'other'.includes(countrySearch.toLowerCase())) && (() => {
+                                                    const isChecked = (formData.countries || []).includes('other');
+                                                    return (
+                                                        <label
+                                                            key="country-tab-virtual-other"
+                                                            className={`flex items-center gap-2 p-2 rounded cursor-pointer border border-transparent transition-colors ${isChecked
+                                                                ? 'bg-primary-50/50 border-primary-200'
+                                                                : 'hover:bg-theme-card'
+                                                                }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                className="rounded text-primary-600"
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    const currentValues = formData.countries || [];
+                                                                    if (e.target.checked) {
+                                                                        setFormData({ ...formData, countries: [...currentValues, 'other'] });
+                                                                    } else {
+                                                                        setFormData({ ...formData, countries: currentValues.filter(c => c !== 'other') });
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <span className="text-[10px] flex items-center gap-2">
+                                                                <Globe size={14} className="text-primary-600 shrink-0" />
+                                                                <span className="truncate font-semibold text-primary-700 dark:text-primary-400">Otros países (Resto)</span>
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })()}
                                                 {countryList
                                                     .filter(country =>
                                                         country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
@@ -1162,11 +1283,20 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 <div className="flex flex-wrap gap-1 items-center">
                                                     <span className="text-[10px] font-semibold text-primary-600 mr-1">Incluidos:</span>
                                                     {formData.countries.map(code => {
+                                                        if (code === 'other') {
+                                                            return (
+                                                                <span key="inc-other" className="bg-primary-50 text-primary-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-primary-100">
+                                                                    <Globe size={10} className="text-primary-600" />
+                                                                    <span>Otros países</span>
+                                                                    <button onClick={(e) => { e.preventDefault(); setFormData({ ...formData, countries: formData.countries?.filter(c => c !== 'other') }); }} className="hover:text-primary-900"><X size={8} /></button>
+                                                                </span>
+                                                            );
+                                                        }
                                                         const country = countryList.find(c => c.code === code);
                                                         return (
                                                             <span key={`inc-${code}`} className="bg-primary-50 text-primary-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-primary-100">
                                                                 {country?.iso && <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="12" alt="" className="rounded-xs" />}
-                                                                {code}
+                                                                {country?.name || code}
                                                                 <button onClick={(e) => { e.preventDefault(); setFormData({ ...formData, countries: formData.countries?.filter(c => c !== code) }); }} className="hover:text-primary-900"><X size={8} /></button>
                                                             </span>
                                                         );
@@ -1182,7 +1312,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                         return (
                                                             <span key={`exc-${code}`} className="bg-red-50 text-red-700 text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-red-100">
                                                                 {country?.iso && <img src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`} width="12" alt="" className="rounded-xs" />}
-                                                                {code}
+                                                                {country?.name || code}
                                                                 <button onClick={(e) => { e.preventDefault(); setFormData({ ...formData, excludeCountries: formData.excludeCountries?.filter(c => c !== code) }); }} className="hover:text-red-900"><X size={8} /></button>
                                                             </span>
                                                         );
@@ -1208,7 +1338,204 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                 )}
                             </div>
 
+                            {/* RESPUESTAS ESPECÍFICAS POR PAÍS */}
+                            {formData.type !== 'menu' && formData.countries && formData.countries.length > 0 && (
+                                <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-theme rounded-lg p-4 transition-all duration-300">
+                                    <div className="flex items-center justify-between border-b border-theme/50 pb-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCountryResponsesExpanded(!isCountryResponsesExpanded)}
+                                            className="flex items-center gap-2 text-sm font-bold text-theme-main hover:text-primary-600 transition-colors focus:outline-none"
+                                        >
+                                            <Bot size={16} className="text-primary-600 shrink-0" />
+                                            <span>Respuestas Personalizadas por País</span>
+                                            <span className="text-xs font-normal text-theme-muted bg-theme-base border border-theme px-2 py-0.5 rounded-full shrink-0">
+                                                {formData.countries.length} {formData.countries.length === 1 ? 'país' : 'países'}
+                                            </span>
+                                            {isCountryResponsesExpanded ? <ChevronUp size={16} className="text-theme-muted shrink-0" /> : <ChevronDown size={16} className="text-theme-muted shrink-0" />}
+                                        </button>
+                                        
+                                        {isCountryResponsesExpanded && (
+                                            <div className="flex items-center bg-theme-base border border-theme rounded-lg p-0.5 shrink-0 shadow-sm">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCountryResponsesLayout('1col')}
+                                                    className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                                                        countryResponsesLayout === '1col'
+                                                            ? 'bg-primary-600 text-white shadow-sm'
+                                                            : 'text-theme-muted hover:text-theme-main hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    1 Columna
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCountryResponsesLayout('2col')}
+                                                    className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
+                                                        countryResponsesLayout === '2col'
+                                                            ? 'bg-primary-600 text-white shadow-sm'
+                                                            : 'text-theme-muted hover:text-theme-main hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    2 Columnas
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 
+                                    {isCountryResponsesExpanded && (
+                                        <div className="space-y-4 pt-3">
+                                            <p className="text-xs text-theme-muted leading-relaxed">
+                                                Configura archivos multimedia y captions específicos para cada uno de los países seleccionados. Si no los personalizas, recibirán el comportamiento por defecto configurado abajo.
+                                            </p>
+
+                                            <div className={`grid gap-4 ${countryResponsesLayout === '2col' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                                                {formData.countries.map(code => {
+                                                    const isOther = code === 'other';
+                                                    const country = isOther ? null : countryList.find(c => c.code === code);
+                                                    const hasOverride = !!formData.countryResponses?.[code];
+                                                    const overrideData = formData.countryResponses?.[code] || { response: '', mediaPaths: [], captions: [] };
+
+                                                    return (
+                                                        <div key={`override-${code}`} className="border border-theme rounded-lg bg-theme-card overflow-hidden transition-all duration-200 hover:shadow-sm">
+                                                            <div className="p-3 bg-theme-base flex items-center justify-between">
+                                                                <div className="flex items-center gap-2 text-xs font-semibold text-theme-main">
+                                                                    {isOther ? (
+                                                                        <Globe size={16} className="text-primary-600 shrink-0" />
+                                                                    ) : (
+                                                                        country?.iso && (
+                                                                            <img
+                                                                                src={`https://flagcdn.com/w20/${country.iso.toLowerCase()}.png`}
+                                                                                width="18"
+                                                                                alt=""
+                                                                                className="rounded-sm shadow-sm"
+                                                                            />
+                                                                        )
+                                                                    )}
+                                                                    <span>{isOther ? 'Otros países (Resto)' : (country?.name || `Prefijo +${code}`)}</span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updatedResponses = { ...(formData.countryResponses || {}) };
+                                                                        if (hasOverride) {
+                                                                            delete updatedResponses[code];
+                                                                        } else {
+                                                                            updatedResponses[code] = { response: '', mediaPaths: [], captions: [] };
+                                                                        }
+                                                                        setFormData({ ...formData, countryResponses: updatedResponses });
+                                                                    }}
+                                                                    className={`text-xs font-semibold px-2.5 py-1 rounded transition-colors ${
+                                                                        hasOverride
+                                                                            ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/60'
+                                                                            : 'bg-primary-50 text-primary-600 hover:bg-primary-100 dark:bg-primary-950/30 dark:text-primary-400 dark:hover:bg-primary-950/60'
+                                                                    }`}
+                                                                >
+                                                                    {hasOverride ? 'Quitar Personalización' : 'Personalizar'}
+                                                                </button>
+                                                            </div>
+
+                                                            {hasOverride && (
+                                                                <div className="p-3 space-y-3 border-t border-theme">
+                                                                    {/* Country Media Specific */}
+                                                                    <div className="space-y-2">
+                                                                        <label className="block text-[11px] font-medium text-theme-main">Archivos Multimedia Exclusivos (Opcional)</label>
+                                                                        
+                                                                        {/* Files Preview */}
+                                                                        {overrideData.mediaPaths && overrideData.mediaPaths.length > 0 && (
+                                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                                                                {overrideData.mediaPaths.map((mp, index) => {
+                                                                                    const fileName = mp.split(/[/\\]/).pop() || 'archivo';
+                                                                                    const type = getMediaTypeFromPath(mp);
+                                                                                    const previewUrl = getMediaPreviewUrl(mp);
+
+                                                                                    return (
+                                                                                        <div key={index} className="border border-theme rounded p-2 bg-theme-base relative group space-y-2">
+                                                                                            <div className="flex items-center justify-between">
+                                                                                                <MediaThumbnail
+                                                                                                    src={previewUrl}
+                                                                                                    mediaPath={mp}
+                                                                                                    type={type}
+                                                                                                    className="h-12 w-12 shrink-0 rounded-lg border border-theme"
+                                                                                                />
+                                                                                            </div>
+                                                                                            <div className="w-full">
+                                                                                                <textarea
+                                                                                                    ref={el => { countryCaptionRefs.current[`${code}-${index}`] = el; }}
+                                                                                                    placeholder="Caption (subtítulo)..."
+                                                                                                    className="w-full border border-theme rounded-lg px-2.5 py-1.5 text-sm bg-theme-card focus:ring-1 focus:ring-primary-500 min-h-[36px] max-h-[120px] resize-none overflow-y-auto font-sans"
+                                                                                                    rows={1}
+                                                                                                    value={overrideData.captions?.[index] || ''}
+                                                                                                    onChange={e => {
+                                                                                                        const updatedResponses = { ...(formData.countryResponses || {}) };
+                                                                                                        const nextCaptions = [...(overrideData.captions || [])];
+                                                                                                        nextCaptions[index] = e.target.value;
+                                                                                                        updatedResponses[code] = {
+                                                                                                            ...overrideData,
+                                                                                                            captions: nextCaptions
+                                                                                                        };
+                                                                                                        setFormData({ ...formData, countryResponses: updatedResponses });
+                                                                                                    }}
+                                                                                                />
+                                                                                            </div>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => {
+                                                                                                    const updatedResponses = { ...(formData.countryResponses || {}) };
+                                                                                                    const nextPaths = overrideData.mediaPaths?.filter((_, idx) => idx !== index) || [];
+                                                                                                    const nextCaptions = overrideData.captions?.filter((_, idx) => idx !== index) || [];
+                                                                                                    updatedResponses[code] = {
+                                                                                                        ...overrideData,
+                                                                                                        mediaPaths: nextPaths,
+                                                                                                        captions: nextCaptions
+                                                                                                    };
+                                                                                                    setFormData({ ...formData, countryResponses: updatedResponses });
+                                                                                                }}
+                                                                                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                                                            >
+                                                                                                <X size={10} />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Country file upload button */}
+                                                                        <div>
+                                                                            <label className="flex items-center justify-center gap-1.5 border border-dashed border-theme hover:border-primary-500 rounded-lg p-3 bg-theme-base cursor-pointer hover:bg-primary-50/20 transition-all text-xs font-semibold text-theme-muted hover:text-primary-600">
+                                                                                {isLoadingCountryMedia[code] ? (
+                                                                                    <>
+                                                                                        <Loader size={14} className="animate-spin text-primary-600" />
+                                                                                        <span>Subiendo archivos...</span>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <Paperclip size={14} />
+                                                                                        <span>Adjuntar multimedia para {isOther ? 'Otros países' : (country?.name || code)}</span>
+                                                                                    </>
+                                                                                )}
+                                                                                <input
+                                                                                    type="file"
+                                                                                    multiple
+                                                                                    accept="image/*,video/*,application/*"
+                                                                                    className="hidden"
+                                                                                    disabled={isLoadingCountryMedia[code]}
+                                                                                    onChange={e => handleCountryMediaSelect(e, code)}
+                                                                                />
+                                                                            </label>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm font-medium text-theme-main mb-1">Palabras Clave (Triggers)</label>
@@ -1270,7 +1597,9 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 setFormData({ ...formData, response: value });
                                                 if (formErrors.response) setFormErrors({ ...formErrors, response: '' });
                                             }}
-                                            showVariables={false}
+                                            variables={['nombre', 'pais']}
+                                            showVariables={true}
+                                            showEmojiPickerBelow={true}
                                         />
                                         <textarea
                                             ref={messageTextareaRef}
@@ -1283,6 +1612,19 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                 if (formErrors.response) setFormErrors({ ...formErrors, response: '' });
                                             }}
                                         ></textarea>
+                                        <div className="mt-3">
+                                            <label className="block text-xs font-semibold text-theme-main mb-1.5 text-primary-700">
+                                                Destino del Mensaje Principal (Texto)
+                                            </label>
+                                            <select
+                                                className="w-full border border-theme rounded-lg px-3 py-2 text-sm bg-theme-card focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium text-theme-main"
+                                                value={formData.isMessageCaption ? 'caption' : 'text'}
+                                                onChange={e => setFormData({ ...formData, isMessageCaption: e.target.value === 'caption' })}
+                                            >
+                                                <option value="text">Enviar como Mensaje de Texto Independiente</option>
+                                                <option value="caption">Enviar como Caption (Subtítulo) de Imagen/Video</option>
+                                            </select>
+                                        </div>
                                         {formErrors.response && (
                                             <p className="mt-1 text-sm text-red-600">{formErrors.response}</p>
                                         )}

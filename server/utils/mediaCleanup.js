@@ -7,6 +7,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * Obtiene el nombre del archivo de forma segura en Windows y Linux,
+ * reemplazando posibles diagonales invertidas y normales.
+ * @param {string} mediaPath - Ruta del archivo
+ * @returns {string} Nombre base del archivo
+ */
+function getSafeBasename(mediaPath) {
+    if (!mediaPath || typeof mediaPath !== 'string') return '';
+    const normalized = mediaPath.replace(/\\/g, '/');
+    return path.basename(normalized);
+}
+
+/**
  * Extrae todos los archivos multimedia referenciados en menús y reglas
  * @param {Array} menus - Array de menús interactivos
  * @param {Array} rules - Array de reglas de auto-respuesta
@@ -21,16 +33,16 @@ export function getReferencedMediaFiles(menus = [], rules = []) {
         if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
             menu.mediaPaths.forEach(mediaPath => {
                 if (mediaPath && !mediaPath.startsWith('http')) {
-                    const fileName = path.basename(mediaPath);
-                    referencedFiles.add(fileName);
+                    const fileName = getSafeBasename(mediaPath);
+                    if (fileName) referencedFiles.add(fileName);
                 }
             });
         }
 
         // Soporte legacy para mediaPath singular
         if (menu.mediaPath && !menu.mediaPath.startsWith('http')) {
-            const fileName = path.basename(menu.mediaPath);
-            referencedFiles.add(fileName);
+            const fileName = getSafeBasename(menu.mediaPath);
+            if (fileName) referencedFiles.add(fileName);
         }
 
         // Media de las opciones del menú
@@ -39,16 +51,16 @@ export function getReferencedMediaFiles(menus = [], rules = []) {
                 if (option.mediaPaths && Array.isArray(option.mediaPaths)) {
                     option.mediaPaths.forEach(mediaPath => {
                         if (mediaPath && !mediaPath.startsWith('http')) {
-                            const fileName = path.basename(mediaPath);
-                            referencedFiles.add(fileName);
+                            const fileName = getSafeBasename(mediaPath);
+                            if (fileName) referencedFiles.add(fileName);
                         }
                     });
                 }
 
                 // Soporte legacy para mediaPath singular
                 if (option.mediaPath && !option.mediaPath.startsWith('http')) {
-                    const fileName = path.basename(option.mediaPath);
-                    referencedFiles.add(fileName);
+                    const fileName = getSafeBasename(option.mediaPath);
+                    if (fileName) referencedFiles.add(fileName);
                 }
             });
         }
@@ -59,16 +71,37 @@ export function getReferencedMediaFiles(menus = [], rules = []) {
         if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
             rule.mediaPaths.forEach(mediaPath => {
                 if (mediaPath && !mediaPath.startsWith('http')) {
-                    const fileName = path.basename(mediaPath);
-                    referencedFiles.add(fileName);
+                    const fileName = getSafeBasename(mediaPath);
+                    if (fileName) referencedFiles.add(fileName);
                 }
             });
         }
 
         // Soporte legacy para mediaPath singular
         if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
-            const fileName = path.basename(rule.mediaPath);
-            referencedFiles.add(fileName);
+            const fileName = getSafeBasename(rule.mediaPath);
+            if (fileName) referencedFiles.add(fileName);
+        }
+
+        // Procesar countryResponses en la regla
+        if (rule.countryResponses && typeof rule.countryResponses === 'object') {
+            Object.keys(rule.countryResponses).forEach(countryCode => {
+                const override = rule.countryResponses[countryCode];
+                if (override && typeof override === 'object') {
+                    if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                        override.mediaPaths.forEach(mediaPath => {
+                            if (mediaPath && !mediaPath.startsWith('http')) {
+                                const fileName = getSafeBasename(mediaPath);
+                                if (fileName) referencedFiles.add(fileName);
+                            }
+                        });
+                    }
+                    if (override.mediaPath && !override.mediaPath.startsWith('http')) {
+                        const fileName = getSafeBasename(override.mediaPath);
+                        if (fileName) referencedFiles.add(fileName);
+                    }
+                }
+            });
         }
     });
 
@@ -154,20 +187,37 @@ export function deleteItemMediaFiles(item) {
         mediaPaths.push(item.mediaPath);
     }
 
+    // Recopilar todas las rutas de media de countryResponses
+    if (item.countryResponses && typeof item.countryResponses === 'object') {
+        Object.keys(item.countryResponses).forEach(countryCode => {
+            const override = item.countryResponses[countryCode];
+            if (override && typeof override === 'object') {
+                if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                    mediaPaths.push(...override.mediaPaths);
+                }
+                if (override.mediaPath) {
+                    mediaPaths.push(override.mediaPath);
+                }
+            }
+        });
+    }
+
     // Eliminar cada archivo
     mediaPaths.forEach(mediaPath => {
         if (mediaPath && !mediaPath.startsWith('http')) {
             try {
+                const fileName = getSafeBasename(mediaPath);
                 const absolutePath = path.isAbsolute(mediaPath)
                     ? mediaPath
-                    : path.join(UPLOAD_DIR, path.basename(mediaPath));
+                    : path.join(UPLOAD_DIR, fileName);
                 if (fs.existsSync(absolutePath)) {
                     fs.unlinkSync(absolutePath);
-                    result.deleted.push(path.basename(mediaPath));
-                    console.log(`[MediaCleanup] Deleted file: ${path.basename(mediaPath)}`);
+                    result.deleted.push(fileName);
+                    console.log(`[MediaCleanup] Deleted file: ${fileName}`);
                 }
             } catch (error) {
-                result.errors.push({ file: path.basename(mediaPath), error: error.message });
+                const fileName = getSafeBasename(mediaPath);
+                result.errors.push({ file: fileName, error: error.message });
                 console.error(`[MediaCleanup] Error deleting ${mediaPath}:`, error);
             }
         }
