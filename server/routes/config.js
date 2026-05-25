@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
+import sharp from 'sharp';
 import { fileURLToPath } from 'url';
 import { cleanSessionOrphanedFiles, cleanAllSessionsOrphanedFiles } from '../utils/mediaCleanup.js';
 import { UPLOAD_DIR } from '../utils/paths.js';
@@ -590,6 +591,98 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
 
     } catch (error) {
         console.error('[Import-All] Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/config/optimize-existing-media - Optimize all existing images on server
+router.post('/config/optimize-existing-media', async (req, res) => {
+    try {
+        const uploadDir = UPLOAD_DIR;
+        if (!fs.existsSync(uploadDir)) {
+            return res.json({ success: true, optimizedCount: 0, message: 'Uploads directory does not exist' });
+        }
+
+        const files = fs.readdirSync(uploadDir);
+        let optimizedCount = 0;
+        let initialSizeTotal = 0;
+        let finalSizeTotal = 0;
+
+        for (const file of files) {
+            const filePath = path.join(uploadDir, file);
+            if (fs.lstatSync(filePath).isDirectory()) continue;
+
+            const ext = path.extname(file).toLowerCase();
+            const isImage = /^\.(jpg|jpeg|png|webp|tiff|gif)$/i.test(ext);
+            if (!isImage || ext === '.svg') continue;
+
+            try {
+                const oldSize = fs.statSync(filePath).size;
+                initialSizeTotal += oldSize;
+
+                const tempPath = filePath + '.tmp';
+                let pipeline = sharp(filePath);
+
+                if (ext === '.gif') {
+                    pipeline = sharp(filePath, { animated: true });
+                }
+
+                pipeline = pipeline.resize({
+                    width: 2000,
+                    height: 2000,
+                    fit: 'inside',
+                    withoutEnlargement: true
+                });
+
+                if (ext === '.png') {
+                    pipeline = pipeline.png({ palette: true, quality: 80, compressionLevel: 8 });
+                } else if (ext === '.gif') {
+                    pipeline = pipeline.gif({ colours: 128, quality: 75 });
+                } else if (ext === '.webp') {
+                    pipeline = pipeline.webp({ quality: 80 });
+                } else {
+                    pipeline = pipeline.jpeg({ quality: 80, mozjpeg: true });
+                }
+
+                await pipeline.toFile(tempPath);
+
+                if (fs.existsSync(tempPath)) {
+                    const newSize = fs.statSync(tempPath).size;
+                    
+                    // Only replace if the compressed version is strictly smaller than the original
+                    if (newSize < oldSize) {
+                        fs.unlinkSync(filePath);
+                        fs.renameSync(tempPath, filePath);
+                        finalSizeTotal += newSize;
+                        optimizedCount++;
+                        console.log(`[OptimizeBulk] Optimized ${file}: ${oldSize} -> ${newSize} bytes`);
+                    } else {
+                        fs.unlinkSync(tempPath);
+                        finalSizeTotal += oldSize;
+                    }
+                } else {
+                    finalSizeTotal += oldSize;
+                }
+            } catch (err) {
+                console.error(`[OptimizeBulk] Failed to optimize ${file}:`, err.message);
+                const oldSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
+                finalSizeTotal += oldSize;
+            }
+        }
+
+        const spaceSavedPercent = initialSizeTotal > 0 
+            ? ((initialSizeTotal - finalSizeTotal) / initialSizeTotal * 100).toFixed(1)
+            : '0.0';
+
+        res.json({
+            success: true,
+            optimizedCount,
+            initialSizeTotal,
+            finalSizeTotal,
+            spaceSavedPercent
+        });
+    } catch (error) {
+        console.error('[OptimizeBulk] Error:', error);
         res.status(500).json({ error: error.message });
     }
 });

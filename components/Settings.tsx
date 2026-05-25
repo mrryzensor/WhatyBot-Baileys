@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Save, Clock, Users, Timer, Download, Upload, Database, Trash2, Palette, Moon, Sun, Plus } from 'lucide-react';
+import { Save, Clock, Users, Timer, Download, Upload, Database, Trash2, Palette, Moon, Sun, Plus, Image } from 'lucide-react';
 import { AppConfig } from '../types';
-import { updateConfig as updateConfigApi, exportCompleteConfig, importCompleteConfig, cleanupOrphanedFiles } from '../services/api';
+import { updateConfig as updateConfigApi, exportCompleteConfig, importCompleteConfig, cleanupOrphanedFiles, optimizeExistingMedia } from '../services/api';
 import { changePassword, getCurrentUser } from '../services/authApi';
 import { GlobalSessionToggle } from './GlobalSessionToggle';
 import { useGlobalSessions } from '../hooks/useGlobalSessions';
@@ -34,6 +34,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const { selectedSessionId } = useSession();
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupAllSessions, setCleanupAllSessions] = useState(false);
@@ -132,6 +133,26 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
 
   const confirmCleanup = () => {
     handleCleanupOrphanedFiles(cleanupAllSessions);
+  };
+
+  const handleOptimizeExistingMedia = async () => {
+    try {
+      setIsOptimizing(true);
+      const result = await optimizeExistingMedia();
+      if (result.success && result.optimizedCount > 0) {
+        const savings = result.spaceSavedPercent ? `${result.spaceSavedPercent}%` : '0%';
+        const initialSizeMb = (result.initialSizeTotal / (1024 * 1024)).toFixed(2);
+        const finalSizeMb = (result.finalSizeTotal / (1024 * 1024)).toFixed(2);
+        toast?.success(`Optimización exitosa: ${result.optimizedCount} imágenes optimizadas. Reducción de ${initialSizeMb} MB a ${finalSizeMb} MB (¡Ahorro de ${savings}!).`);
+      } else {
+        toast?.info('No se encontraron imágenes aptas para optimizar o todas ya estaban optimizadas.');
+      }
+    } catch (error: any) {
+      console.error('Error optimizing existing media:', error);
+      toast?.error(error?.message || 'Error al optimizar imágenes en el servidor');
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   const handleCheckUpdates = async () => {
@@ -554,6 +575,41 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
           </div>
         </div>
 
+        {/* Optimización de Archivos Multimedia */}
+        <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
+          <h3 className="text-lg font-bold text-theme-main mb-6 flex items-center gap-2">
+            <Image size={20} className="text-emerald-500" /> Optimización de Archivos Multimedia
+          </h3>
+
+          <div className="space-y-4">
+            <p className="text-sm text-theme-muted">
+              Comprime y optimiza en el servidor todas las imágenes (JPEG, PNG, WebP, GIF) de menús y reglas para ahorrar espacio en disco y acelerar las copias de seguridad.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleOptimizeExistingMedia}
+                disabled={isOptimizing}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                <Image size={18} />
+                {isOptimizing ? 'Optimizando imágenes...' : 'Optimizar Imágenes del Servidor'}
+              </button>
+
+              <div className="flex items-start gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5">
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+                  <path d="m9 12 2 2 4-4"></path>
+                </svg>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  Esta acción analizará todas las imágenes almacenadas y las optimizará en su lugar sin cambiar sus nombres ni enlaces, manteniendo la integridad del bot.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Límites de envío masivo */}
         <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme">
           <h3 className="text-lg font-bold text-theme-main mb-6 flex items-center gap-2">
@@ -683,7 +739,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
           <button
             type="button"
             onClick={handleCheckUpdates}
-            className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-black dark:hover:bg-white inline-flex items-center justify-center shadow-md transition-all duration-200"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg font-medium"
           >
             Buscar actualizaciones
           </button>

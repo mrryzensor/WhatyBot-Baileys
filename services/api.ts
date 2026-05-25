@@ -987,4 +987,10 @@ export const cleanupOrphanedFiles = async (sessionId?: string, allSessions: bool
   return response.data;
 };
 
+// Optimize existing media files on server
+export const optimizeExistingMedia = async () => {
+  const response = await api.post('/config/optimize-existing-media');
+  return response.data;
+};
+
 export default api;
