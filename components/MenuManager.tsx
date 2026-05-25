@@ -764,16 +764,18 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ toast }) => {
                                 <h4 className="font-semibold text-theme-main text-sm">Sesiones Activas ({sessions.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-40 overflow-y-auto">
-                                {sessions.map(session => {
+                                {sessions.map((session, idx) => {
+                                    const userId = session.userId || session.phoneNumber || `session-${idx}`;
+                                    const displayName = userId.includes('@') ? userId.split('@')[0] : userId;
                                     const menu = menus.find(m => m.id === session.currentMenuId);
                                     return (
-                                        <div key={session.userId} className="flex items-center justify-between p-2 bg-theme-base rounded text-xs">
+                                        <div key={userId} className="flex items-center justify-between p-2 bg-theme-base rounded text-xs">
                                             <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-theme-main truncate">{session.userId.split('@')[0]}</div>
+                                                <div className="font-medium text-theme-main truncate">{displayName}</div>
                                                 <div className="text-theme-muted">{menu?.name || session.currentMenuId}</div>
                                             </div>
                                             <button
-                                                onClick={() => handleClearSession(session.userId)}
+                                                onClick={() => handleClearSession(userId)}
                                                 className="ml-2 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                                 title="Limpiar sesión"
                                             >
