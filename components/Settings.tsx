@@ -260,7 +260,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       {saveStatus === 'success' && (
         <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
           <p className="text-sm text-primary-600">¡Configuración guardada exitosamente!</p>
