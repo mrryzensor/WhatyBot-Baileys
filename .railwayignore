@@ -1,0 +1,28 @@
+# Dependency and build folders
+node_modules/
+dist/
+dist-server/
+release/
+build/
+out/
+.git/
+.github/
+
+# Local databases and runtime configuration
+.port-info.json
+.env
+.env.local
+
+# WhatsApp / Baileys session data (CRITICAL: Never upload these!)
+.baileys_auth/
+server/.baileys_auth/
+.baileys_sessions/
+server/.baileys_sessions/
+profiles/
+
+# Local data databases, rules, config, logs, and uploads
+server/data/**/*.db
+server/data/**/*.json
+server/data/local_logs/
+server/uploads/
+uploads/

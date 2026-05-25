@@ -91,6 +91,23 @@ class WhatsAppClient extends EventEmitter {
     }
   }
 
+  getRulesAndMenus() {
+    let rules = this.autoReplyRules;
+    let menus = this.interactiveMenus;
+
+    if (this.globalSessionsEnabled && this.activeSessionId && this.sessionId !== this.activeSessionId) {
+      const sessionManager = global.serverWhatsappClient;
+      if (sessionManager) {
+        const activeClient = sessionManager.getSessionClient(this.activeSessionId);
+        if (activeClient) {
+          rules = activeClient.autoReplyRules || rules;
+          menus = activeClient.interactiveMenus || menus;
+        }
+      }
+    }
+    return { rules, menus };
+  }
+
   scheduleReconnect(delayMs) {
     try {
       if (this._reconnectTimer) {
@@ -481,7 +498,8 @@ class WhatsAppClient extends EventEmitter {
 
   async handleMenuInteraction(userId, messageText, session, currentUser, messageCountService, messageLogService) {
     try {
-      const currentMenu = this.interactiveMenus.find(m => m.id === session.currentMenuId);
+      const { menus } = this.getRulesAndMenus();
+      const currentMenu = menus.find(m => m.id === session.currentMenuId);
       if (!currentMenu || !currentMenu.isActive) {
         console.log('[WhatsApp] Current menu not found or inactive, clearing session');
         this.clearSession(userId);
@@ -564,7 +582,7 @@ class WhatsAppClient extends EventEmitter {
         const prevMenuId = history.length > 0 ? history.pop() : null;
 
         if (prevMenuId) {
-          const prevMenu = this.interactiveMenus.find(m => String(m.id) === String(prevMenuId) && m.isActive);
+          const prevMenu = menus.find(m => String(m.id) === String(prevMenuId) && m.isActive);
           if (prevMenu) {
             await this.sendMenu(userId, prevMenu);
 
@@ -584,7 +602,7 @@ class WhatsAppClient extends EventEmitter {
         }
       } else if (matchedOption.nextMenuId) {
         // Navigate to next menu
-        const nextMenu = this.interactiveMenus.find(m => String(m.id) === String(matchedOption.nextMenuId) && m.isActive);
+        const nextMenu = menus.find(m => String(m.id) === String(matchedOption.nextMenuId) && m.isActive);
         if (nextMenu) {
           await this.sendMenu(userId, nextMenu);
 
@@ -1061,17 +1079,19 @@ class WhatsAppClient extends EventEmitter {
             console.log(`[WhatsApp] ✅ PROCESS: Session ${this.sessionId} IS active.`);
           }
 
+          const { rules, menus } = this.getRulesAndMenus();
+
           // Check for active menu session FIRST
           const session = this.getSession(from);
           if (session) {
             // Verify that the menu is still active
-            const currentMenu = this.interactiveMenus.find(m => String(m.id) === String(session.currentMenuId));
+            const currentMenu = menus.find(m => String(m.id) === String(session.currentMenuId));
             if (!currentMenu || !currentMenu.isActive) {
               console.log('[WhatsApp] Menu session exists but menu is inactive/deleted, clearing session');
               this.clearSession(from);
             } else {
               // Check if there's an auto-reply rule that triggers this menu and if it's still active
-              const menuTriggerRule = this.autoReplyRules.find(r =>
+              const menuTriggerRule = rules.find(r =>
                 r.type === 'menu' && String(r.menuId) === String(session.currentMenuId)
               );
 
@@ -1090,8 +1110,8 @@ class WhatsAppClient extends EventEmitter {
 
           // Process auto-reply rules (only if no menu session or menu didn't handle it)
           // First, check for menu-type rules (higher priority)
-          console.log(`[WhatsApp] Checking ${this.autoReplyRules.length} auto-reply rules...`);
-          for (const rule of this.autoReplyRules) {
+          console.log(`[WhatsApp] Checking ${rules.length} auto-reply rules...`);
+          for (const rule of rules) {
             if (!rule.isActive || rule.type !== 'menu') continue;
 
             const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
@@ -1144,7 +1164,7 @@ class WhatsAppClient extends EventEmitter {
 
             if (shouldReply && rule.menuId) {
               // Start menu session
-              const menu = this.interactiveMenus.find(m => String(m.id) === String(rule.menuId) && m.isActive);
+              const menu = menus.find(m => String(m.id) === String(rule.menuId) && m.isActive);
               if (menu) {
                 console.log('[WhatsAppClient] Starting menu session:', {
                   userId: from,
@@ -1189,7 +1209,7 @@ class WhatsAppClient extends EventEmitter {
           }
 
           // Then, check for simple auto-reply rules
-          for (const rule of this.autoReplyRules) {
+          for (const rule of rules) {
             if (!rule.isActive || rule.type === 'menu') continue;
 
             let phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
