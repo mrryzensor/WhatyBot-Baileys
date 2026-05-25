@@ -11,6 +11,16 @@ import { UPLOAD_DIR } from '../utils/paths.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Obtiene el nombre del archivo de forma segura en Windows y Linux,
+ * reemplazando posibles diagonales invertidas y normales.
+ */
+function getSafeBasename(mediaPath) {
+    if (!mediaPath || typeof mediaPath !== 'string') return '';
+    const normalized = mediaPath.replace(/\\/g, '/');
+    return path.basename(normalized);
+}
+
 const router = express.Router();
 
 // Helper to get session ID
@@ -238,7 +248,7 @@ router.get('/config/export-all', async (req, res) => {
             if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
                 menu.mediaPaths.forEach(p => {
                     if (p && !p.startsWith('http')) {
-                        const fileName = path.basename(p);
+                        const fileName = getSafeBasename(p);
                         const fullPath = path.join(uploadDir, fileName);
                         if (fs.existsSync(fullPath)) {
                             mediaFiles.add(fileName);
@@ -252,7 +262,7 @@ router.get('/config/export-all', async (req, res) => {
                     if (opt.mediaPaths && Array.isArray(opt.mediaPaths)) {
                         opt.mediaPaths.forEach(p => {
                             if (p && !p.startsWith('http')) {
-                                const fileName = path.basename(p);
+                                const fileName = getSafeBasename(p);
                                 const fullPath = path.join(uploadDir, fileName);
                                 if (fs.existsSync(fullPath)) {
                                     mediaFiles.add(fileName);
@@ -269,10 +279,37 @@ router.get('/config/export-all', async (req, res) => {
             if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
                 rule.mediaPaths.forEach(p => {
                     if (p && !p.startsWith('http')) {
-                        const fileName = path.basename(p);
+                        const fileName = getSafeBasename(p);
                         const fullPath = path.join(uploadDir, fileName);
                         if (fs.existsSync(fullPath)) {
                             mediaFiles.add(fileName);
+                        }
+                    }
+                });
+            }
+
+            // Collect geofiltered country responses media files
+            if (rule.countryResponses && typeof rule.countryResponses === 'object') {
+                Object.keys(rule.countryResponses).forEach(countryCode => {
+                    const override = rule.countryResponses[countryCode];
+                    if (override && typeof override === 'object') {
+                        if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                            override.mediaPaths.forEach(p => {
+                                if (p && !p.startsWith('http')) {
+                                    const fileName = getSafeBasename(p);
+                                    const fullPath = path.join(uploadDir, fileName);
+                                    if (fs.existsSync(fullPath)) {
+                                        mediaFiles.add(fileName);
+                                    }
+                                }
+                            });
+                        }
+                        if (override.mediaPath && !override.mediaPath.startsWith('http')) {
+                            const fileName = getSafeBasename(override.mediaPath);
+                            const fullPath = path.join(uploadDir, fileName);
+                            if (fs.existsSync(fullPath)) {
+                                mediaFiles.add(fileName);
+                            }
                         }
                     }
                 });
@@ -370,7 +407,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                 const parsed = JSON.parse(content.toString('utf8'));
                 rulesData = Array.isArray(parsed) ? parsed : (parsed.rules || []);
             } else if (file.path.startsWith('media/')) {
-                const fileName = path.basename(file.path);
+                const fileName = getSafeBasename(file.path);
                 const targetPath = path.join(uploadDir, fileName);
 
                 if (fs.existsSync(targetPath)) {
@@ -412,7 +449,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                 if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
                     menu.mediaPaths = menu.mediaPaths.map(p => {
                         if (p && !p.startsWith('http')) {
-                            const fileName = path.basename(p);
+                            const fileName = getSafeBasename(p);
                             return `uploads/${fileName}`;
                         }
                         return p;
@@ -424,7 +461,7 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                         if (opt.mediaPaths && Array.isArray(opt.mediaPaths)) {
                             opt.mediaPaths = opt.mediaPaths.map(p => {
                                 if (p && !p.startsWith('http')) {
-                                    const fileName = path.basename(p);
+                                    const fileName = getSafeBasename(p);
                                     return `uploads/${fileName}`;
                                 }
                                 return p;
@@ -474,10 +511,32 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                 if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
                     mediaPaths = rule.mediaPaths.map(p => {
                         if (p && !p.startsWith('http')) {
-                            const fileName = path.basename(p);
+                            const fileName = getSafeBasename(p);
                             return `uploads/${fileName}`;
                         }
                         return p;
+                    });
+                }
+
+                // Update media paths in countryResponses if present
+                if (rule.countryResponses && typeof rule.countryResponses === 'object') {
+                    Object.keys(rule.countryResponses).forEach(countryCode => {
+                        const override = rule.countryResponses[countryCode];
+                        if (override && typeof override === 'object') {
+                            if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                                override.mediaPaths = override.mediaPaths.map(p => {
+                                    if (p && !p.startsWith('http')) {
+                                        const fileName = getSafeBasename(p);
+                                        return `uploads/${fileName}`;
+                                    }
+                                    return p;
+                                });
+                            }
+                            if (override.mediaPath && !override.mediaPath.startsWith('http')) {
+                                const fileName = getSafeBasename(override.mediaPath);
+                                override.mediaPath = `uploads/${fileName}`;
+                            }
+                        }
                     });
                 }
 
@@ -511,7 +570,12 @@ router.post('/config/import-all', upload.single('file'), async (req, res) => {
                         captions: rule.captions || [],
                         caption: (rule.captions && rule.captions[0]) || rule.caption || '',
                         type: rule.type || 'simple',
-                        menuId: finalMenuId || null
+                        menuId: finalMenuId || null,
+                        countries: rule.countries || [],
+                        excludeCountries: rule.excludeCountries || [],
+                        allowUnknownCountries: rule.allowUnknownCountries || false,
+                        isMessageCaption: rule.isMessageCaption || false,
+                        countryResponses: rule.countryResponses || {}
                     };
 
                     if (existingIndex !== -1) {

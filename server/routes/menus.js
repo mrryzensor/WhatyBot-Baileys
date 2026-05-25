@@ -9,6 +9,16 @@ import { UPLOAD_DIR } from '../utils/paths.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Obtiene el nombre del archivo de forma segura en Windows y Linux,
+ * reemplazando posibles diagonales invertidas y normales.
+ */
+function getSafeBasename(mediaPath) {
+    if (!mediaPath || typeof mediaPath !== 'string') return '';
+    const normalized = mediaPath.replace(/\\/g, '/');
+    return path.basename(normalized);
+}
+
 const router = express.Router();
 
 // Helper to get session ID
@@ -407,9 +417,9 @@ router.get('/export', async (req, res) => {
 
         console.log('[Export] Step 9: Adding media files to ZIP');
         for (const mediaPath of mediaFiles) {
-            const fullPath = path.isAbsolute(mediaPath) ? mediaPath : path.join(process.cwd(), mediaPath);
+            const fileName = getSafeBasename(mediaPath);
+            const fullPath = path.isAbsolute(mediaPath) ? mediaPath : path.join(UPLOAD_DIR, fileName);
             if (fs.existsSync(fullPath)) {
-                const fileName = path.basename(mediaPath);
                 console.log(`[Export] Adding media file: ${fileName} from ${fullPath}`);
                 archive.file(fullPath, { name: `media/${fileName}` });
             } else {
@@ -461,7 +471,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
                         jsonContent = JSON.parse(content.toString('utf8'));
                     } else if (file.path.startsWith('media/')) {
                         // Extract media file to uploads directory
-                        const fileName = path.basename(file.path);
+                        const fileName = getSafeBasename(file.path);
                         const targetPath = path.join(uploadDir, fileName);
 
                         // If file exists, replace it
@@ -534,7 +544,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
             if (menu.mediaPaths && Array.isArray(menu.mediaPaths)) {
                 menu.mediaPaths = menu.mediaPaths.map(p => {
                     if (p && !p.startsWith('http')) {
-                        const fileName = path.basename(p);
+                        const fileName = getSafeBasename(p);
                         return `uploads/${fileName}`;
                     }
                     return p;
@@ -547,7 +557,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
                     if (opt.mediaPaths && Array.isArray(opt.mediaPaths)) {
                         opt.mediaPaths = opt.mediaPaths.map(p => {
                             if (p && !p.startsWith('http')) {
-                                const fileName = path.basename(p);
+                                const fileName = getSafeBasename(p);
                                 return `uploads/${fileName}`;
                             }
                             return p;

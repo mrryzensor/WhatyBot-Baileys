@@ -9,6 +9,16 @@ import { UPLOAD_DIR } from '../utils/paths.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Obtiene el nombre del archivo de forma segura en Windows y Linux,
+ * reemplazando posibles diagonales invertidas y normales.
+ */
+function getSafeBasename(mediaPath) {
+    if (!mediaPath || typeof mediaPath !== 'string') return '';
+    const normalized = mediaPath.replace(/\\/g, '/');
+    return path.basename(normalized);
+}
+
 const router = express.Router();
 
 // Helper to get session ID
@@ -453,6 +463,25 @@ router.get('/export', async (req, res) => {
             } else if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
                 mediaFiles.add(rule.mediaPath);
             }
+
+            // Collect geofiltered country responses media files
+            if (rule.countryResponses && typeof rule.countryResponses === 'object') {
+                Object.keys(rule.countryResponses).forEach(countryCode => {
+                    const override = rule.countryResponses[countryCode];
+                    if (override && typeof override === 'object') {
+                        if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                            override.mediaPaths.forEach(p => {
+                                if (p && !p.startsWith('http')) {
+                                    mediaFiles.add(p);
+                                }
+                            });
+                        }
+                        if (override.mediaPath && !override.mediaPath.startsWith('http')) {
+                            mediaFiles.add(override.mediaPath);
+                        }
+                    }
+                });
+            }
         });
 
         console.log(`[Export Rules] Found ${mediaFiles.size} media files:`, Array.from(mediaFiles));
@@ -479,10 +508,9 @@ router.get('/export', async (req, res) => {
         console.log('[Export Rules] Step 9: Adding media files to ZIP');
         // Add media files if any
         for (const mediaPath of mediaFiles) {
-            const fileName = path.basename(mediaPath);
+            const fileName = getSafeBasename(mediaPath);
             const fullPath = path.join(UPLOAD_DIR, fileName);
             if (fs.existsSync(fullPath)) {
-                const fileName = path.basename(mediaPath);
                 console.log(`[Export Rules] Adding media file: ${fileName} from ${fullPath}`);
                 archive.file(fullPath, { name: `media/${fileName}` });
             } else {
@@ -531,7 +559,7 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                         jsonContent = JSON.parse(content.toString('utf8'));
                     } else if (file.path.startsWith('media/')) {
                         // Extract media file to uploads directory
-                        const fileName = path.basename(file.path);
+                        const fileName = getSafeBasename(file.path);
                         const targetPath = path.join(uploadDir, fileName);
 
                         // If file exists, replace it
@@ -605,14 +633,36 @@ router.post('/rules/import', upload.single('file'), async (req, res) => {
                 if (rule.mediaPaths && Array.isArray(rule.mediaPaths)) {
                     mediaPaths = rule.mediaPaths.map(p => {
                         if (p && !p.startsWith('http')) {
-                            const fileName = path.basename(p);
-                            return path.join(uploadDir, fileName);
+                            const fileName = getSafeBasename(p);
+                            return `uploads/${fileName}`;
                         }
                         return p;
                     });
                 } else if (rule.mediaPath && !rule.mediaPath.startsWith('http')) {
-                    const fileName = path.basename(rule.mediaPath);
-                    mediaPaths = [path.join(uploadDir, fileName)];
+                    const fileName = getSafeBasename(rule.mediaPath);
+                    mediaPaths = [`uploads/${fileName}`];
+                }
+
+                // Update media paths in countryResponses if present
+                if (rule.countryResponses && typeof rule.countryResponses === 'object') {
+                    Object.keys(rule.countryResponses).forEach(countryCode => {
+                        const override = rule.countryResponses[countryCode];
+                        if (override && typeof override === 'object') {
+                            if (override.mediaPaths && Array.isArray(override.mediaPaths)) {
+                                override.mediaPaths = override.mediaPaths.map(p => {
+                                    if (p && !p.startsWith('http')) {
+                                        const fileName = getSafeBasename(p);
+                                        return `uploads/${fileName}`;
+                                    }
+                                    return p;
+                                });
+                            }
+                            if (override.mediaPath && !override.mediaPath.startsWith('http')) {
+                                const fileName = getSafeBasename(override.mediaPath);
+                                override.mediaPath = `uploads/${fileName}`;
+                            }
+                        }
+                    });
                 }
 
                 // If this is a menu-type rule, try to find the menu by name and update menuId
