@@ -710,6 +710,24 @@ export const createAutoReplyRule = async (rule: any, files?: File[], captions?: 
   if (rule.menuId) {
     formData.append('menuId', rule.menuId);
   }
+  if (rule.aiProvider) {
+    formData.append('aiProvider', rule.aiProvider);
+  }
+  if (rule.aiModel) {
+    formData.append('aiModel', rule.aiModel);
+  }
+  if (rule.systemPrompt) {
+    formData.append('systemPrompt', rule.systemPrompt);
+  }
+  if (rule.aiApiKey) {
+    formData.append('aiApiKey', rule.aiApiKey);
+  }
+  if (rule.isCatchAll !== undefined) {
+    formData.append('isCatchAll', rule.isCatchAll.toString());
+  }
+  if (rule.knowledgeBaseText) {
+    formData.append('knowledgeBaseText', rule.knowledgeBaseText);
+  }
   if (captions && captions.length > 0) {
     formData.append('captions', JSON.stringify(captions));
   }
@@ -759,6 +777,24 @@ export const updateAutoReplyRule = async (id: string, rule: any, files?: File[],
   formData.append('type', rule.type || 'simple');
   if (rule.menuId) {
     formData.append('menuId', rule.menuId);
+  }
+  if (rule.aiProvider) {
+    formData.append('aiProvider', rule.aiProvider);
+  }
+  if (rule.aiModel) {
+    formData.append('aiModel', rule.aiModel);
+  }
+  if (rule.systemPrompt) {
+    formData.append('systemPrompt', rule.systemPrompt);
+  }
+  if (rule.aiApiKey) {
+    formData.append('aiApiKey', rule.aiApiKey);
+  }
+  if (rule.isCatchAll !== undefined) {
+    formData.append('isCatchAll', rule.isCatchAll.toString());
+  }
+  if (rule.knowledgeBaseText) {
+    formData.append('knowledgeBaseText', rule.knowledgeBaseText);
   }
   if (rule.caption) {
     formData.append('caption', rule.caption);

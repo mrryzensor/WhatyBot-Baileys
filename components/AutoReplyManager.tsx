@@ -93,7 +93,13 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         excludeCountries: [],
         allowUnknownCountries: false,
         isMessageCaption: false,
-        countryResponses: {}
+        countryResponses: {},
+        aiProvider: 'google',
+        aiModel: 'gemini-2.5-flash',
+        systemPrompt: '',
+        aiApiKey: '',
+        isCatchAll: false,
+        knowledgeBaseText: ''
     });
 
     const [keywordInput, setKeywordInput] = useState('');
@@ -152,7 +158,13 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             excludeCountries: [],
             allowUnknownCountries: false,
             isMessageCaption: false,
-            countryResponses: {}
+            countryResponses: {},
+            aiProvider: 'google',
+            aiModel: 'gemini-2.5-flash',
+            systemPrompt: '',
+            aiApiKey: '',
+            isCatchAll: false,
+            knowledgeBaseText: ''
         });
         setKeywordInput('');
         media.setMediaItems([]);
@@ -215,7 +227,8 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             ...rule,
             countries: rule.countries || [],
             excludeCountries: rule.excludeCountries || [],
-            countryResponses: rule.countryResponses || {}
+            countryResponses: rule.countryResponses || {},
+            knowledgeBaseText: rule.knowledgeBaseText || ''
         });
         const hasCountries = (rule.countries && rule.countries.length > 0) || (rule.excludeCountries && rule.excludeCountries.length > 0);
         setShowCountrySelector(hasCountries);
@@ -311,6 +324,11 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
             if (!formData.menuId) {
                 errors.menuId = 'Debes seleccionar un menú';
             }
+        } else if (formData.type === 'ai') {
+            // AI type requires systemPrompt
+            if (!formData.systemPrompt) {
+                errors.systemPrompt = 'El prompt del sistema es requerido';
+            }
         } else {
             // Simple type requires response or media
             if (!formData.response && media.mediaItems.length === 0) {
@@ -319,7 +337,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
         }
 
         const processedKeywords = keywordInput.split(',').map(k => k.trim()).filter(k => k.length > 0);
-        if (processedKeywords.length === 0) {
+        if (processedKeywords.length === 0 && !(formData.type === 'ai' && formData.isCatchAll)) {
             errors.keywords = 'Debes agregar al menos una palabra clave';
         }
 
@@ -360,7 +378,13 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                 excludeCountries: formData.excludeCountries || [],
                 allowUnknownCountries: formData.allowUnknownCountries ?? false,
                 isMessageCaption: formData.isMessageCaption ?? false,
-                countryResponses: formData.countryResponses || {}
+                countryResponses: formData.countryResponses || {},
+                aiProvider: formData.aiProvider,
+                aiModel: formData.aiModel,
+                systemPrompt: formData.systemPrompt,
+                aiApiKey: formData.aiApiKey,
+                isCatchAll: formData.isCatchAll,
+                knowledgeBaseText: formData.knowledgeBaseText || ''
             };
 
             if (editingId) {
@@ -861,6 +885,11 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                                         <MenuIcon size={12} /> Menú
                                                     </span>
                                                 )}
+                                                {rule.type === 'ai' && (
+                                                    <span className="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full flex items-center gap-1 whitespace-nowrap animate-pulse">
+                                                        <Bot size={12} /> Asistente IA
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="flex flex-col items-end gap-2 shrink-0">
                                                 {/* Primera fila: Toggle Activar/Desactivar */}
@@ -983,7 +1012,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                         })()}
 
                                         <p className="text-xs text-theme-muted line-clamp-2 italic border-l-2 border-theme pl-2">
-                                            "{rule.response}"
+                                            {rule.type === 'ai' ? `IA Prompt: "${rule.systemPrompt}"` : `"${rule.response}"`}
                                         </p>
                                     </div>
                                 ))
@@ -1043,20 +1072,28 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             <div>
                                 <label className="block text-sm font-medium text-theme-main mb-1">Tipo de Respuesta</label>
                                 <select
-                                    className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 bg-theme-card"
+                                    className="w-full border border-theme rounded-lg px-4 py-2 text-sm focus:ring-primary-500 focus:border-primary-500 bg-theme-card font-semibold"
                                     value={formData.type || 'simple'}
                                     onChange={e => {
-                                        const newType = e.target.value as 'simple' | 'menu';
-                                        setFormData({ ...formData, type: newType, menuId: newType === 'simple' ? undefined : formData.menuId });
+                                        const newType = e.target.value as 'simple' | 'menu' | 'ai';
+                                        setFormData({ 
+                                            ...formData, 
+                                            type: newType, 
+                                            menuId: newType === 'menu' ? formData.menuId : undefined,
+                                            aiProvider: newType === 'ai' ? (formData.aiProvider || 'google') : undefined,
+                                            aiModel: newType === 'ai' ? (formData.aiModel || 'gemini-2.5-flash') : undefined,
+                                            systemPrompt: newType === 'ai' ? (formData.systemPrompt || 'Eres un asistente virtual de atención al cliente útil y educado.') : undefined
+                                        });
                                     }}
                                 >
                                     <option value="simple">💬 Respuesta Simple</option>
                                     <option value="menu">🎯 Menú Interactivo</option>
+                                    <option value="ai">🤖 Asistente de IA (Multimodal + Failover)</option>
                                 </select>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    {formData.type === 'menu'
-                                        ? 'Inicia una conversación guiada con opciones'
-                                        : 'Envía un mensaje de respuesta directa'}
+                                    {formData.type === 'menu' && 'Inicia una conversación guiada con opciones.'}
+                                    {formData.type === 'simple' && 'Envía un mensaje de respuesta directa.'}
+                                    {formData.type === 'ai' && 'Conversación guiada inteligente con memoria y soporte para fotos/audios.'}
                                 </p>
                             </div>
 
@@ -1585,7 +1622,7 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                             </div>
 
                             {/* Response and Media (only for simple type) */}
-                            {formData.type !== 'menu' && (
+                            {formData.type !== 'menu' && formData.type !== 'ai' && (
                                 <>
                                     <div className="flex-1 flex flex-col">
                                         <label className="block text-sm font-medium text-theme-main mb-1">Mensaje de Respuesta</label>
@@ -1664,6 +1701,281 @@ export const AutoReplyManager: React.FC<AutoReplyManagerProps> = ({ rules, setRu
                                         </p>
                                     </div>
                                 </>
+                            )}
+                            {/* AI Settings (only for AI type) */}
+                            {formData.type === 'ai' && (
+                                <div className="space-y-4 border border-purple-200 dark:border-purple-900 rounded-xl p-4 bg-purple-50/20 dark:bg-purple-950/10">
+                                    <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 border-b border-purple-100 dark:border-purple-900/50 pb-2 mb-3">
+                                        <Bot size={20} className="animate-bounce text-purple-600" />
+                                        <h4 className="font-bold text-sm">Configuración del Asistente de IA</h4>
+                                    </div>
+
+                                    {/* Siempre responder con IA (Catch-all) */}
+                                    <div className="flex items-start justify-between p-3.5 bg-purple-100/40 dark:bg-purple-950/20 rounded-xl border border-purple-200/50 dark:border-purple-900/50 transition-all duration-200 hover:shadow-sm">
+                                        <div className="space-y-0.5 max-w-[80%]">
+                                            <label className="text-sm font-bold text-purple-950 dark:text-purple-300 flex items-center gap-1.5 cursor-pointer">
+                                                ✨ Siempre responder con esta IA (Catch-all)
+                                            </label>
+                                            <p className="text-sm text-purple-800/80 dark:text-purple-400/80 leading-relaxed">
+                                                Si se activa, el bot responderá siempre con esta IA cuando el cliente escriba cualquier mensaje (sin necesidad de triggers específicos), actuando como tu asistente principal por defecto.
+                                            </p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.isCatchAll || false}
+                                                onChange={e => setFormData({ ...formData, isCatchAll: e.target.checked })}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-theme-card after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-theme-main mb-1">Proveedor de IA</label>
+                                            <select
+                                                className="w-full border border-theme rounded-lg px-3 py-2 text-sm bg-theme-card focus:ring-purple-500 focus:border-purple-500 text-theme-main"
+                                                value={formData.aiProvider || 'google'}
+                                                onChange={e => {
+                                                    const prov = e.target.value as any;
+                                                    let defaultModel = 'gemini-2.5-flash';
+                                                    if (prov === 'openai') defaultModel = 'gpt-4o-mini';
+                                                    else if (prov === 'anthropic') defaultModel = 'claude-3-5-sonnet-latest';
+                                                    else if (prov === 'deepseek') defaultModel = 'deepseek-chat';
+                                                    else if (prov === 'openrouter') defaultModel = 'google/gemini-2.5-flash';
+                                                    else if (prov === 'groq') defaultModel = 'llama-3.3-70b-versatile';
+                                                    else if (prov === 'sambanova') defaultModel = 'llama3-70b';
+                                                    else if (prov === 'deepinfra') defaultModel = 'meta-llama/Meta-Llama-3-70B-Instruct';
+                                                    else if (prov === 'zhipu') defaultModel = 'glm-4-flash';
+                                                    else if (prov === 'huggingface') defaultModel = 'meta-llama/Meta-Llama-3-8B-Instruct';
+                                                    setFormData({ ...formData, aiProvider: prov, aiModel: defaultModel });
+                                                }}
+                                            >
+                                                <option value="google">Google Gemini</option>
+                                                <option value="openai">OpenAI (ChatGPT)</option>
+                                                <option value="groq">Groq Cloud (Veloz & Gratis)</option>
+                                                <option value="sambanova">SambaNova (Gratis & Ultra Inferencia)</option>
+                                                <option value="anthropic">Anthropic (Claude)</option>
+                                                <option value="deepseek">DeepSeek</option>
+                                                <option value="openrouter">OpenRouter</option>
+                                                <option value="deepinfra">DeepInfra</option>
+                                                <option value="zhipu">Zhipu AI (Z AI)</option>
+                                                <option value="huggingface">Hugging Face</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-theme-main mb-1">Modelo de IA</label>
+                                            {(() => {
+                                                const prov = formData.aiProvider || 'google';
+                                                return (
+                                                    <select
+                                                        className="w-full border border-theme rounded-lg px-3 py-2 text-sm bg-theme-card focus:ring-purple-500 focus:border-purple-500 text-theme-main"
+                                                        value={formData.aiModel || ''}
+                                                        onChange={e => setFormData({ ...formData, aiModel: e.target.value })}
+                                                    >
+                                                        {prov === 'google' && (
+                                                            <>
+                                                                <option value="gemini-2.5-flash">gemini-2.5-flash (Recomendado)</option>
+                                                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                                                <option value="gemini-1.5-pro">gemini-1.5-pro (Contexto gigante)</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'openai' && (
+                                                            <>
+                                                                <option value="gpt-4o-mini">gpt-4o-mini (Económico & Rápido)</option>
+                                                                <option value="gpt-4o">gpt-4o (Multimodal Inteligente)</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'groq' && (
+                                                            <>
+                                                                <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Llama 3.3 70B - Versátil & Veloz)</option>
+                                                                <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Llama 3.1 8B - Ultra Rápido)</option>
+                                                                <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b (DeepSeek R1 Distill - Razonador)</option>
+                                                                <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Mixtral 8x7B - 32k Contexto)</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'sambanova' && (
+                                                            <>
+                                                                <option value="llama3-70b">llama3-70b (Veloz y de alto desempeño)</option>
+                                                                <option value="llama3-8b">llama3-8b</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'anthropic' && (
+                                                            <>
+                                                                <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest (Mejor en escritura)</option>
+                                                                <option value="claude-3-haiku-20240307">claude-3-haiku</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'deepseek' && (
+                                                            <>
+                                                                <option value="deepseek-chat">deepseek-chat (V3 - Muy económico)</option>
+                                                                <option value="deepseek-reasoner">deepseek-reasoner (R1 - Razonador)</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'openrouter' && (
+                                                            <>
+                                                                <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                                                                <option value="meta-llama/llama-3-8b-instruct">meta-llama/llama-3-8b-instruct</option>
+                                                                <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'deepinfra' && (
+                                                            <>
+                                                                <option value="meta-llama/Meta-Llama-3-70B-Instruct">llama-3-70b (DeepInfra)</option>
+                                                                <option value="mistralai/Mixtral-8x22B-Instruct-v0.1">mixtral-8x22b</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'zhipu' && (
+                                                            <>
+                                                                <option value="glm-4-flash">glm-4-flash (Rápido y Gratis)</option>
+                                                                <option value="glm-4-plus">glm-4-plus (Alto rendimiento)</option>
+                                                            </>
+                                                        )}
+                                                        {prov === 'huggingface' && (
+                                                            <>
+                                                                <option value="meta-llama/Meta-Llama-3-8B-Instruct">llama-3-8b (Hugging Face)</option>
+                                                                <option value="mistralai/Mistral-7B-Instruct-v0.2">mistral-7b</option>
+                                                            </>
+                                                        )}
+                                                    </select>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+
+                                    {/* API Key Override (Optional) */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-theme-main mb-1">
+                                            API Key específica para esta Regla (Opcional)
+                                        </label>
+                                        <input
+                                            type="password"
+                                            className="w-full border border-theme rounded-lg px-3 py-2 text-sm bg-theme-card font-mono text-theme-main"
+                                            placeholder="Sobreescribe la API Key configurada globalmente si es necesario..."
+                                            value={formData.aiApiKey || ''}
+                                            onChange={e => setFormData({ ...formData, aiApiKey: e.target.value })}
+                                        />
+                                    </div>
+
+                                    {/* Prompts Templates Button */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-theme-main mb-1.5">
+                                            Plantillas de Prompt de Sistema (Un clic para cargar)
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ 
+                                                    ...formData, 
+                                                    systemPrompt: 'Eres un vendedor estrella de una tienda online. Responde amablemente, resuelve dudas sobre productos, precios y envíos de manera persuasiva y busca concretar la venta. Usa emojis y mantén las respuestas cortas.'
+                                                })}
+                                                className="px-2.5 py-1 text-sm bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300 rounded-md border border-purple-200 dark:border-purple-900 hover:bg-purple-100 transition-colors"
+                                            >
+                                                🛍️ Vendedor Online
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ 
+                                                    ...formData, 
+                                                    systemPrompt: 'Eres un agente de soporte técnico experto. Tu objetivo es guiar al usuario paso a paso para resolver su incidencia con paciencia, empatía y profesionalismo técnico de forma clara.'
+                                                })}
+                                                className="px-2.5 py-1 text-sm bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300 rounded-md border border-purple-200 dark:border-purple-900 hover:bg-purple-100 transition-colors"
+                                            >
+                                                🔧 Soporte Técnico
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ 
+                                                    ...formData, 
+                                                    systemPrompt: 'Eres una asistente virtual de una clínica médica. Tu labor es agendar citas, informar sobre especialidades, horarios y requerimientos de forma sumamente educada y clara.'
+                                                })}
+                                                className="px-2.5 py-1 text-sm bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300 rounded-md border border-purple-200 dark:border-purple-900 hover:bg-purple-100 transition-colors"
+                                            >
+                                                🏥 Clínica Médica
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* System Prompt Textarea */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-theme-main mb-1">
+                                            System Prompt (Instrucciones de la IA)
+                                        </label>
+                                        <textarea
+                                            className={`w-full min-h-[140px] max-h-[350px] px-4 py-2 border rounded-lg text-base font-sans bg-theme-card text-theme-main focus:ring-purple-500 focus:border-purple-500 ${
+                                                formErrors.systemPrompt ? 'border-red-300' : 'border-theme'
+                                            }`}
+                                            placeholder="Define la personalidad e instrucciones para el Asistente IA..."
+                                            value={formData.systemPrompt || ''}
+                                            onChange={e => {
+                                                setFormData({ ...formData, systemPrompt: e.target.value });
+                                                if (formErrors.systemPrompt) setFormErrors({ ...formErrors, systemPrompt: '' });
+                                            }}
+                                        ></textarea>
+                                        {formErrors.systemPrompt && (
+                                            <p className="mt-1 text-sm text-red-600">{formErrors.systemPrompt}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Plain text knowledge base */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-theme-main mb-1">
+                                            Base de Conocimiento en Texto Plano (Copiar y Pegar)
+                                        </label>
+                                        <textarea
+                                            className="w-full min-h-[160px] max-h-[350px] px-4 py-2 border border-theme rounded-lg text-base font-sans bg-theme-card text-theme-main focus:ring-purple-500 focus:border-purple-500 transition-all"
+                                            placeholder="Pega aquí la información, preguntas frecuentes, catálogo de productos o cualquier texto que quieras que la IA use para responder..."
+                                            value={formData.knowledgeBaseText || ''}
+                                            onChange={e => setFormData({ ...formData, knowledgeBaseText: e.target.value })}
+                                        ></textarea>
+                                    </div>
+
+                                    {/* Knowledge Base Info (RAG) */}
+                                    <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-900/50 rounded-lg space-y-2">
+                                        <h5 className="text-sm font-bold text-purple-950 dark:text-purple-300 flex items-center gap-1.5">
+                                            <FileText size={14} /> Base de Conocimiento Activa (.txt, .md, .csv)
+                                        </h5>
+                                        <p className="text-sm text-purple-800 dark:text-purple-400 leading-relaxed">
+                                            ¿Quieres que el Asistente responda sobre tu negocio, catálogo o preguntas frecuentes?
+                                            ¡Adjunta archivos en la sección de abajo!
+                                            Los archivos de texto plano que subas serán leídos automáticamente en el servidor y entregados a la IA como su fuente de verdad.
+                                        </p>
+                                    </div>
+
+                                    {/* Multimodal Info */}
+                                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/50 rounded-lg space-y-2">
+                                        <h5 className="text-sm font-bold text-blue-950 dark:text-blue-300 flex items-center gap-1.5">
+                                            <Image size={14} /> Capacidad Multimodal Habilitada
+                                        </h5>
+                                        <p className="text-sm text-blue-800 dark:text-blue-400 leading-relaxed">
+                                            Si el cliente te envía una <strong>foto</strong>, un <strong>video</strong> o un <strong>audio (nota de voz)</strong>, los modelos compatibles los procesarán de forma nativa para dar una respuesta inteligente.
+                                        </p>
+                                    </div>
+
+                                    {/* Knowledge Base files upload section */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-theme-main mb-2">
+                                            Archivos de Base de Conocimiento y Multimedia de Soporte
+                                        </label>
+                                        <MediaUpload
+                                            mediaItems={media.mediaItems}
+                                            onMediaChange={media.setMediaItems}
+                                            maxFiles={50}
+                                            fileInputRef={media.fileInputRef}
+                                            onFileSelect={media.handleFileSelect}
+                                            onDrop={media.handleDrop}
+                                            onOpenFileSelector={media.openFileSelector}
+                                            onRemoveMedia={media.removeMedia}
+                                            onUpdateCaption={media.updateCaption}
+                                            uploadProgress={media.uploadProgress}
+                                        />
+                                        <p className="text-sm text-slate-400 mt-1.5">
+                                            Sube archivos <code>.txt, .md, .csv</code> para dar información de soporte a tu Asistente de IA.
+                                        </p>
+                                    </div>
+                                </div>
                             )}
                         </div>
 

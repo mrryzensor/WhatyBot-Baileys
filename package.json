@@ -1,7 +1,7 @@
 {
   "name": "whatybot-dxs",
   "private": true,
-  "version": "2.3.6",
+  "version": "2.3.7",
   "type": "module",
   "main": "public/electron.js",
   "scripts": {

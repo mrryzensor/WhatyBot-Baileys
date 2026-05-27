@@ -706,13 +706,13 @@ class WhatsAppClient extends EventEmitter {
           if (foundParticipant) {
             const resolvedJid = foundParticipant.id || foundParticipant.jid || '';
             const resolvedLid = foundParticipant.lid || foundParticipant.participant_lid || '';
-            
+
             if (resolvedJid.endsWith('@s.whatsapp.net') && resolvedLid.endsWith('@lid')) {
               const cleanL = resolvedLid.split(':')[0].split('@')[0] + '@lid';
               const cleanJ = resolvedJid.split(':')[0].split('@')[0] + '@s.whatsapp.net';
-              
+
               console.log(`[WhatsApp] 👥 Encontrado participante en grupo "${g.subject || g.id}": LID ${cleanL} -> JID ${cleanJ}`);
-              
+
               // Guardar en caché
               this.contactsCache[cleanL] = {
                 ...(this.contactsCache[cleanL] || {}),
@@ -724,7 +724,7 @@ class WhatsAppClient extends EventEmitter {
                 lid: cleanL
               };
               this.saveContactsCache();
-              
+
               cachedContact = this.contactsCache[cleanL];
               break;
             }
@@ -1211,12 +1211,28 @@ class WhatsAppClient extends EventEmitter {
           // Check for active menu session FIRST
           let session = this.getSession(from);
 
+          // Check for active AI session
+          const isAISession = session && session.currentMenuId && session.currentMenuId.startsWith('ai_');
+          if (isAISession) {
+            const ruleId = session.currentMenuId.replace('ai_', '');
+            const activeRule = rules.find(r => String(r.id) === String(ruleId) && r.isActive && r.type === 'ai');
+            if (activeRule) {
+              console.log(`[AI Chat] Active AI session found for user ${from} matching rule "${activeRule.name}"`);
+              await this.processAIRule(from, body, m, activeRule, session, currentUser, messageCountService, messageLogService);
+              return;
+            } else {
+              console.log(`[AI Chat] AI session rule ${ruleId} not found or inactive. Clearing session.`);
+              this.clearSession(from);
+              session = null;
+            }
+          }
+
           // 0. Interceptar si el usuario solicita cambiar de país activamente
           const normalizedBody = normalizeText(body);
           const isChangeCountryRequest = [
-            'cambiar pais', 
-            'cambiar de pais', 
-            'cambiar mi pais', 
+            'cambiar pais',
+            'cambiar de pais',
+            'cambiar mi pais',
             'configurar pais',
             'change country',
             'modificar pais'
@@ -1224,7 +1240,7 @@ class WhatsAppClient extends EventEmitter {
 
           if (isChangeCountryRequest) {
             console.log(`[WhatsApp] 🌍 Solicitud de cambio de país recibida de ${from}`);
-            
+
             if (!session) {
               session = {
                 currentMenuId: null,
@@ -1232,16 +1248,16 @@ class WhatsAppClient extends EventEmitter {
                 conversationData: {}
               };
             }
-            
+
             // Buscar el último trigger message válido de la sesión para re-despacharlo
             const lastTrigger = session.conversationData?.lastTriggerMessage || '';
             console.log(`[WhatsApp] 🔄 Guardando trigger pendiente "${lastTrigger}" para re-despachar tras cambio de país.`);
-            
+
             session.currentMenuId = 'country_gate';
             session.conversationData = session.conversationData || {};
             session.conversationData.selectedCountryCode = null; // reset
             session.conversationData.pendingMessage = lastTrigger; // re-use last trigger!
-            
+
             this.userSessions.set(from, session);
             this.saveUserSessions();
 
@@ -1439,7 +1455,7 @@ class WhatsAppClient extends EventEmitter {
                 // Si falló la resolución técnica, iniciar gate conversacional (Opción B)
                 console.log(`[WhatsApp] ⚠️ Sincronización técnica no resolvió el JID. Iniciando gate conversacional de país...`);
 
-                const messageText = `¡Hola! Para brindarte una mejor atención y dirigirte con el asesor correcto, por favor dinos: *¿de qué país nos escribes?* 🌎`;
+                const messageText = `¡Hola! Para continuar por favor dinos: *¿de qué país nos escribes?* 🌎`;
 
                 // Iniciar sesión especial country_gate (si ya tiene una sesión, preservar sus datos y sobreescribir currentMenuId)
                 const currentConversationData = session?.conversationData || {};
@@ -1587,6 +1603,7 @@ class WhatsAppClient extends EventEmitter {
           }
 
           // Then, check for simple auto-reply rules
+          let ruleMatched = false;
           for (const rule of rules) {
             if (!rule.isActive || rule.type === 'menu') continue;
 
@@ -1673,6 +1690,13 @@ class WhatsAppClient extends EventEmitter {
               shouldReply = rule.keywords.some(keyword => messageTextNormalized.includes(normalizeText(keyword)));
             }
             if (shouldReply) {
+              ruleMatched = true;
+              if (rule.type === 'ai') {
+                console.log(`[AI Chat] Triggering new AI session for ${from} with rule "${rule.name}"`);
+                session = this.setSession(from, 'ai_' + rule.id, { aiHistory: [] });
+                await this.processAIRule(from, body, m, rule, session, currentUser, messageCountService, messageLogService);
+                return;
+              }
               // Regular auto-reply (simple type)
               let textMessage = rule.response || '';
 
@@ -1822,6 +1846,74 @@ class WhatsAppClient extends EventEmitter {
               break;
             }
           }
+
+          // Check for active catch-all AI rule if no rule was matched
+          if (!ruleMatched) {
+            const catchAllRule = rules.find(r => r.isActive && r.type === 'ai' && r.isCatchAll === true);
+            if (catchAllRule) {
+              console.log(`[AI Catch-all] No rule matched. Triggering Catch-all AI rule "${catchAllRule.name}"`);
+              
+              // Validate country filter/exclude for catch-all rule
+              let isCountryAllowed = true;
+              let phoneNumberFrom = from.split('@')[0].split(':')[0].replace(/\D/g, '');
+              const isUnresolvedLid = from.includes('@lid') && !from.includes('@s.whatsapp.net');
+              const selectedCountryCode = session?.conversationData?.selectedCountryCode;
+              const isCountryOverridden = !!selectedCountryCode;
+
+              // Country filter check
+              if (catchAllRule.countries && catchAllRule.countries.length > 0) {
+                if (isCountryOverridden) {
+                  if (selectedCountryCode === 'other') {
+                    const hasOtherAllowed = catchAllRule.countries.includes('other');
+                    if (!hasOtherAllowed) isCountryAllowed = false;
+                  } else {
+                    const matchedCountry = catchAllRule.countries.some(countryCode => {
+                      const code = countryCode.replace(/\D/g, '');
+                      return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                    });
+                    if (!matchedCountry && !catchAllRule.countries.includes('other')) isCountryAllowed = false;
+                  }
+                } else if (isUnresolvedLid) {
+                  if (!catchAllRule.allowUnknownCountries) isCountryAllowed = false;
+                } else {
+                  const matchedCountry = catchAllRule.countries.some(countryCode => {
+                    const code = countryCode.replace(/\D/g, '');
+                    return phoneNumberFrom.startsWith(code);
+                  });
+                  if (!matchedCountry && !catchAllRule.countries.includes('other')) isCountryAllowed = false;
+                }
+              }
+
+              // Exclude country check
+              if (isCountryAllowed && catchAllRule.excludeCountries && catchAllRule.excludeCountries.length > 0) {
+                if (isCountryOverridden) {
+                  if (selectedCountryCode !== 'other') {
+                    const matchedExcluded = catchAllRule.excludeCountries.some(countryCode => {
+                      const code = countryCode.replace(/\D/g, '');
+                      return selectedCountryCode === code || selectedCountryCode.startsWith(code);
+                    });
+                    if (matchedExcluded) isCountryAllowed = false;
+                  }
+                } else if (isUnresolvedLid) {
+                  if (!catchAllRule.allowUnknownCountries) isCountryAllowed = false;
+                } else {
+                  const matchedExcluded = catchAllRule.excludeCountries.some(countryCode => {
+                    const code = countryCode.replace(/\D/g, '');
+                    return phoneNumberFrom.startsWith(code);
+                  });
+                  if (matchedExcluded) isCountryAllowed = false;
+                }
+              }
+
+              if (isCountryAllowed) {
+                session = this.setSession(from, 'ai_' + catchAllRule.id, { aiHistory: [] });
+                await this.processAIRule(from, body, m, catchAllRule, session, currentUser, messageCountService, messageLogService);
+                return;
+              } else {
+                console.log(`[AI Catch-all] Catch-all AI rule "${catchAllRule.name}" skipped due to country restriction`);
+              }
+            }
+          }
         } catch (error) { }
       });
 
@@ -1912,6 +2004,246 @@ class WhatsAppClient extends EventEmitter {
     console.log('[WhatsApp] Generated options list:', optionsList);
 
     return this.sendMessage(jid, message, mediaPaths, captions);
+  }
+
+  /**
+   * Procesa la interacción conversacional del Asistente de IA (RAG, descarga de multimedia, failover)
+   */
+  async processAIRule(from, body, m, rule, session, currentUser, messageCountService, messageLogService) {
+    try {
+      // 0. Comprobar palabras clave universales de salida
+      const cleanInput = normalizeText(body);
+      const exitKeywords = ['salir', 'menu', 'humano', 'cancelar'];
+      if (exitKeywords.includes(cleanInput)) {
+        console.log(`[AI Chat] Palabra clave de salida "${cleanInput}" detectada para ${from}. Limpiando sesión.`);
+        this.clearSession(from);
+        
+        let exitResponse = 'Entendido. Has salido del asistente virtual de IA.';
+        const { menus } = this.getRulesAndMenus();
+        const mainMenu = menus.find(menu => menu.isActive);
+        if (mainMenu) {
+          exitResponse += ` Escribe *"${mainMenu.name}"* o cualquier palabra clave para volver a interactuar con nuestros menús.`;
+        }
+        await this.sendMessage(from, exitResponse);
+        return;
+      }
+
+      // 1. Descarga de archivos multimedia del cliente (Multimodalidad activa)
+      const attachments = [];
+      const messageType = m.message ? Object.keys(m.message)[0] : '';
+      let downloadedMimeType = '';
+      
+      if (['imageMessage', 'audioMessage', 'videoMessage'].includes(messageType)) {
+        try {
+          console.log(`[AI Multimodal] Descargando adjunto ${messageType} de Baileys...`);
+          const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
+          const buffer = await downloadMediaMessage(
+            m,
+            'buffer',
+            {},
+            { 
+              logger: console,
+              reuploadRequest: this.sock.updateMediaMessage
+            }
+          );
+          if (buffer) {
+            const base64 = buffer.toString('base64');
+            let mimeType = m.message[messageType].mimetype || '';
+            if (!mimeType) {
+              if (messageType === 'imageMessage') mimeType = 'image/jpeg';
+              else if (messageType === 'audioMessage') mimeType = 'audio/ogg';
+              else if (messageType === 'videoMessage') mimeType = 'video/mp4';
+            }
+            downloadedMimeType = mimeType;
+            attachments.push({ base64, mimeType });
+            console.log(`[AI Multimodal] Adjunto descargado: ${mimeType}, Tamaño: ${buffer.length} bytes`);
+          }
+        } catch (downloadErr) {
+          console.error('[AI Multimodal] Error descargando multimedia:', downloadErr.message);
+        }
+      }
+
+      // Determinar el texto del mensaje de entrada del usuario
+      let userText = this.getTextFromMessage(m) || '';
+      if (!userText && attachments.length > 0) {
+        if (messageType === 'imageMessage') userText = 'Describe esta imagen o responde a ella.';
+        else if (messageType === 'audioMessage') userText = 'Escucha este audio y responde a lo que dice.';
+        else if (messageType === 'videoMessage') userText = 'Mira este video y responde.';
+      }
+
+      // 2. Base de conocimientos (RAG Local): leer archivos de texto cargados en la regla (.txt, .md, .csv, .json)
+      let customContext = '';
+      if (rule.knowledgeBaseText && rule.knowledgeBaseText.trim()) {
+        customContext += `\n--- Información adicional de fuente (Texto Copiado) ---\n${rule.knowledgeBaseText.trim()}\n`;
+      }
+      if (rule.mediaPaths && rule.mediaPaths.length > 0) {
+        for (const mediaP of rule.mediaPaths) {
+          if (!mediaP) continue;
+          const ext = mediaP.toLowerCase().split('.').pop();
+          if (['txt', 'md', 'csv', 'json'].includes(ext)) {
+            try {
+              let absPath = '';
+              if (path.isAbsolute(mediaP) && fs.existsSync(mediaP)) {
+                absPath = mediaP;
+              } else {
+                const fileName = path.basename(mediaP);
+                absPath = path.join(UPLOAD_DIR, fileName);
+                if (!fs.existsSync(absPath)) {
+                  const stripped = mediaP.startsWith('uploads/') ? mediaP.replace('uploads/', '') : mediaP;
+                  absPath = path.join(UPLOAD_DIR, stripped);
+                }
+              }
+              if (fs.existsSync(absPath)) {
+                const content = fs.readFileSync(absPath, 'utf8');
+                customContext += `\n--- Información adicional de fuente (${path.basename(mediaP)}) ---\n${content}\n`;
+              }
+            } catch (e) {
+              console.error(`[AI RAG] Error leyendo base de conocimientos ${mediaP}:`, e.message);
+            }
+          }
+        }
+      }
+
+      // Concatenar el contexto recuperado del RAG al Prompt de Sistema
+      let finalSystemPrompt = rule.systemPrompt || '';
+      if (customContext) {
+        finalSystemPrompt = `${finalSystemPrompt}\n\nUsa la siguiente información de contexto para responder si es relevante:\n${customContext}`;
+      }
+
+      // Reemplazar plantillas de variables básicas (como el nombre del remitente)
+      let finalSenderName = m.pushName || 'Amigo';
+      finalSystemPrompt = finalSystemPrompt.replace(/\{\{nombre\}\}/gi, finalSenderName).replace(/\[nombre\]/gi, finalSenderName);
+
+      // 3. Memoria conversacional multi-turno (máximo 10 mensajes)
+      session.conversationData = session.conversationData || {};
+      const history = session.conversationData.aiHistory || [];
+
+      // Importar dinámicamente el servicio unificado de IA con failover automático
+      const { generateAIResponseWithFailover } = await import('./utils/aiService.js');
+
+      console.log(`[AI Chat] Solicitando inferencia de IA para ${from}...`);
+
+      // Activar indicador de "Escribiendo..." en WhatsApp
+      try {
+        if (this.sock) {
+          await this.sock.sendPresenceUpdate('composing', from);
+        }
+      } catch (presenceErr) {
+        console.error('[Presence] Error enviando actualización composing:', presenceErr.message);
+      }
+      
+      const responseText = await generateAIResponseWithFailover({
+        selectedProvider: rule.aiProvider,
+        selectedModel: rule.aiModel,
+        systemPrompt: finalSystemPrompt,
+        userMessage: userText,
+        history: history,
+        attachments: attachments,
+        customApiKey: rule.aiApiKey,
+        globalConfig: this.config
+      });
+
+      let finalResponseText = responseText;
+      const mediaPaths = [];
+      const captions = [];
+
+      // Detectar si la respuesta contiene un bloque de código HTML
+      const htmlBlockRegex = /```html([\s\S]*?)```/i;
+      const htmlMatch = responseText.match(htmlBlockRegex);
+      
+      if (htmlMatch) {
+        try {
+          const { default: fs } = await import('fs');
+          
+          const htmlContent = htmlMatch[1].trim();
+          let combinedHtml = htmlContent;
+          
+          // Extraer CSS opcional en bloque de código separado e inyectarlo si no existe style en el HTML
+          const cssMatch = responseText.match(/```css([\s\S]*?)```/i);
+          if (cssMatch && !htmlContent.includes('<style>')) {
+            const cssContent = cssMatch[1].trim();
+            if (combinedHtml.includes('</head>')) {
+              combinedHtml = combinedHtml.replace('</head>', `<style>\n${cssContent}\n</style>\n</head>`);
+            } else {
+              combinedHtml = `<style>\n${cssContent}\n</style>\n` + combinedHtml;
+            }
+          }
+          
+          // Extraer JS opcional en bloque de código separado e inyectarlo si no existe script en el HTML
+          const jsMatch = responseText.match(/```(?:javascript|js)([\s\S]*?)```/i);
+          if (jsMatch && !htmlContent.includes('<script>')) {
+            const jsContent = jsMatch[1].trim();
+            if (combinedHtml.includes('</body>')) {
+              combinedHtml = combinedHtml.replace('</body>', `<script>\n${jsContent}\n</script>\n</body>`);
+            } else {
+              combinedHtml = combinedHtml + `\n<script>\n${jsContent}\n</script>`;
+            }
+          }
+          
+          // Nombre de archivo seguro e identificable
+          const senderNumber = from.split('@')[0];
+          const fileName = `index_${senderNumber}_${Date.now()}.html`;
+          const filePath = path.join(UPLOAD_DIR, fileName);
+          
+          fs.writeFileSync(filePath, combinedHtml, 'utf8');
+          console.log(`[AI Web Doc] 📄 HTML extraído y guardado como documento en: ${filePath}`);
+          
+          mediaPaths.push(filePath);
+          captions.push('Página Web Generada');
+          
+          finalResponseText += `\n\n📄 *¡He generado tu página web en un archivo HTML!* Te lo adjunto en este chat para que puedas descargarlo y abrirlo directamente en tu navegador.`;
+        } catch (deployErr) {
+          console.error('[AI Web Doc] Error guardando archivo HTML:', deployErr.message);
+        }
+      }
+
+      // Actualizar el historial conversacional
+      history.push({ role: 'user', content: userText });
+      history.push({ role: 'assistant', content: finalResponseText });
+      
+      // Limitar a los últimos 10 mensajes
+      if (history.length > 10) {
+        history.splice(0, history.length - 10);
+      }
+      
+      session.conversationData.aiHistory = history;
+      session.lastInteraction = new Date().toISOString();
+      this.userSessions.set(from, session);
+      this.saveUserSessions();
+
+      // 4. Enviar la respuesta generada al chat de WhatsApp (con documento adjunto si aplica)
+      await this.sendMessage(from, finalResponseText, mediaPaths.length > 0 ? mediaPaths : null, captions.length > 0 ? captions : null);
+
+      // 5. Registro de logs e historial de métricas
+      const cleanTarget = formatTarget(from);
+      if (this.io) {
+        this.io.emit('message_log', {
+          id: uuidv4(),
+          sessionId: this.sessionId,
+          userId: currentUser?.id || null,
+          target: cleanTarget,
+          status: 'sent',
+          timestamp: new Date(),
+          content: `IA Asistente: ${responseText}`,
+          messageType: 'ai-assist'
+        });
+      }
+      if (currentUser && currentUser.id) {
+        await messageCountService.incrementCount(currentUser.id, 1);
+        await messageLogService.logMessage(
+          currentUser.id,
+          'ai-assist',
+          cleanTarget,
+          'sent',
+          `IA Asistente: ${responseText.substring(0, 200)}...`,
+          null
+        );
+      }
+
+    } catch (err) {
+      console.error('[AI Chat] Error crítico procesando asistente de IA:', err);
+      await this.sendMessage(from, 'Lo siento, tuve un inconveniente técnico temporal procesando tu mensaje. Por favor intenta de nuevo en un momento.');
+    }
   }
 
   /**

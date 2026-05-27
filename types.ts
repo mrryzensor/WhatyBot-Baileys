@@ -32,6 +32,17 @@ export interface AppConfig {
   chromePath?: string; // Optional Chrome executable path (legacy, not used in Baileys)
   defaultCountryCode?: string; // Default country code for single send (frontend only)
   autoReplyInGroups?: boolean; // Allow auto-replies in group chats (default: false)
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
+  deepseekApiKey?: string;
+  openrouterApiKey?: string;
+  googleApiKey?: string;
+  groqApiKey?: string;
+  deepinfraApiKey?: string;
+  zhipuApiKey?: string;
+  huggingfaceApiKey?: string;
+  sambanovaApiKey?: string;
+  aiFailoverEnabled?: boolean;
 }
 
 export interface AutoReplyRule {
@@ -47,8 +58,14 @@ export interface AutoReplyRule {
   mediaPaths?: string[]; // Multiple media files
   captions?: string[]; // Captions for multiple media files
   isMessageCaption?: boolean; // Destination of main text message (standalone vs caption)
-  type?: 'simple' | 'menu'; // Type of auto-reply
+  type?: 'simple' | 'menu' | 'ai'; // Type of auto-reply
   menuId?: string; // ID of menu if type is 'menu'
+  aiProvider?: 'openai' | 'anthropic' | 'deepseek' | 'openrouter' | 'google' | 'groq' | 'deepinfra' | 'zhipu' | 'huggingface' | 'sambanova';
+  aiModel?: string;
+  systemPrompt?: string;
+  aiApiKey?: string; // Optional override per-rule
+  isCatchAll?: boolean; // If true, always responds with this AI if no other rule matches
+  knowledgeBaseText?: string; // Optional plain-text knowledge base / documentation
   countries?: string[]; // Optional: List of countries to match (based on phone prefix)
   excludeCountries?: string[]; // Optional: List of countries to NOT match
   allowUnknownCountries?: boolean; // Allow if country cannot be detected (LID)

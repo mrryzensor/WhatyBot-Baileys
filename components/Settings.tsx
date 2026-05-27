@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Clock, Users, Timer, Download, Upload, Database, Trash2, Palette, Moon, Sun, Plus, Image } from 'lucide-react';
+import { Save, Clock, Users, Timer, Download, Upload, Database, Trash2, Palette, Moon, Sun, Plus, Image, Eye, EyeOff, Cpu, Sparkles, HelpCircle, Key, RefreshCw } from 'lucide-react';
 import { AppConfig } from '../types';
 import { updateConfig as updateConfigApi, exportCompleteConfig, importCompleteConfig, cleanupOrphanedFiles, optimizeExistingMedia } from '../services/api';
 import { changePassword, getCurrentUser } from '../services/authApi';
@@ -38,6 +38,13 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   const { selectedSessionId } = useSession();
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [cleanupAllSessions, setCleanupAllSessions] = useState(false);
+
+  // States for AI API visibility and Failover info
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+
+  const toggleKeyVisibility = (key: string) => {
+    setVisibleKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Theme state
   const [activeTheme, setActiveTheme] = useState(() => localStorage.getItem('theme_color') || 'green');
@@ -171,7 +178,24 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
   };
 
   const handleSave = async () => {
-    const { messageDelay, maxContactsPerBatch, waitTimeBetweenBatches, defaultCountryCode, autoReplyInGroups } = localConfig;
+    const { 
+      messageDelay, 
+      maxContactsPerBatch, 
+      waitTimeBetweenBatches, 
+      defaultCountryCode, 
+      autoReplyInGroups,
+      openaiApiKey,
+      anthropicApiKey,
+      deepseekApiKey,
+      openrouterApiKey,
+      googleApiKey,
+      groqApiKey,
+      deepinfraApiKey,
+      zhipuApiKey,
+      huggingfaceApiKey,
+      sambanovaApiKey,
+      aiFailoverEnabled
+    } = localConfig;
 
     if (!messageDelay || messageDelay <= 0) {
       toast?.error('El retraso entre mensajes debe ser un número mayor a 0.');
@@ -196,7 +220,18 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
       maxContactsPerBatch,
       waitTimeBetweenBatches,
       defaultCountryCode: (defaultCountryCode || '').trim(),
-      autoReplyInGroups: autoReplyInGroups || false
+      autoReplyInGroups: autoReplyInGroups || false,
+      openaiApiKey: (openaiApiKey || '').trim(),
+      anthropicApiKey: (anthropicApiKey || '').trim(),
+      deepseekApiKey: (deepseekApiKey || '').trim(),
+      openrouterApiKey: (openrouterApiKey || '').trim(),
+      googleApiKey: (googleApiKey || '').trim(),
+      groqApiKey: (groqApiKey || '').trim(),
+      deepinfraApiKey: (deepinfraApiKey || '').trim(),
+      zhipuApiKey: (zhipuApiKey || '').trim(),
+      huggingfaceApiKey: (huggingfaceApiKey || '').trim(),
+      sambanovaApiKey: (sambanovaApiKey || '').trim(),
+      aiFailoverEnabled: aiFailoverEnabled || false
     };
 
     try {
@@ -743,6 +778,312 @@ export const Settings: React.FC<SettingsProps> = ({ config, setConfig, toast }) 
           >
             Buscar actualizaciones
           </button>
+        </div>
+
+        {/* Proveedores de IA y Failover */}
+        <div className="bg-theme-card p-6 rounded-xl shadow-sm border border-theme md:col-span-2">
+          <h3 className="text-lg font-bold text-theme-main mb-4 flex items-center gap-2">
+            <Cpu size={20} className="text-purple-600 animate-pulse" /> Proveedores de Inteligencia Artificial & Failover Inteligente
+          </h3>
+
+          <div className="p-4 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-xl mb-6">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="text-purple-600 shrink-0" size={20} />
+                <div>
+                  <h4 className="text-sm font-semibold text-purple-950 dark:text-purple-300">Failover Inteligente Activo</h4>
+                  <p className="text-xs text-purple-800 dark:text-purple-400">
+                    Si un proveedor agota su cuota o excede el límite por minuto, el bot salta automáticamente al siguiente proveedor configurado.
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={localConfig.aiFailoverEnabled || false}
+                  onChange={(e) => setLocalConfig({ ...localConfig, aiFailoverEnabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-theme-card after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+              </label>
+            </div>
+            <p className="text-[11px] text-purple-700/80 dark:text-purple-400/80 leading-relaxed">
+              💡 **Recomendación**: Configura al menos 2 o 3 proveedores (ej: Google Gemini y Groq, ambos ofrecen cuotas gratuitas muy generosas) para tener tolerancia total a fallos por cuotas de tokens por minuto (TPM) y mantener el bot 100% activo.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* OpenAI */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🟢 OpenAI (ChatGPT)</span>
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.openai ? "text" : "password"}
+                  placeholder="sk-..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.openaiApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, openaiApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('openai')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.openai ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>gpt-4o-mini</code> (Recomendado, económico), <code>gpt-4o</code> (Multimodal).</p>
+            </div>
+
+            {/* Google Gemini */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🔵 Google AI Studio (Gemini)</span>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.google ? "text" : "password"}
+                  placeholder="AIzaSy..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.googleApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, googleApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('google')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.google ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>gemini-2.5-flash</code> (Veloz, gratis y lee voz/fotos), <code>gemini-1.5-pro</code>.</p>
+            </div>
+
+            {/* Anthropic */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🟠 Anthropic (Claude)</span>
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.anthropic ? "text" : "password"}
+                  placeholder="sk-ant-..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.anthropicApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, anthropicApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('anthropic')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.anthropic ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>claude-3-5-sonnet-latest</code> (Redacción excelente), <code>claude-3-haiku</code>.</p>
+            </div>
+
+            {/* DeepSeek */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🔴 DeepSeek</span>
+                <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.deepseek ? "text" : "password"}
+                  placeholder="sk-..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.deepseekApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, deepseekApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('deepseek')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.deepseek ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>deepseek-chat</code> (V3, económico), <code>deepseek-reasoner</code> (R1 razonamiento).</p>
+            </div>
+
+            {/* OpenRouter */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🌐 OpenRouter</span>
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.openrouter ? "text" : "password"}
+                  placeholder="sk-or-..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.openrouterApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, openrouterApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('openrouter')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.openrouter ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Proxy unificado: accede a cientos de modelos open-source y premium con un único saldo.</p>
+            </div>
+
+            {/* Groq */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">⚡ Groq Cloud</span>
+                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.groq ? "text" : "password"}
+                  placeholder="gsk_..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.groqApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, groqApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('groq')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.groq ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>llama-3.3-70b-versatile</code>, <code>mixtral-8x7b-32768</code>. ¡Velocidad récord y gratis!</p>
+            </div>
+
+            {/* SambaNova */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🚀 SambaNova Cloud</span>
+                <a href="https://cloud.sambanova.ai/" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.sambanova ? "text" : "password"}
+                  placeholder="API Key..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.sambanovaApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, sambanovaApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('sambanova')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.sambanova ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>llama3-70b</code>, <code>llama3-8b</code> a cientos de tokens por segundo de forma gratuita.</p>
+            </div>
+
+            {/* DeepInfra */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🌌 DeepInfra</span>
+                <a href="https://deepinfra.com/dash/api_keys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.deepinfra ? "text" : "password"}
+                  placeholder="API Key..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.deepinfraApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, deepinfraApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('deepinfra')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.deepinfra ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos open-source como Llama 3 y Mixtral de alto desempeño a costo ultra bajo.</p>
+            </div>
+
+            {/* Zhipu AI (GLM) */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🇨🇳 Zhipu AI (Z AI)</span>
+                <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.zhipu ? "text" : "password"}
+                  placeholder="API Key..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.zhipuApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, zhipuApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('zhipu')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.zhipu ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Modelos: <code>glm-4-plus</code>, <code>glm-4-flash</code>. Ventana de contexto gigante.</p>
+            </div>
+
+            {/* Hugging Face */}
+            <div className="border border-theme rounded-xl p-4 bg-theme-base/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-theme-main flex items-center gap-2">🤗 Hugging Face Inference API</span>
+                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline flex items-center gap-1">
+                  Obtener Key <HelpCircle size={12} />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  type={visibleKeys.huggingface ? "text" : "password"}
+                  placeholder="hf_..."
+                  className="w-full pl-3 pr-10 py-2 border border-theme rounded-lg text-xs font-mono bg-theme-card"
+                  value={localConfig.huggingfaceApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, huggingfaceApiKey: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleKeyVisibility('huggingface')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-main"
+                >
+                  {visibleKeys.huggingface ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-theme-muted">Inferencia serverless para miles de modelos en Hugging Face.</p>
+            </div>
+
+          </div>
         </div>
       </div>
 

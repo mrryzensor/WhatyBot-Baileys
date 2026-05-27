@@ -118,7 +118,9 @@ router.post('/rules', upload.array('media', 10), async (req, res) => {
         if (!client) return res.status(400).json({ error: 'WhatsApp client not found' });
 
         const rule = req.body;
-        if (!rule.name || !rule.keywords) {
+        const isCatchAll = rule.isCatchAll === true || rule.isCatchAll === 'true' || rule.isCatchAll === '1';
+
+        if (!rule.name || (!rule.keywords && !isCatchAll)) {
             return res.status(400).json({ error: 'Missing required fields: name, keywords' });
         }
 
@@ -126,7 +128,7 @@ router.post('/rules', upload.array('media', 10), async (req, res) => {
 
         if (rule.type === 'menu' && !rule.menuId) {
             return res.status(400).json({ error: 'Menu-type rules require menuId' });
-        } else if (rule.type !== 'menu' && !rule.response && (!files || files.length === 0) && !rule.mediaPaths) {
+        } else if (rule.type !== 'menu' && rule.type !== 'ai' && !rule.response && (!files || files.length === 0) && !rule.mediaPaths) {
             return res.status(400).json({ error: 'Missing required field: response or media' });
         }
 
@@ -167,6 +169,18 @@ router.post('/rules', upload.array('media', 10), async (req, res) => {
             rule.isMessageCaption = (String(rule.isMessageCaption) === 'true' || rule.isMessageCaption === true || rule.isMessageCaption === '1');
         } else {
             rule.isMessageCaption = false;
+        }
+
+        if (rule.isCatchAll !== undefined) {
+            rule.isCatchAll = (String(rule.isCatchAll) === 'true' || rule.isCatchAll === true || rule.isCatchAll === '1');
+        } else {
+            rule.isCatchAll = false;
+        }
+
+        if (rule.knowledgeBaseText !== undefined) {
+            rule.knowledgeBaseText = String(rule.knowledgeBaseText);
+        } else {
+            rule.knowledgeBaseText = '';
         }
 
         if (rule.countryResponses) {
@@ -288,6 +302,14 @@ router.put('/rules/:id', upload.array('media', 10), async (req, res) => {
             updatedRule.isMessageCaption = (String(updatedRule.isMessageCaption) === 'true' || updatedRule.isMessageCaption === true || updatedRule.isMessageCaption === '1');
         }
 
+        if (updatedRule.isCatchAll !== undefined) {
+            updatedRule.isCatchAll = (String(updatedRule.isCatchAll) === 'true' || updatedRule.isCatchAll === true || updatedRule.isCatchAll === '1');
+        }
+
+        if (updatedRule.knowledgeBaseText !== undefined) {
+            updatedRule.knowledgeBaseText = String(updatedRule.knowledgeBaseText);
+        }
+
         if (updatedRule.countryResponses) {
             try {
                 updatedRule.countryResponses = typeof updatedRule.countryResponses === 'string' ? JSON.parse(updatedRule.countryResponses) : updatedRule.countryResponses;
@@ -369,6 +391,8 @@ router.put('/rules/:id', upload.array('media', 10), async (req, res) => {
             excludeCountries: updatedRule.excludeCountries !== undefined ? updatedRule.excludeCountries : (existingRule.excludeCountries || []),
             allowUnknownCountries: updatedRule.allowUnknownCountries !== undefined ? updatedRule.allowUnknownCountries : (existingRule.allowUnknownCountries || false),
             isMessageCaption: updatedRule.isMessageCaption !== undefined ? updatedRule.isMessageCaption : (existingRule.isMessageCaption || false),
+            isCatchAll: updatedRule.isCatchAll !== undefined ? updatedRule.isCatchAll : (existingRule.isCatchAll || false),
+            knowledgeBaseText: updatedRule.knowledgeBaseText !== undefined ? updatedRule.knowledgeBaseText : (existingRule.knowledgeBaseText || ''),
             countryResponses: updatedRule.countryResponses !== undefined ? updatedRule.countryResponses : (existingRule.countryResponses || {})
         };
 
